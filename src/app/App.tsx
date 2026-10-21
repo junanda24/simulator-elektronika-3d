@@ -277,17 +277,40 @@ export default function App() {
     0,
     (boardDef.origin[2] + BREADBOARD_ORIGIN[2]) / 2,
   ];
-  const applyCameraPreset = (preset: 'perspektif' | 'atas' | 'depan' | 'dekat') => {
+  const boardCenter: [number, number, number] = [boardDef.origin[0], 1, boardDef.origin[2]];
+  const applyCameraPreset = (
+    preset:
+      | 'perspektif'
+      | 'depan'
+      | 'dekat'
+      | 'board-miring'
+      | 'board-atas'
+      | 'bb-miring'
+      | 'bb-atas',
+  ) => {
     if (preset === 'perspektif') {
       setCameraView(
         [TARGET_HOME.x, TARGET_HOME.y, TARGET_HOME.z],
         [CAMERA_HOME.x, CAMERA_HOME.y, CAMERA_HOME.z],
       );
-    } else if (preset === 'atas') {
-      // Tepat tegak lurus di atas breadboard; offset z 0.01 menghindari gimbal lock.
-      setCameraView(breadboardCenter, [breadboardCenter[0], 80, breadboardCenter[2] + 0.01]);
     } else if (preset === 'depan') {
       setCameraView(tableCenter, [tableCenter[0], 14, 58]);
+    } else if (preset === 'board-miring') {
+      // Sudut 3/4 dekat ke board mikrokontroler aktif.
+      setCameraView(boardCenter, [boardCenter[0] + 14, 13, boardCenter[2] + 18]);
+    } else if (preset === 'board-atas') {
+      // Tegak lurus di atas board; offset z 0.01 menghindari gimbal lock.
+      setCameraView(boardCenter, [boardCenter[0], 55, boardCenter[2] + 0.01]);
+    } else if (preset === 'bb-miring') {
+      // Sudut 3/4 dekat ke breadboard — enak untuk merangkai kabel.
+      setCameraView(breadboardCenter, [
+        breadboardCenter[0] + 13,
+        17,
+        breadboardCenter[2] + 21,
+      ]);
+    } else if (preset === 'bb-atas') {
+      // Tepat tegak lurus di atas breadboard; offset z 0.01 menghindari gimbal lock.
+      setCameraView(breadboardCenter, [breadboardCenter[0], 80, breadboardCenter[2] + 0.01]);
     } else {
       const target = selectedInstance
         ? ([...selectedInstance.position] as [number, number, number])
@@ -629,24 +652,51 @@ export default function App() {
           className={`relative min-w-0 flex-1 ${deleteMode ? 'cursor-crosshair' : ''}`}
         >
           <Workbench resetSignal={resetSignal} />
-          {/* Preset sudut kamera */}
-          <div className="absolute left-3 top-3 z-10 flex flex-col gap-1.5">
+          {/* Preset sudut kamera — dibedakan per area: Umum, Board, Breadboard */}
+          <div className="absolute left-3 top-3 z-10 flex w-[172px] flex-col gap-2.5 rounded-md border border-border-subtle bg-panel/70 p-2 backdrop-blur-md">
             {(
               [
-                { id: 'perspektif', label: 'Perspektif' },
-                { id: 'atas', label: 'Atas' },
-                { id: 'depan', label: 'Depan' },
-                { id: 'dekat', label: 'Dekat' },
+                {
+                  title: 'Umum',
+                  items: [
+                    { id: 'perspektif', label: 'Perspektif' },
+                    { id: 'depan', label: 'Depan' },
+                    { id: 'dekat', label: 'Dekat' },
+                  ],
+                },
+                {
+                  title: 'Board',
+                  items: [
+                    { id: 'board-miring', label: 'Miring' },
+                    { id: 'board-atas', label: 'Atas' },
+                  ],
+                },
+                {
+                  title: 'Breadboard',
+                  items: [
+                    { id: 'bb-miring', label: 'Miring' },
+                    { id: 'bb-atas', label: 'Atas' },
+                  ],
+                },
               ] as const
-            ).map((p) => (
-              <button
-                key={p.id}
-                type="button"
-                onClick={() => applyCameraPreset(p.id)}
-                className="h-7 rounded-md border border-border-subtle bg-panel/85 px-2.5 text-left text-[11px] font-medium text-zinc-200 backdrop-blur-md transition-colors hover:border-accent-primary hover:text-accent-primary"
-              >
-                {p.label}
-              </button>
+            ).map((group) => (
+              <div key={group.title} className="flex flex-col gap-1">
+                <span className="px-0.5 text-[9px] font-semibold uppercase tracking-[0.14em] text-zinc-500">
+                  {group.title}
+                </span>
+                <div className="flex gap-1.5">
+                  {group.items.map((p) => (
+                    <button
+                      key={p.id}
+                      type="button"
+                      onClick={() => applyCameraPreset(p.id)}
+                      className="h-7 flex-1 rounded-md border border-border-subtle bg-panel/85 px-2 text-[11px] font-medium text-zinc-200 transition-colors hover:border-accent-primary hover:text-accent-primary"
+                    >
+                      {p.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
             ))}
           </div>
           <div className="pointer-events-none absolute bottom-3 left-3 rounded-md border border-border-subtle bg-panel/85 px-3 py-2 text-[11px] text-zinc-400 backdrop-blur-md">
