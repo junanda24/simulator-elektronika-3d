@@ -1,5 +1,6 @@
-import type { ComponentType } from 'react';
-import type { ThreeEvent } from '@react-three/fiber';
+import { useRef, type ComponentType } from 'react';
+import { useFrame, type ThreeEvent } from '@react-three/fiber';
+import type { MeshStandardMaterial } from 'three';
 import type { ComponentRenderProps } from '../../../types';
 
 const METAL = { color: '#cfd4dc', metalness: 0.9, roughness: 0.3 } as const;
@@ -18,6 +19,19 @@ const LEG_Z = [-1, 0, 1] as const;
  */
 export const PirRender3D: ComponentType<ComponentRenderProps> = ({ instance, onInteract }) => {
   const motion = instance.interactiveState.motion === true;
+
+  // Denyut kubah saat gerakan terdeteksi: emissive berosilasi halus.
+  const domeMatRef = useRef<MeshStandardMaterial>(null);
+  const motionRef = useRef(motion);
+  motionRef.current = motion;
+
+  useFrame(({ clock }) => {
+    const mat = domeMatRef.current;
+    if (!mat) return;
+    mat.emissiveIntensity = motionRef.current
+      ? 0.6 + 0.4 * Math.sin(clock.elapsedTime * 6)
+      : 0;
+  });
 
   const handleDomePointerDown = (e: ThreeEvent<PointerEvent>) => {
     e.stopPropagation();
@@ -40,10 +54,11 @@ export const PirRender3D: ComponentType<ComponentRenderProps> = ({ instance, onI
         <meshStandardMaterial {...PCB} />
       </mesh>
 
-      {/* Kubah lensa Fresnel setengah bola — klik untuk toggle gerakan */}
+      {/* Kubah lensa Fresnel setengah bola — klik untuk toggle gerakan;
+          berpendar merah muda berdenyut saat gerakan terdeteksi */}
       <mesh position={[0, 0.93, 0]} castShadow onPointerDown={handleDomePointerDown}>
         <sphereGeometry args={[1.25, 24, 12, 0, Math.PI * 2, 0, Math.PI / 2]} />
-        <meshStandardMaterial {...DOME} />
+        <meshStandardMaterial ref={domeMatRef} {...DOME} emissive="#ff8fab" emissiveIntensity={0} />
       </mesh>
 
       {/* LED indikator merah — menyala saat gerakan terdeteksi */}

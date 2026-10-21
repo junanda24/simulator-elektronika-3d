@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef } from 'react';
 import * as THREE from 'three';
 import gsap from 'gsap';
 import { Canvas, useThree, type ThreeEvent } from '@react-three/fiber';
-import { Line, OrbitControls } from '@react-three/drei';
+import { ContactShadows, OrbitControls } from '@react-three/drei';
 import type { OrbitControls as OrbitControlsImpl } from 'three-stdlib';
 import Breadboard from './Breadboard';
 import Smoke from './effects/Smoke';
@@ -22,18 +22,23 @@ import {
 import { useCircuitStore } from '../wiring/store/circuitStore';
 import { terminalWorldPosition } from '../wiring/terminals';
 import type { TerminalRef } from '../wiring/netlist';
-import { computePlacement } from '../wiring/placement';
+import { computePlacement, type PlacementRotation } from '../wiring/placement';
+import WireMesh3D from '../wiring/components/WireMesh3D';
+import DanglingWirePreview from '../wiring/components/DanglingWirePreview';
+import GhostPlacementMesh from './effects/GhostPlacementMesh';
 
-const CAMERA_HOME = new THREE.Vector3(48, 42, 52);
-const TARGET_HOME = new THREE.Vector3(2, 0, 0);
+export const CAMERA_HOME = new THREE.Vector3(48, 42, 52);
+export const TARGET_HOME = new THREE.Vector3(2, 0, 0);
 
-/** Kamera: reset manual + fokus autopsi (GSAP, STYLE_GUIDE §4.4). */
+/** Kamera: reset manual + fokus autopsi + preset view (GSAP, STYLE_GUIDE §4.4). */
 function CameraRig({ resetSignal }: { resetSignal: number }) {
   const camera = useThree((s) => s.camera);
   const controls = useThree((s) => s.controls) as OrbitControlsImpl | null;
   const focusNonce = useCircuitStore((s) => s.focusNonce);
   const focusPosition = useCircuitStore((s) => s.focusPosition);
+  const cameraView = useCircuitStore((s) => s.cameraView);
   const firstFocus = useRef(true);
+  const firstView = useRef(true);
 
   useEffect(() => {
     if (resetSignal === 0 || !controls) return;
@@ -62,53 +67,26 @@ function CameraRig({ resetSignal }: { resetSignal: number }) {
     });
   }, [focusNonce, focusPosition, controls, camera]);
 
+  // Preset view dari UI (tombol Perspektif/Atas/Depan/Dekat & fokus autopsi):
+  // nonce berubah → luncurkan kamera ke posisi + target yang diperintahkan.
+  useEffect(() => {
+    if (firstView.current) {
+      firstView.current = false;
+      return;
+    }
+    if (!controls || !cameraView) return;
+    const [tx, ty, tz] = cameraView.target;
+    const [px, py, pz] = cameraView.position;
+    gsap.to(camera.position, {
+      x: px, y: py, z: pz, duration: 0.6, ease: 'power2.inOut',
+    });
+    gsap.to(controls.target, {
+      x: tx, y: ty, z: tz, duration: 0.6, ease: 'power2.inOut',
+      onUpdate: () => controls.update(),
+    });
+  }, [cameraView, controls, camera]);
+
   return null;
-}
-
-/** Satu kabel jumper: TubeGeometry mengikuti CatmullRomCurve3 melengkung. */
-function WireTube({
-  id,
-  points,
-  color,
-}: {
-  id: string;
-  points: Array<[number, number, number]>;
-  color: string;
-}) {
-  const selectWire = useCircuitStore((s) => s.selectWire);
-  const selected = useCircuitStore((s) => s.selectedWireId === id);
-  const geometry = useMemo(() => {
-    const curve = new THREE.CatmullRomCurve3(points.map((p) => new THREE.Vector3(...p)));
-    return new THREE.TubeGeometry(curve, 40, selected ? 0.21 : 0.16, 8, false);
-  }, [points, selected]);
-  useEffect(() => () => geometry.dispose(), [geometry]);
-  return (
-    <mesh
-      geometry={geometry}
-      castShadow
-      onClick={(e) => {
-        e.stopPropagation();
-        selectWire(id);
-      }}
-    >
-      <meshStandardMaterial color={color} roughness={0.55} emissive={selected ? color : '#000000'} emissiveIntensity={selected ? 0.35 : 0} />
-    </mesh>
-  );
-}
-
-/** Titik tengah melengkung untuk kabel dari A ke B. */
-function wirePoints(
-  a: [number, number, number],
-  b: [number, number, number],
-): Array<[number, number, number]> {
-  const dist = Math.hypot(b[0] - a[0], b[2] - a[2]);
-  const lift = 1.6 + dist * 0.16;
-  const mid = (t: number): [number, number, number] => [
-    a[0] + (b[0] - a[0]) * t,
-    Math.max(a[1], b[1]) + lift * Math.sin(Math.PI * t),
-    a[2] + (b[2] - a[2]) * t,
-  ];
-  return [a, mid(0.33), mid(0.66), b];
 }
 
 /** Bidang interaksi tak terlihat di atas breadboard / board (snapping matematis). */
@@ -122,6 +100,8 @@ function InteractionPlane({
   const placeAt = useCircuitStore((s) => s.placeAt);
   const clickTerminal = useCircuitStore((s) => s.clickTerminal);
   const placingType = useCircuitStore((s) => s.placingType);
+  const pendingFrom = useCircuitStore((s) => s.pendingFrom);
+  const setWireCursorPos = useCircuitStore((s) => s.setWireCursorPos);
   const boardId = useCircuitStore((s) => s.boardId);
   const board = getBoardDefinition(boardId);
 
@@ -137,6 +117,8 @@ function InteractionPlane({
   const handleMove = (e: ThreeEvent<PointerEvent>) => {
     const ref = resolve(e.point);
     setHover(ref ? { ref, clientX: e.clientX, clientY: e.clientY } : null);
+    // Umpan posisi kursor 3D untuk preview kabel elastis (DanglingWirePreview).
+    if (pendingFrom) setWireCursorPos([e.point.x, e.point.y, e.point.z]);
   };
 
   const handleDown = (e: ThreeEvent<PointerEvent>) => {
@@ -187,12 +169,15 @@ function HoverMarkers() {
   const boardId = useCircuitStore((s) => s.boardId);
   const board = getBoardDefinition(boardId);
 
+  const placementRotation = useCircuitStore(
+    (s) => (s as { placementRotation?: PlacementRotation }).placementRotation ?? 0,
+  );
   const ghostHoles = useMemo(() => {
     if (!placingType || !hover || hover.ref.kind !== 'hole') return [];
     const occupied = new Set(Object.values(pinHoles).flatMap((m) => Object.values(m)));
-    const placement = computePlacement(placingType, hover.ref.holeId, occupied);
+    const placement = computePlacement(placingType, hover.ref.holeId, occupied, placementRotation);
     return placement ? Object.values(placement.pinHoles) : [];
-  }, [placingType, hover, pinHoles]);
+  }, [placingType, hover, pinHoles, placementRotation]);
 
   void instances;
   const hoverPos = hover ? terminalWorldPosition(hover.ref, board) : null;
@@ -239,9 +224,6 @@ function HoverMarkers() {
           </mesh>
         );
       })}
-      {pendingFrom && hoverPos && pendingPos && (
-        <Line points={[pendingPos, hoverPos]} color="#f59e0b" lineWidth={2} dashed dashSize={0.7} gapSize={0.4} />
-      )}
     </group>
   );
 }
@@ -252,8 +234,6 @@ function CircuitScene() {
   const wires = useCircuitStore((s) => s.wires);
   const selectInstance = useCircuitStore((s) => s.selectInstance);
   const interact = useCircuitStore((s) => s.interact);
-  const boardId = useCircuitStore((s) => s.boardId);
-  const board = getBoardDefinition(boardId);
 
   return (
     <group>
@@ -277,12 +257,9 @@ function CircuitScene() {
           </group>
         );
       })}
-      {wires.map((wire) => {
-        const a = terminalWorldPosition(wire.a, board);
-        const b = terminalWorldPosition(wire.b, board);
-        if (!a || !b) return null;
-        return <WireTube key={wire.id} id={wire.id} points={wirePoints(a, b)} color={wire.color} />;
-      })}
+      {wires.map((wire) => (
+        <WireMesh3D key={wire.id} wire={wire} />
+      ))}
     </group>
   );
 }
@@ -300,9 +277,10 @@ function ActiveBoard() {
  * rangkaian dari store (komponen + kabel), interaksi pasang & wiring.
  */
 export default function Workbench({ resetSignal }: { resetSignal: number }) {
+  const isDragging3D = useCircuitStore((s) => s.isDragging3D);
   return (
     <Canvas
-      shadows
+      shadows="soft"
       dpr={[1, 2]}
       camera={{ position: CAMERA_HOME.toArray(), fov: 45, near: 0.5, far: 600 }}
       style={{ position: 'absolute', inset: 0 }}
@@ -329,16 +307,21 @@ export default function Workbench({ resetSignal }: { resetSignal: number }) {
         <meshStandardMaterial color="#0f241d" roughness={1} />
       </mesh>
       <gridHelper args={[420, 210, '#18382d', '#18382d']} position={[0, 0.02, 0]} />
+      {/* Bayangan kontak lembut tepat di bawah board & breadboard (tanpa HDR eksternal). */}
+      <ContactShadows position={[0, 0.01, 0]} opacity={0.55} scale={170} blur={2.2} far={4} resolution={1024} />
 
       <ActiveBoard />
       <Breadboard position={BREADBOARD_ORIGIN} />
       <CircuitScene />
       <HoverMarkers />
+      <DanglingWirePreview />
+      <GhostPlacementMesh />
       <InteractionPlane kind="breadboard" />
       <InteractionPlane kind="board" />
 
       <OrbitControls
         makeDefault
+        enabled={!isDragging3D}
         target={TARGET_HOME.toArray()}
         maxPolarAngle={1.45}
         minDistance={10}

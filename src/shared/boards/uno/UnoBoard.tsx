@@ -19,6 +19,41 @@ function createSilkscreenTexture(): THREE.CanvasTexture {
   if (!ctx) return new THREE.CanvasTexture(canvas);
 
   ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+  // Jejak PCB (traces) samar di bawah silkscreen: jalur siku (Manhattan)
+  // deterministik dari baris header menuju tengah board + titik via,
+  // digambar SEBELUM label agar teks putih tetap paling terbaca.
+  // Pemetaan bidang silkscreen 26.2 x 20.2 unit -> canvas 1024 x 796 px.
+  const PXU = 39; // piksel per unit (kurang lebih)
+  const toPx = (lx: number, lz: number): [number, number] => [
+    (lx / 26.2 + 0.5) * canvas.width,
+    (lz / 20.2 + 0.5) * canvas.height,
+  ];
+  const tracePins: Array<[number, number]> = [];
+  for (let i = 0; i < 14; i += 1) tracePins.push([-6.5 + i, -9.6]);
+  for (let i = 0; i < 8; i += 1) tracePins.push([-8.9 + i, 9.6]);
+  for (let i = 0; i < 6; i += 1) tracePins.push([3.1 + i, 9.6]);
+  ctx.strokeStyle = 'rgba(200,245,255,0.08)';
+  ctx.lineWidth = 3;
+  ctx.lineCap = 'round';
+  tracePins.forEach(([lx, lz], i) => {
+    if (i % 3 === 2) return; // hanya ±2/3 pin berjejak agar tidak ramai
+    const [sx, sy] = toPx(lx, lz);
+    const inward = lz < 0 ? 1 : -1; // arah menuju tengah board (sumbu z)
+    const startY = sy + inward * 0.9 * PXU;
+    const [endX] = toPx(lx * 0.3, 0);
+    const [, endY] = toPx(0, lz * 0.35);
+    ctx.beginPath();
+    ctx.moveTo(sx, startY);
+    ctx.lineTo(sx, endY);
+    ctx.lineTo(endX, endY);
+    ctx.stroke();
+    ctx.fillStyle = 'rgba(0,0,0,0.10)';
+    ctx.beginPath();
+    ctx.arc(sx, endY, 0.09 * PXU, 0, Math.PI * 2);
+    ctx.fill();
+  });
+
   ctx.fillStyle = 'rgba(255,255,255,0.92)';
   ctx.strokeStyle = 'rgba(255,255,255,0.55)';
   ctx.textAlign = 'center';
@@ -85,6 +120,7 @@ function buildHeaderPositions(): Array<[number, number, number]> {
  */
 export default function UnoBoard({ position = [0, 0, 0] }: UnoBoardProps) {
   const headersRef = useRef<THREE.InstancedMesh>(null);
+  const holesRef = useRef<THREE.InstancedMesh>(null);
   const silkscreen = useMemo(createSilkscreenTexture, []);
   const headerPositions = useMemo(buildHeaderPositions, []);
   const headerGeometry = useMemo(() => new THREE.BoxGeometry(0.9, 1.1, 0.9), []);
@@ -92,17 +128,30 @@ export default function UnoBoard({ position = [0, 0, 0] }: UnoBoardProps) {
     () => new THREE.MeshStandardMaterial({ color: '#101014', roughness: 0.6 }),
     [],
   );
+  // Lubang soket: cakram gelap kecil di permukaan atas tiap header betina
+  const holeGeometry = useMemo(() => new THREE.CylinderGeometry(0.3, 0.3, 0.08, 12), []);
+  const holeMaterial = useMemo(
+    () => new THREE.MeshStandardMaterial({ color: '#050506', roughness: 0.85 }),
+    [],
+  );
 
   useLayoutEffect(() => {
     const mesh = headersRef.current;
     if (!mesh) return;
+    const holes = holesRef.current;
     const dummy = new THREE.Object3D();
     headerPositions.forEach(([x, y, z], index) => {
       dummy.position.set(x, y, z);
       dummy.updateMatrix();
       mesh.setMatrixAt(index, dummy.matrix);
+      if (holes) {
+        dummy.position.set(x, y + 0.57, z); // tepat di permukaan atas header
+        dummy.updateMatrix();
+        holes.setMatrixAt(index, dummy.matrix);
+      }
     });
     mesh.instanceMatrix.needsUpdate = true;
+    if (holes) holes.instanceMatrix.needsUpdate = true;
   }, [headerPositions]);
 
   return (
@@ -132,6 +181,12 @@ export default function UnoBoard({ position = [0, 0, 0] }: UnoBoardProps) {
         castShadow
       />
 
+      {/* Lubang soket di permukaan atas tiap header betina */}
+      <instancedMesh
+        ref={holesRef}
+        args={[holeGeometry, holeMaterial, headerPositions.length]}
+      />
+
       {/* Port USB-B (perak) di tepi kiri */}
       <mesh position={[-12.2, 1.9, -5]} castShadow>
         <boxGeometry args={[4.6, 3.2, 5]} />
@@ -142,6 +197,13 @@ export default function UnoBoard({ position = [0, 0, 0] }: UnoBoardProps) {
       <mesh position={[-11.4, 1.6, 6.8]} castShadow>
         <cylinderGeometry args={[2.1, 2.1, 3.2, 24]} />
         <meshStandardMaterial color="#17181c" roughness={0.5} />
+      </mesh>
+
+      {/* Lubang tengah jack: silinder gelap kecil sedikit masuk ke mulut
+          jack (puncak jack y=3.2) agar terlihat berlubang, bukan solid */}
+      <mesh position={[-11.4, 3.05, 6.8]}>
+        <cylinderGeometry args={[0.55, 0.55, 0.5, 20]} />
+        <meshStandardMaterial color="#0a0a0c" roughness={0.9} />
       </mesh>
 
       {/* Chip ATmega328P */}

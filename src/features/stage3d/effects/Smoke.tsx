@@ -1,11 +1,18 @@
-import { useMemo, useRef } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
 import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
+import { playBurnPop } from '../../../shared/utils/soundFx';
 
 /**
- * Efek kepulan asap untuk komponen yang rusak.
- * Partikel naik dari atas komponen, menyebar seiring tinggi, lalu loop.
- * Posisi dimutasi langsung pada BufferAttribute — tanpa re-render React.
+ * Efek kerusakan berlapis untuk komponen yang rusak:
+ * 1. Bunyi letupan (playBurnPop) tepat satu kali saat mount.
+ * 2. Percikan api kuning — 12 partikel terlontar acak, jatuh oleh
+ *    gravitasi, hilang setelah 0,4 detik.
+ * 3. Kilatan cahaya oranye — pointLight meredup eksponensial ±0,25 detik.
+ * 4. Getaran kamera singkat (250 ms, amplitudo ±0,12) yang batal sendiri
+ *    bila kamera digerakkan pihak lain (user / CameraRig).
+ * 5. Kepulan asap abu yang naik terus (perilaku asli, dipertahankan).
+ * Posisi partikel dimutasi langsung pada BufferAttribute — tanpa re-render.
  */
 
 const PARTICLE_COUNT = 26;
@@ -16,6 +23,23 @@ const RISE_SPAN = 3.2;
 /** Radius sebaran di dasar dan di puncak kepulan. */
 const RADIUS_MIN = 0.12;
 const RADIUS_MAX = 1.0;
+
+/** Jumlah partikel percikan api saat ledakan. */
+const SPARK_COUNT = 12;
+/** Umur percikan dalam detik; setelah itu points disembunyikan. */
+const SPARK_LIFE = 0.4;
+/** Gravitasi percikan (diperlambat setengah agar terasa melayang). */
+const SPARK_GRAVITY = -9.8 * 0.5;
+/** Tinggi pangkal percikan dari titik asal komponen. */
+const SPARK_LIFT = 0.9;
+
+/** Durasi kilatan & getaran kamera dalam detik. */
+const FLASH_DURATION = 0.25;
+const SHAKE_DURATION = 0.25;
+/** Amplitudo maksimum getaran kamera per sumbu. */
+const SHAKE_AMPLITUDE = 0.12;
+/** Batas gerak kamera dari posisi tangkapan sebelum shake dibatalkan. */
+const SHAKE_CANCEL_DISTANCE = 1;
 
 interface ParticleSeed {
   /** Kemajuan awal siklus naik (0–1), acak tapi stabil antar-render. */
@@ -42,6 +66,11 @@ function mulberry32(seed: number): () => number {
 }
 
 export function Smoke({ position }: { position: [number, number, number] }) {
+  // Bunyi letupan tepat satu kali saat efek kerusakan muncul.
+  useEffect(() => {
+    playBurnPop();
+  }, []);
+
   const seeds = useMemo<ParticleSeed[]>(() => {
     const rand = mulberry32(20261021);
     return Array.from({ length: PARTICLE_COUNT }, () => ({
@@ -63,8 +92,49 @@ export function Smoke({ position }: { position: [number, number, number] }) {
 
   const geometryRef = useRef<THREE.BufferGeometry>(geometry);
 
-  useFrame((state) => {
+  // --- Percikan api -------------------------------------------------------
+  const sparkPositions = useMemo(() => new Float32Array(SPARK_COUNT * 3), []);
+  const sparkVelocities = useMemo(() => {
+    const rand = mulberry32(977351);
+    const vel = new Float32Array(SPARK_COUNT * 3);
+    for (let i = 0; i < SPARK_COUNT; i += 1) {
+      // Arah acak di bola, dibiaskan ke atas agar percikan terlontar naik.
+      const angle = rand() * Math.PI * 2;
+      const horizontal = 0.6 + rand() * 1.8;
+      vel[i * 3] = Math.cos(angle) * horizontal;
+      vel[i * 3 + 1] = 1.5 + rand() * 2.0;
+      vel[i * 3 + 2] = Math.sin(angle) * horizontal;
+    }
+    return vel;
+  }, []);
+
+  const sparkGeometry = useMemo(() => {
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.BufferAttribute(sparkPositions, 3));
+    return geo;
+  }, [sparkPositions]);
+
+  const sparkPointsRef = useRef<THREE.Points>(null);
+  const flashRef = useRef<THREE.PointLight>(null);
+
+  /** Waktu clock saat efek pertama kali dirender (acuan semua lapisan). */
+  const startTimeRef = useRef<number | null>(null);
+  /** State getaran kamera: posisi tangkapan + offset frame sebelumnya. */
+  const shakeRef = useRef({
+    captured: new THREE.Vector3(),
+    prevOffset: new THREE.Vector3(),
+    done: false,
+  });
+
+  useFrame((state, delta) => {
     const t = state.clock.elapsedTime;
+    if (startTimeRef.current === null) {
+      startTimeRef.current = t;
+      shakeRef.current.captured.copy(state.camera.position);
+    }
+    const age = t - startTimeRef.current;
+
+    // --- Kepulan asap (perilaku asli) ---
     for (let i = 0; i < PARTICLE_COUNT; i += 1) {
       const seed = seeds[i];
       // Kemajuan siklus 0–1: kecepatan (unit/detik) dibagi rentang naik.
@@ -80,19 +150,102 @@ export function Smoke({ position }: { position: [number, number, number] }) {
     }
     const attr = geometryRef.current.getAttribute('position') as THREE.BufferAttribute;
     attr.needsUpdate = true;
+
+    // --- Percikan api: integrasi kecepatan + gravitasi selama 0,4 detik ---
+    const sparks = sparkPointsRef.current;
+    if (sparks) {
+      if (age <= SPARK_LIFE) {
+        const dt = Math.min(delta, 0.05);
+        for (let i = 0; i < SPARK_COUNT; i += 1) {
+          const idx = i * 3;
+          sparkVelocities[idx + 1] += SPARK_GRAVITY * dt;
+          sparkPositions[idx] += sparkVelocities[idx] * dt;
+          sparkPositions[idx + 1] += sparkVelocities[idx + 1] * dt;
+          sparkPositions[idx + 2] += sparkVelocities[idx + 2] * dt;
+        }
+        const sparkAttr = sparkGeometry.getAttribute('position') as THREE.BufferAttribute;
+        sparkAttr.needsUpdate = true;
+      } else if (sparks.visible) {
+        sparks.visible = false;
+      }
+    }
+
+    // --- Kilatan cahaya: 8 → 0 eksponensial dalam ±0,25 detik ---
+    if (flashRef.current) {
+      flashRef.current.intensity =
+        age <= FLASH_DURATION + 0.1 ? 8 * Math.exp(-14 * age) : 0;
+    }
+
+    // --- Getaran kamera: offset acak kecil selama 250 ms ---
+    const shake = shakeRef.current;
+    if (!shake.done) {
+      const cam = state.camera;
+      // Posisi dasar = posisi sekarang tanpa offset yang kita pasang sendiri.
+      const baseX = cam.position.x - shake.prevOffset.x;
+      const baseY = cam.position.y - shake.prevOffset.y;
+      const baseZ = cam.position.z - shake.prevOffset.z;
+      const moved = Math.hypot(
+        baseX - shake.captured.x,
+        baseY - shake.captured.y,
+        baseZ - shake.captured.z,
+      );
+      if (age > SHAKE_DURATION || moved > SHAKE_CANCEL_DISTANCE) {
+        // Selesai / dibatalkan: kembalikan kamera persis ke posisi dasar.
+        cam.position.set(baseX, baseY, baseZ);
+        shake.prevOffset.set(0, 0, 0);
+        shake.done = true;
+      } else {
+        const decay = 1 - age / SHAKE_DURATION;
+        const offX = (Math.random() * 2 - 1) * SHAKE_AMPLITUDE * decay;
+        const offY = (Math.random() * 2 - 1) * SHAKE_AMPLITUDE * decay;
+        const offZ = (Math.random() * 2 - 1) * SHAKE_AMPLITUDE * decay;
+        cam.position.set(baseX + offX, baseY + offY, baseZ + offZ);
+        shake.prevOffset.set(offX, offY, offZ);
+      }
+    }
   });
 
   return (
-    <points geometry={geometry} position={position} frustumCulled={false}>
-      <pointsMaterial
-        color="#9aa0a8"
-        size={1.6}
-        sizeAttenuation
-        transparent
-        opacity={0.35}
-        depthWrite={false}
+    <>
+      {/* Kepulan asap abu (asli) */}
+      <points geometry={geometry} position={position} frustumCulled={false}>
+        <pointsMaterial
+          color="#9aa0a8"
+          size={1.6}
+          sizeAttenuation
+          transparent
+          opacity={0.35}
+          depthWrite={false}
+        />
+      </points>
+
+      {/* Percikan api kuning-oranye sesaat */}
+      <points
+        ref={sparkPointsRef}
+        geometry={sparkGeometry}
+        position={[position[0], position[1] + SPARK_LIFT, position[2]]}
+        frustumCulled={false}
+      >
+        <pointsMaterial
+          color="#FACC15"
+          size={0.55}
+          sizeAttenuation
+          transparent
+          opacity={0.95}
+          depthWrite={false}
+        />
+      </points>
+
+      {/* Kilatan ledakan */}
+      <pointLight
+        ref={flashRef}
+        position={[position[0], position[1] + BASE_LIFT, position[2]]}
+        color="#FF5500"
+        intensity={0}
+        distance={9}
+        decay={2}
       />
-    </points>
+    </>
   );
 }
 

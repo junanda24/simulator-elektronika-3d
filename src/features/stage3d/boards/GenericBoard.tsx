@@ -33,6 +33,32 @@ function createSilkscreenTexture(definition: BoardDefinition): THREE.CanvasTextu
   ];
 
   ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+  // Jejak PCB (traces) samar di bawah silkscreen: jalur siku (Manhattan)
+  // dari sekitar sebagian pin menuju tengah board + titik via gelap.
+  // Deterministik dari indeks pin; digambar SEBELUM label agar label
+  // putih tetap paling terbaca.
+  ctx.strokeStyle = 'rgba(255,255,255,0.08)';
+  ctx.lineWidth = Math.max(2, Math.round(0.07 * PX_PER_UNIT));
+  ctx.lineCap = 'round';
+  definition.pins.forEach((pin, i) => {
+    if (i % 3 === 2) return; // hanya ±2/3 pin berjejak agar tidak ramai
+    const [sx, sy] = toPx(pin.local[0], pin.local[2]);
+    const inward = pin.local[0] < 0 ? 1 : -1;
+    const midX = sx + inward * (((i % 4) + 2) * 0.35 * PX_PER_UNIT);
+    const [cx, cy] = toPx(0, pin.local[2] * 0.4);
+    ctx.beginPath();
+    ctx.moveTo(sx + inward * 0.8 * PX_PER_UNIT, sy);
+    ctx.lineTo(midX, sy);
+    ctx.lineTo(midX, cy);
+    ctx.lineTo(cx, cy);
+    ctx.stroke();
+    ctx.fillStyle = 'rgba(0,0,0,0.10)';
+    ctx.beginPath();
+    ctx.arc(midX, cy, 0.09 * PX_PER_UNIT, 0, Math.PI * 2);
+    ctx.fill();
+  });
+
   ctx.fillStyle = 'rgba(255,255,255,0.92)';
 
   // Label tiap pin, digambar ke arah tengah board agar tidak tertutup header
@@ -216,12 +242,27 @@ export default function GenericBoard({ definition }: { definition: BoardDefiniti
         <meshPhysicalMaterial color={definition.pcbColor} clearcoat={0.6} roughness={0.3} />
       </RoundedBox>
 
-      {/* Lubang pemasangan di 4 sudut */}
-      {mountHoles.map(([x, z]) => (
-        <mesh key={`${x}:${z}`} position={[x, PCB_HEIGHT / 2, z]}>
-          <cylinderGeometry args={[0.32, 0.32, PCB_HEIGHT + 0.06, 16]} />
-          <meshStandardMaterial color="#0b0b0d" roughness={0.7} />
-        </mesh>
+      {/* Lubang pemasangan di 4 sudut + sekrup metal berkepala slot minus */}
+      {mountHoles.map(([x, z], i) => (
+        <group key={`${x}:${z}`} position={[x, 0, z]}>
+          <mesh position={[0, PCB_HEIGHT / 2, 0]}>
+            <cylinderGeometry args={[0.32, 0.32, PCB_HEIGHT + 0.06, 16]} />
+            <meshStandardMaterial color="#0b0b0d" roughness={0.7} />
+          </mesh>
+          {/* Kepala sekrup: cakram metal di permukaan PCB */}
+          <mesh position={[0, PCB_HEIGHT + 0.04, 0]} castShadow>
+            <cylinderGeometry args={[0.3, 0.3, 0.09, 20]} />
+            <meshStandardMaterial color="#c0c4cc" metalness={0.9} roughness={0.35} />
+          </mesh>
+          {/* Slot minus di kepala sekrup (sudut bervariasi per sudut) */}
+          <mesh
+            position={[0, PCB_HEIGHT + 0.09, 0]}
+            rotation={[0, ((i * 47) % 180) * (Math.PI / 180), 0]}
+          >
+            <boxGeometry args={[0.42, 0.03, 0.09]} />
+            <meshStandardMaterial color="#3a3d45" roughness={0.6} />
+          </mesh>
+        </group>
       ))}
 
       {/* Silkscreen: label pin + nama board */}

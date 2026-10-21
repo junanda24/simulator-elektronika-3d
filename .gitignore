@@ -9,3 +9,5 @@ credentials*
 .DS_Store
 *.log
 coverage/
+.vercel
+.env*

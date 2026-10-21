@@ -1,6 +1,8 @@
 import type { ComponentType } from 'react';
 import type { ThreeEvent } from '@react-three/fiber';
 import type { ComponentRenderProps } from '../../../types';
+import { useCircuitStore } from '../../../../features/wiring/store/circuitStore';
+import { RotaryKnobGizmo } from '../../../../features/stage3d/gizmos/RotaryKnobGizmo';
 
 const METAL = { color: '#cfd4dc', metalness: 0.9, roughness: 0.3 } as const;
 const BODY = { color: '#1d4ed8', roughness: 0.45 } as const;
@@ -28,9 +30,14 @@ export const PotentiometerRender3D: ComponentType<ComponentRenderProps> = ({
 }) => {
   const alpha = displayAlpha(instance);
   const knobAngleRad = ((-135 + alpha * 270) * Math.PI) / 180;
+  const selected = useCircuitStore((s) => s.selectedInstanceId === instance.id);
+  const setDragging3D = useCircuitStore((s) => s.setDragging3D);
+  const totalOhmsRaw = Number(instance.props.value ?? 10000);
+  const totalOhms = Number.isFinite(totalOhmsRaw) ? totalOhmsRaw : 10000;
 
   const handleKnobPointerDown = (e: ThreeEvent<PointerEvent>) => {
     e.stopPropagation();
+    setDragging3D?.(true);
     const startY = e.clientY;
     const startAlpha = alpha;
     const onMove = (ev: PointerEvent) => {
@@ -43,6 +50,7 @@ export const PotentiometerRender3D: ComponentType<ComponentRenderProps> = ({
     const onUp = () => {
       window.removeEventListener('pointermove', onMove);
       window.removeEventListener('pointerup', onUp);
+      setDragging3D?.(false);
     };
     window.addEventListener('pointermove', onMove);
     window.addEventListener('pointerup', onUp);
@@ -82,6 +90,15 @@ export const PotentiometerRender3D: ComponentType<ComponentRenderProps> = ({
           <meshStandardMaterial color="#00e5ff" roughness={0.4} />
         </mesh>
       </group>
+
+      {/* Panel baca % putaran + resistansi saat komponen terpilih */}
+      {selected && (
+        <RotaryKnobGizmo
+          position={[0, 4.6, 0]}
+          percent={alpha * 100}
+          ohms={alpha * totalOhms}
+        />
+      )}
     </group>
   );
 };

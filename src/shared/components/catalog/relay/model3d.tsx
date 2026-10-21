@@ -1,5 +1,7 @@
+import { useEffect, useRef } from 'react';
 import type { ComponentType } from 'react';
 import type { ComponentRenderProps } from '../../../types';
+import { playClick } from '../../../utils/soundFx';
 
 const METAL = { color: '#cfd4dc', metalness: 0.9, roughness: 0.3 } as const;
 
@@ -19,7 +21,18 @@ const LEG_POSITIONS: Array<[number, number]> = [
  * merah yang menyala saat branchCurrents.active === 1.
  */
 export const RelayRender3D: ComponentType<ComponentRenderProps> = ({ instance }) => {
-  const active = instance.simState.branchCurrents['active'] === 1;
+  const activeValue = instance.simState.branchCurrents['active'] ?? 0;
+  const active = activeValue === 1;
+
+  // Bunyi "tak!" mekanis setiap kali koil berubah status.
+  // Ref diinisialisasi dari nilai awal agar mount pertama tidak berbunyi.
+  const prevActiveRef = useRef(activeValue);
+  useEffect(() => {
+    if (prevActiveRef.current !== activeValue) {
+      prevActiveRef.current = activeValue;
+      playClick(1200);
+    }
+  }, [activeValue]);
 
   return (
     <group position={instance.position} rotation={[0, instance.rotation, 0]}>

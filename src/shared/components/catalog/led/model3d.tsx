@@ -38,12 +38,14 @@ export const LedRender3D: ComponentType<ComponentRenderProps> = ({ instance }) =
         <meshStandardMaterial {...METAL} />
       </mesh>
 
-      {/* Gelang alas kubah */}
+      {/* Gelang alas kubah — epoxy: physical material + clearcoat */}
       <mesh position={[0, 1.62, 0]} castShadow>
         <cylinderGeometry args={[1.16, 1.16, 0.32, 24]} />
-        <meshStandardMaterial
+        <meshPhysicalMaterial
           color={domeColor}
           roughness={0.35}
+          clearcoat={0.6}
+          clearcoatRoughness={0.25}
           transparent
           opacity={0.9}
           emissive={damaged ? '#000000' : baseColor}
@@ -51,12 +53,14 @@ export const LedRender3D: ComponentType<ComponentRenderProps> = ({ instance }) =
         />
       </mesh>
 
-      {/* Badan silinder */}
+      {/* Badan silinder — epoxy bening ber-clearcoat */}
       <mesh position={[0, 2.75, 0]} castShadow>
         <cylinderGeometry args={[1, 1, 2.2, 24]} />
-        <meshStandardMaterial
+        <meshPhysicalMaterial
           color={domeColor}
           roughness={0.3}
+          clearcoat={0.6}
+          clearcoatRoughness={0.25}
           transparent
           opacity={0.88}
           emissive={damaged ? '#000000' : baseColor}
@@ -64,12 +68,14 @@ export const LedRender3D: ComponentType<ComponentRenderProps> = ({ instance }) =
         />
       </mesh>
 
-      {/* Kubah bola */}
+      {/* Kubah bola — epoxy bening ber-clearcoat */}
       <mesh position={[0, 3.85, 0]} castShadow>
         <sphereGeometry args={[1, 24, 16, 0, Math.PI * 2, 0, Math.PI / 2]} />
-        <meshStandardMaterial
+        <meshPhysicalMaterial
           color={domeColor}
           roughness={0.3}
+          clearcoat={0.6}
+          clearcoatRoughness={0.25}
           transparent
           opacity={0.88}
           emissive={damaged ? '#000000' : baseColor}

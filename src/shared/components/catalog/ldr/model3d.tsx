@@ -1,6 +1,9 @@
 import type { ComponentType } from 'react';
+import { DoubleSide } from 'three';
 import type { ThreeEvent } from '@react-three/fiber';
 import type { ComponentRenderProps } from '../../../types';
+import { useCircuitStore } from '../../../../features/wiring/store/circuitStore';
+import { SensorGizmo3D } from '../../../../features/stage3d/gizmos/SensorGizmo3D';
 
 const METAL = { color: '#cfd4dc', metalness: 0.9, roughness: 0.3 } as const;
 /** Badan LDR — oranye kecoklatan khas fotoresistor CdS. */
@@ -27,9 +30,12 @@ function displayLight(instance: ComponentRenderProps['instance']): number {
  */
 export const LdrRender3D: ComponentType<ComponentRenderProps> = ({ instance, onInteract }) => {
   const light = displayLight(instance);
+  const selected = useCircuitStore((s) => s.selectedInstanceId === instance.id);
+  const setDragging3D = useCircuitStore((s) => s.setDragging3D);
 
   const handlePointerDown = (e: ThreeEvent<PointerEvent>) => {
     e.stopPropagation();
+    setDragging3D?.(true);
     const startY = e.clientY;
     const startLight = light;
     const onMove = (ev: PointerEvent) => {
@@ -42,6 +48,7 @@ export const LdrRender3D: ComponentType<ComponentRenderProps> = ({ instance, onI
     const onUp = () => {
       window.removeEventListener('pointermove', onMove);
       window.removeEventListener('pointerup', onUp);
+      setDragging3D?.(false);
     };
     window.addEventListener('pointermove', onMove);
     window.addEventListener('pointerup', onUp);
@@ -78,6 +85,32 @@ export const LdrRender3D: ComponentType<ComponentRenderProps> = ({ instance, onI
           <meshStandardMaterial {...TRACE} />
         </mesh>
       ))}
+
+      {/* Kerucut cahaya virtual + panel gizmo saat sensor terpilih */}
+      {selected && (
+        <>
+          <mesh position={[0, 1.6, 0]} rotation={[Math.PI, 0, 0]}>
+            <coneGeometry args={[0.95, 1.15, 24, 1, true]} />
+            <meshBasicMaterial
+              color="#FEF08A"
+              transparent
+              opacity={0.05 + light * 0.3}
+              depthWrite={false}
+              side={DoubleSide}
+            />
+          </mesh>
+          <SensorGizmo3D
+            position={[0, 3.6, 0]}
+            label="Cahaya"
+            value={Math.round(light * 1000)}
+            min={0}
+            max={1000}
+            step={10}
+            unit=" lux"
+            onChange={(v) => onInteract({ light: v / 1000 })}
+          />
+        </>
+      )}
     </group>
   );
 };

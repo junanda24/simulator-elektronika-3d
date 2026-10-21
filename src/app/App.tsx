@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type ChangeEvent } from 'react';
-import Workbench from '../features/stage3d/Workbench';
+import Workbench, { CAMERA_HOME, TARGET_HOME } from '../features/stage3d/Workbench';
 import AutopsyCard from './AutopsyCard';
 import RightDock from './RightDock';
 import { initSim } from '../features/simulation/worker/bridge';
@@ -13,13 +13,24 @@ import {
 import { CATALOG, CATEGORY_LABEL_ID, describeDefaultProps } from './catalogData';
 import { useCircuitStore } from '../features/wiring/store/circuitStore';
 import { getComponentPlugin } from '../shared/components/registry';
-import { holeLabel } from '../shared/boards/breadboard';
+import { BREADBOARD_ORIGIN, holeLabel } from '../shared/boards/breadboard';
+import { isSoundEnabled, playClick, setSoundEnabled } from '../shared/utils/soundFx';
 import {
   boardPinById,
   BOARD_DEFINITIONS,
   getBoardDefinition,
 } from '../shared/boards/definitions';
 import { terminalLabel, type TerminalRef } from '../features/wiring/netlist';
+
+/** Palet warna kabel untuk shortcut angka 1–6 & swatch bar peralatan. */
+const SHORTCUT_WIRE_COLORS: Array<{ hex: string; label: string }> = [
+  { hex: '#EF4444', label: 'Merah' },
+  { hex: '#1F2937', label: 'Hitam' },
+  { hex: '#3B82F6', label: 'Biru' },
+  { hex: '#22C55E', label: 'Hijau' },
+  { hex: '#EAB308', label: 'Kuning' },
+  { hex: '#F97316', label: 'Oranye' },
+];
 
 const WIRE_COLORS: Array<{ hex: string; label: string }> = [
   { hex: '#ef4444', label: 'Merah (5V)' },
@@ -51,7 +62,6 @@ export default function App() {
   const wires = useCircuitStore((s) => s.wires);
   const placingType = useCircuitStore((s) => s.placingType);
   const setPlacing = useCircuitStore((s) => s.setPlacing);
-  const cancelPending = useCircuitStore((s) => s.cancelPending);
   const pendingFrom = useCircuitStore((s) => s.pendingFrom);
   const wireColor = useCircuitStore((s) => s.wireColor);
   const setWireColor = useCircuitStore((s) => s.setWireColor);
@@ -64,7 +74,16 @@ export default function App() {
   const clearAll = useCircuitStore((s) => s.clearAll);
   const hover = useCircuitStore((s) => s.hover);
   const loadShared = useCircuitStore((s) => s.loadShared);
+  const pinHoles = useCircuitStore((s) => s.pinHoles);
+  const canUndo = useCircuitStore((s) => s.canUndo);
+  const canRedo = useCircuitStore((s) => s.canRedo);
+  const undo = useCircuitStore((s) => s.undo);
+  const redo = useCircuitStore((s) => s.redo);
+  const deleteMode = useCircuitStore((s) => s.deleteMode);
+  const setDeleteMode = useCircuitStore((s) => s.setDeleteMode);
+  const setCameraView = useCircuitStore((s) => s.setCameraView);
   const [shareNote, setShareNote] = useState<string | null>(null);
+  const [soundOn, setSoundOn] = useState<boolean>(() => isSoundEnabled());
   const importRef = useRef<HTMLInputElement>(null);
   const voltages = useCircuitStore((s) => s.voltages);
   const netNameOf = useCircuitStore((s) => s.netNameOf);
@@ -87,16 +106,88 @@ export default function App() {
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') cancelPending();
-      if (e.key === 'Delete' || e.key === 'Backspace') {
-        const state = useCircuitStore.getState();
-        if (state.selectedWireId) state.removeWire(state.selectedWireId);
-        else if (state.selectedInstanceId) state.removeInstance(state.selectedInstanceId);
+      // PENJAGA FOKUS: jangan pernah menelan ketikan user — semua shortcut
+      // dimatikan saat fokus di input/textarea/select/contenteditable atau
+      // di dalam editor sketch CodeMirror (.cm-editor). Ini juga mencegah
+      // Delete/Backspace saat mengetik menghapus komponen terpilih.
+      const target = e.target as HTMLElement | null;
+      if (target) {
+        const tag = target.tagName;
+        if (
+          tag === 'INPUT' ||
+          tag === 'TEXTAREA' ||
+          tag === 'SELECT' ||
+          target.isContentEditable ||
+          target.closest('.cm-editor')
+        ) {
+          return;
+        }
+      }
+      const state = useCircuitStore.getState();
+
+      // Kombinasi undo/redo adalah satu-satunya shortcut ber-modifier.
+      if (e.ctrlKey || e.metaKey) {
+        if (e.altKey) return;
+        const key = e.key.toLowerCase();
+        if (key === 'z') {
+          e.preventDefault();
+          if (e.shiftKey) state.redo();
+          else state.undo();
+        } else if (key === 'y') {
+          e.preventDefault();
+          state.redo();
+        }
+        return;
+      }
+      if (e.altKey || e.repeat) return;
+
+      switch (e.key) {
+        case 'Escape':
+          state.cancelPending();
+          if (state.deleteMode) state.setDeleteMode(false);
+          break;
+        case 'Delete':
+        case 'Backspace':
+          if (state.selectedWireId) state.removeWire(state.selectedWireId);
+          else if (state.selectedInstanceId) state.removeInstance(state.selectedInstanceId);
+          break;
+        case 'r':
+        case 'R':
+          if (state.placingType) state.rotatePlacement();
+          break;
+        case ' ':
+          e.preventDefault();
+          state.setRunning(!state.running);
+          break;
+        case '1':
+        case '2':
+        case '3':
+        case '4':
+        case '5':
+        case '6':
+          state.setWireColor(SHORTCUT_WIRE_COLORS[Number(e.key) - 1].hex);
+          break;
+        default:
+          break;
       }
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [cancelPending]);
+  }, []);
+
+  // Mode Hapus: seleksi berikutnya (komponen/kabel) langsung dihapus.
+  // Klik kosong tidak memilih apa pun → tidak menghapus apa pun.
+  useEffect(() => {
+    if (!deleteMode) return;
+    const state = useCircuitStore.getState();
+    if (state.selectedWireId) {
+      state.removeWire(state.selectedWireId);
+      playClick(300);
+    } else if (state.selectedInstanceId) {
+      state.removeInstance(state.selectedInstanceId);
+      playClick(300);
+    }
+  }, [deleteMode, selectedInstanceId, selectedWireId]);
 
   const currentProject = () =>
     toSharedProject({
@@ -149,6 +240,67 @@ export default function App() {
   const anyDamaged = instances.some((i) => i.simState.isDamaged);
   const hoverNet = hover ? netNameOf(hover.ref) : null;
   const hoverVolts = hoverNet !== null ? voltages[hoverNet] : undefined;
+
+  // --- Probe multimeter: status tegangan vs tegangan logika board aktif ---
+  const logicVolts = getBoardDefinition(boardId).profile.logicVolts;
+  const hoverVoltsClass =
+    hoverVolts === undefined
+      ? ''
+      : hoverVolts > logicVolts + 0.5
+        ? 'font-semibold text-accent-danger'
+        : hoverVolts > logicVolts
+          ? 'text-accent-warning'
+          : 'text-accent-run';
+  // Arus hanya ditampilkan bila lubang yang di-hover adalah pin komponen
+  // DAN komponen itu punya tepat satu cabang arus (tidak menebak multi-cabang).
+  let hoverAmpsMa: number | undefined;
+  const hoverRef = hover?.ref;
+  if (hoverRef?.kind === 'hole') {
+    const owner = instances.find((i) =>
+      Object.values(pinHoles[i.id] ?? {}).includes(hoverRef.holeId),
+    );
+    if (owner) {
+      const currents = Object.values(owner.simState.branchCurrents);
+      if (currents.length === 1) hoverAmpsMa = currents[0] * 1000;
+    }
+  }
+
+  // --- Preset kamera (CameraRig mengeksekusi lewat cameraView) ---
+  const boardDef = getBoardDefinition(boardId);
+  const breadboardCenter: [number, number, number] = [
+    BREADBOARD_ORIGIN[0],
+    0,
+    BREADBOARD_ORIGIN[2],
+  ];
+  const tableCenter: [number, number, number] = [
+    (boardDef.origin[0] + BREADBOARD_ORIGIN[0]) / 2,
+    0,
+    (boardDef.origin[2] + BREADBOARD_ORIGIN[2]) / 2,
+  ];
+  const applyCameraPreset = (preset: 'perspektif' | 'atas' | 'depan' | 'dekat') => {
+    if (preset === 'perspektif') {
+      setCameraView(
+        [TARGET_HOME.x, TARGET_HOME.y, TARGET_HOME.z],
+        [CAMERA_HOME.x, CAMERA_HOME.y, CAMERA_HOME.z],
+      );
+    } else if (preset === 'atas') {
+      // Tepat tegak lurus di atas breadboard; offset z 0.01 menghindari gimbal lock.
+      setCameraView(breadboardCenter, [breadboardCenter[0], 80, breadboardCenter[2] + 0.01]);
+    } else if (preset === 'depan') {
+      setCameraView(tableCenter, [tableCenter[0], 14, 58]);
+    } else {
+      const target = selectedInstance
+        ? ([...selectedInstance.position] as [number, number, number])
+        : breadboardCenter;
+      setCameraView(target, [target[0] + 6, target[1] + 5, target[2] + 7]);
+    }
+  };
+
+  const toggleSound = () => {
+    const next = !soundOn;
+    setSoundEnabled(next);
+    setSoundOn(next);
+  };
 
   return (
     <div className="flex h-full flex-col bg-panel">
@@ -226,6 +378,82 @@ export default function App() {
               : 'Simulasi berhenti'}
         </div>
       </header>
+
+      {/* ===== Bar Peralatan: warna kabel, undo/redo, mode hapus, suara ===== */}
+      <div className="flex h-10 shrink-0 items-center gap-3 border-b border-border-subtle bg-panel px-4">
+        <div className="flex items-center gap-1.5" role="group" aria-label="Warna kabel aktif">
+          {SHORTCUT_WIRE_COLORS.map((c, i) => (
+            <button
+              key={c.hex}
+              type="button"
+              title={`${c.label} (tombol ${i + 1})`}
+              aria-label={`Warna kabel ${c.label}`}
+              onClick={() => setWireColor(c.hex)}
+              className={`flex size-6 items-center justify-center rounded-full border-2 text-[9px] font-bold text-white/90 transition-transform ${
+                wireColor.toLowerCase() === c.hex.toLowerCase()
+                  ? 'scale-110 border-accent-primary'
+                  : 'border-transparent'
+              }`}
+              style={{ backgroundColor: c.hex }}
+            >
+              {i + 1}
+            </button>
+          ))}
+        </div>
+
+        <div className="h-5 w-px bg-border-subtle" />
+
+        <div className="flex items-center gap-1.5">
+          <button
+            type="button"
+            onClick={undo}
+            disabled={!canUndo}
+            title="Urungkan (Ctrl+Z)"
+            className="h-7 rounded-md border border-border-subtle px-2.5 text-xs font-medium text-zinc-200 transition-colors hover:border-zinc-500 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:border-border-subtle"
+          >
+            Undo
+          </button>
+          <button
+            type="button"
+            onClick={redo}
+            disabled={!canRedo}
+            title="Ulangi (Ctrl+Shift+Z)"
+            className="h-7 rounded-md border border-border-subtle px-2.5 text-xs font-medium text-zinc-200 transition-colors hover:border-zinc-500 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:border-border-subtle"
+          >
+            Redo
+          </button>
+          <button
+            type="button"
+            onClick={() => setDeleteMode(!deleteMode)}
+            aria-pressed={deleteMode}
+            title="Mode hapus: klik komponen/kabel untuk menghapusnya (Esc untuk keluar)"
+            className={`h-7 rounded-md border px-2.5 text-xs font-semibold transition-colors ${
+              deleteMode
+                ? 'border-accent-danger bg-accent-danger/20 text-accent-danger'
+                : 'border-border-subtle text-zinc-200 hover:border-zinc-500'
+            }`}
+          >
+            Mode Hapus
+          </button>
+          <button
+            type="button"
+            onClick={toggleSound}
+            aria-pressed={soundOn}
+            title="Suara mekanis & elektrik (Web Audio)"
+            className={`h-7 rounded-md border px-2.5 text-xs font-medium transition-colors ${
+              soundOn
+                ? 'border-accent-primary/60 bg-accent-primary/10 text-accent-primary'
+                : 'border-border-subtle text-zinc-400 hover:border-zinc-500'
+            }`}
+          >
+            Suara: {soundOn ? 'Nyala' : 'Mati'}
+          </button>
+        </div>
+
+        <p className="ml-auto hidden text-[11px] text-zinc-500 xl:block">
+          R putar · Spasi jalan · Del hapus · 1–6 warna
+        </p>
+      </div>
 
       {/* ===== Badan: Left Dock + Viewport ===== */}
       <div className="flex min-h-0 flex-1">
@@ -397,8 +625,30 @@ export default function App() {
           </p>
         </aside>
 
-        <main className="relative min-w-0 flex-1">
+        <main
+          className={`relative min-w-0 flex-1 ${deleteMode ? 'cursor-crosshair' : ''}`}
+        >
           <Workbench resetSignal={resetSignal} />
+          {/* Preset sudut kamera */}
+          <div className="absolute left-3 top-3 z-10 flex flex-col gap-1.5">
+            {(
+              [
+                { id: 'perspektif', label: 'Perspektif' },
+                { id: 'atas', label: 'Atas' },
+                { id: 'depan', label: 'Depan' },
+                { id: 'dekat', label: 'Dekat' },
+              ] as const
+            ).map((p) => (
+              <button
+                key={p.id}
+                type="button"
+                onClick={() => applyCameraPreset(p.id)}
+                className="h-7 rounded-md border border-border-subtle bg-panel/85 px-2.5 text-left text-[11px] font-medium text-zinc-200 backdrop-blur-md transition-colors hover:border-accent-primary hover:text-accent-primary"
+              >
+                {p.label}
+              </button>
+            ))}
+          </div>
           <div className="pointer-events-none absolute bottom-3 left-3 rounded-md border border-border-subtle bg-panel/85 px-3 py-2 text-[11px] text-zinc-400 backdrop-blur-md">
             Kontrol kamera: seret untuk memutar, roda tetikus untuk memperbesar,
             seret kanan untuk menggeser.
@@ -421,8 +671,12 @@ export default function App() {
           style={{ left: hover.clientX + 14, top: hover.clientY + 14 }}
         >
           <span className="text-accent-primary">{terminalDisplay(hover.ref, boardId)}</span>
+          {hoverNet && <span className="text-zinc-500"> · net {hoverNet}</span>}
           {hoverVolts !== undefined && (
-            <span className="text-zinc-400"> · {hoverVolts.toFixed(2)} V</span>
+            <span className={hoverVoltsClass}> · {hoverVolts.toFixed(2)} V</span>
+          )}
+          {hoverAmpsMa !== undefined && (
+            <span className="text-zinc-400"> · ≈ {hoverAmpsMa.toFixed(1)} mA</span>
           )}
           {pendingFrom && <span className="text-accent-warning"> · klik tujuan kabel</span>}
         </div>

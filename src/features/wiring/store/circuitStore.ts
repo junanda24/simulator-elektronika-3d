@@ -7,7 +7,8 @@ import {
 } from '../../../shared/types';
 import { holeWorldPosition, terminalHoleId, railHoleId } from '../../../shared/boards/breadboard';
 import { buildNetlist, type TerminalRef, type WireConnection } from '../netlist';
-import { computePlacement } from '../placement';
+import { computePlacement, type PlacementRotation } from '../placement';
+import { playClick, playSnap } from '../../../shared/utils/soundFx';
 import {
   simClearBoardDamage,
   simSetCircuit,
@@ -36,6 +37,57 @@ export interface HoverState {
   clientY: number;
 }
 
+/** Snapshot rangkaian untuk histori undo/redo — data polos saja, aman di-deep-clone. */
+interface CircuitSnapshot {
+  instances: ComponentInstanceState[];
+  pinHoles: Record<string, Record<string, string>>;
+  wires: WireConnection[];
+}
+
+const HISTORY_LIMIT = 50;
+
+function takeSnapshot(state: CircuitSnapshot): CircuitSnapshot {
+  return structuredClone({
+    instances: state.instances,
+    pinHoles: state.pinHoles,
+    wires: state.wires,
+  });
+}
+
+type SetFn = (partial: Partial<CircuitStore>) => void;
+
+/** Dorong snapshot state SAAT INI ke tumpukan undo — panggil SEBELUM mutasi. */
+function pushHistory(set: SetFn, get: () => CircuitStore): void {
+  const s = get();
+  const past = [...s.past, takeSnapshot(s)].slice(-HISTORY_LIMIT);
+  set({ past, future: [], canUndo: true, canRedo: false });
+}
+
+/** Kosongkan histori — proyek/demo/starter/board baru adalah titik awal baru. */
+function resetHistory(set: SetFn): void {
+  set({ past: [], future: [], canUndo: false, canRedo: false });
+}
+
+/** Pilihan & autopsi yang menunjuk entitas yang sudah tidak ada dibersihkan. */
+function pruneAfterRestore(
+  state: CircuitStore,
+  restored: CircuitSnapshot,
+): Pick<CircuitStore, 'selectedInstanceId' | 'selectedWireId' | 'autopsy'> {
+  return {
+    selectedInstanceId: restored.instances.some((i) => i.id === state.selectedInstanceId)
+      ? state.selectedInstanceId
+      : null,
+    selectedWireId: restored.wires.some((w) => w.id === state.selectedWireId)
+      ? state.selectedWireId
+      : null,
+    autopsy:
+      state.autopsy?.instanceId &&
+      !restored.instances.some((i) => i.id === state.autopsy?.instanceId)
+        ? null
+        : state.autopsy,
+  };
+}
+
 interface CircuitStore {
   instances: ComponentInstanceState[];
   pinHoles: Record<string, Record<string, string>>;
@@ -62,6 +114,23 @@ interface CircuitStore {
   hover: HoverState | null;
   focusNonce: number;
   focusPosition: [number, number, number] | null;
+  /** State transien interaksi 3D (Batch 6) — tidak ikut disimpan/di-share. */
+  isDragging3D: boolean;
+  placementRotation: PlacementRotation;
+  wireCursorPos: [number, number, number] | null;
+  /** Tumpukan histori undo/redo berisi snapshot {instances, pinHoles, wires}. */
+  past: CircuitSnapshot[];
+  future: CircuitSnapshot[];
+  canUndo: boolean;
+  canRedo: boolean;
+  /** Perintah gerak kamera dari UI (preset / fokus autopsi) — nonce memicu CameraRig. */
+  cameraView: {
+    target: [number, number, number];
+    position: [number, number, number];
+    nonce: number;
+  } | null;
+  /** Mode hapus: klik seleksi berikutnya langsung menghapus entitasnya. */
+  deleteMode: boolean;
 
   setPlacing: (type: string | null) => void;
   placeAt: (holeId: string) => boolean;
@@ -76,6 +145,16 @@ interface CircuitStore {
   selectInstance: (id: string | null) => void;
   selectWire: (id: string | null) => void;
   setHover: (hover: HoverState | null) => void;
+  setDragging3D: (v: boolean) => void;
+  rotatePlacement: () => void;
+  setWireCursorPos: (pos: [number, number, number] | null) => void;
+  undo: () => void;
+  redo: () => void;
+  setCameraView: (
+    target: [number, number, number],
+    position: [number, number, number],
+  ) => void;
+  setDeleteMode: (v: boolean) => void;
   closeAutopsy: () => void;
   setRunning: (running: boolean) => void;
   setBoard: (boardId: string) => void;
@@ -143,15 +222,84 @@ export const useCircuitStore = create<CircuitStore>((set, get) => ({
   hover: null,
   focusNonce: 0,
   focusPosition: null,
+  isDragging3D: false,
+  placementRotation: 0,
+  wireCursorPos: null,
+  past: [],
+  future: [],
+  canUndo: false,
+  canRedo: false,
+  cameraView: null,
+  deleteMode: false,
 
-  setPlacing: (type) => set({ placingType: type, pendingFrom: null }),
+  setCameraView: (target, position) =>
+    set((s) => ({
+      cameraView: { target, position, nonce: (s.cameraView?.nonce ?? 0) + 1 },
+    })),
+
+  setDeleteMode: (v) => set({ deleteMode: v }),
+
+  setPlacing: (type) =>
+    set({
+      placingType: type,
+      pendingFrom: null,
+      placementRotation: type === null ? 0 : get().placementRotation,
+    }),
+
+  setDragging3D: (v) => set({ isDragging3D: v }),
+
+  rotatePlacement: () =>
+    set((s) => ({
+      placementRotation: ((s.placementRotation + 90) % 360) as PlacementRotation,
+    })),
+
+  setWireCursorPos: (pos) => set({ wireCursorPos: pos }),
+
+  undo: () => {
+    const state = get();
+    if (state.past.length === 0) return;
+    const restored = takeSnapshot(state.past[state.past.length - 1]);
+    set({
+      past: state.past.slice(0, -1),
+      future: [...state.future, takeSnapshot(state)],
+      instances: restored.instances,
+      pinHoles: restored.pinHoles,
+      wires: restored.wires,
+      pendingFrom: null,
+      wireCursorPos: null,
+      ...pruneAfterRestore(state, restored),
+      canUndo: state.past.length - 1 > 0,
+      canRedo: true,
+    });
+    syncSim(get);
+  },
+
+  redo: () => {
+    const state = get();
+    if (state.future.length === 0) return;
+    const restored = takeSnapshot(state.future[state.future.length - 1]);
+    set({
+      past: [...state.past, takeSnapshot(state)].slice(-HISTORY_LIMIT),
+      future: state.future.slice(0, -1),
+      instances: restored.instances,
+      pinHoles: restored.pinHoles,
+      wires: restored.wires,
+      pendingFrom: null,
+      wireCursorPos: null,
+      ...pruneAfterRestore(state, restored),
+      canUndo: true,
+      canRedo: state.future.length - 1 > 0,
+    });
+    syncSim(get);
+  },
 
   placeAt: (holeId) => {
-    const { placingType, instances, pinHoles } = get();
+    const { placingType, instances, pinHoles, placementRotation } = get();
     if (!placingType) return false;
     const occupied = new Set(Object.values(pinHoles).flatMap((m) => Object.values(m)));
-    const placement = computePlacement(placingType, holeId, occupied);
+    const placement = computePlacement(placingType, holeId, occupied, placementRotation);
     if (!placement) return false;
+    pushHistory(set, get);
     set({
       instances: [...instances, placement.instance],
       pinHoles: { ...pinHoles, [placement.instance.id]: placement.pinHoles },
@@ -159,6 +307,7 @@ export const useCircuitStore = create<CircuitStore>((set, get) => ({
       selectedInstanceId: placement.instance.id,
     });
     syncSim(get);
+    playSnap();
     return true;
   },
 
@@ -169,7 +318,7 @@ export const useCircuitStore = create<CircuitStore>((set, get) => ({
       return;
     }
     if (sameTerminal(pendingFrom, ref)) {
-      set({ pendingFrom: null });
+      set({ pendingFrom: null, wireCursorPos: null });
       return;
     }
     const exists = wires.some(
@@ -178,18 +327,22 @@ export const useCircuitStore = create<CircuitStore>((set, get) => ({
         (sameTerminal(w.a, ref) && sameTerminal(w.b, pendingFrom)),
     );
     if (!exists) {
+      pushHistory(set, get);
       set({
         wires: [...wires, { id: nextWireId(), a: pendingFrom, b: ref, color: wireColor }],
       });
       syncSim(get);
+      playClick(880);
     }
-    set({ pendingFrom: null });
+    set({ pendingFrom: null, wireCursorPos: null });
   },
 
-  cancelPending: () => set({ pendingFrom: null, placingType: null }),
+  cancelPending: () =>
+    set({ pendingFrom: null, placingType: null, placementRotation: 0, wireCursorPos: null }),
   setWireColor: (color) => set({ wireColor: color }),
 
   removeWire: (id) => {
+    pushHistory(set, get);
     set((s) => ({
       wires: s.wires.filter((w) => w.id !== id),
       selectedWireId: s.selectedWireId === id ? null : s.selectedWireId,
@@ -198,6 +351,7 @@ export const useCircuitStore = create<CircuitStore>((set, get) => ({
   },
 
   removeInstance: (id) => {
+    pushHistory(set, get);
     set((s) => {
       const pinHoles = { ...s.pinHoles };
       delete pinHoles[id];
@@ -212,6 +366,7 @@ export const useCircuitStore = create<CircuitStore>((set, get) => ({
   },
 
   replaceInstance: (id) => {
+    pushHistory(set, get);
     set((s) => ({
       instances: s.instances.map((i) =>
         i.id === id ? { ...i, simState: EMPTY_SIM_RESULT } : i,
@@ -222,6 +377,7 @@ export const useCircuitStore = create<CircuitStore>((set, get) => ({
   },
 
   clearAll: () => {
+    pushHistory(set, get);
     simStopSketch();
     simSetPowered(false);
     set({
@@ -254,10 +410,16 @@ export const useCircuitStore = create<CircuitStore>((set, get) => ({
     const { instances } = get();
     const resistor = instances.find((i) => i.type === 'resistor');
     const led = instances.find((i) => i.type === 'led-5mm');
-    if (!resistor || !led) return;
+    if (!resistor || !led) {
+      resetHistory(set);
+      return;
+    }
     const board = getBoardDefinition(get().boardId);
     const groundPin = board.pins.find((pin) => pin.kind === 'ground');
-    if (!groundPin) return;
+    if (!groundPin) {
+      resetHistory(set);
+      return;
+    }
     const pinHoles = get().pinHoles;
     const wires: WireConnection[] = [
       { id: nextWireId(), a: { kind: 'board', pinId: board.demoPinId }, b: { kind: 'hole', holeId: pinHoles[resistor.id].A }, color: '#3b82f6' },
@@ -270,6 +432,7 @@ export const useCircuitStore = create<CircuitStore>((set, get) => ({
       sketchCode: DEFAULT_SKETCH.replaceAll('13', String(board.demoPinNumber)),
     });
     syncSim(get);
+    resetHistory(set);
   },
 
   selectInstance: (id) => set({ selectedInstanceId: id, selectedWireId: null }),
@@ -293,6 +456,10 @@ export const useCircuitStore = create<CircuitStore>((set, get) => ({
       autopsy: null,
       selectedWireId: null,
       pendingFrom: null,
+      past: [],
+      future: [],
+      canUndo: false,
+      canRedo: false,
     }));
     syncSim(get);
   },
@@ -328,6 +495,10 @@ export const useCircuitStore = create<CircuitStore>((set, get) => ({
   },
 
   interact: (instanceId, patch) => {
+    // SENGAJA tidak dicatat ke histori undo: interact dipakai oleh drag
+    // kontinu (potensiometer, joystick, sensor) yang memicu puluhan mutasi
+    // per detik — mencatatnya akan membanjiri tumpukan histori (batas 50)
+    // dan mengusir snapshot mutasi penting (pasang/hapus komponen & kabel).
     set((s) => ({
       instances: s.instances.map((i) =>
         i.id === instanceId
@@ -476,6 +647,7 @@ export const useCircuitStore = create<CircuitStore>((set, get) => ({
       lastDamageRuleId: null,
     });
     syncSim(get);
+    resetHistory(set);
   },
 
   loadShared: (project) => {
@@ -500,6 +672,10 @@ export const useCircuitStore = create<CircuitStore>((set, get) => ({
       selectedInstanceId: null,
       selectedWireId: null,
       pendingFrom: null,
+      past: [],
+      future: [],
+      canUndo: false,
+      canRedo: false,
     });
     syncSim(get);
   },

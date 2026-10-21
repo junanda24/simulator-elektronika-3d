@@ -35,6 +35,8 @@ export const SevenSegmentRender3D: ComponentType<ComponentRenderProps> = ({ inst
   const intensityOf = (key: string) =>
     Math.min(1, Math.max(0, Math.abs(currents[key] ?? 0) / 0.02));
   const anyLit = SEGMENTS.some((s) => intensityOf(s.key) > 0.05) || intensityOf('dp') > 0.05;
+  // Pecahan arus segmen terkuat (20 mA = 1) — menggerakkan cahaya titik.
+  const peakFrac = Math.max(0, ...SEGMENTS.map((s) => intensityOf(s.key)), intensityOf('dp'));
 
   return (
     <group position={instance.position} rotation={[0, instance.rotation, 0]}>
@@ -77,7 +79,13 @@ export const SevenSegmentRender3D: ComponentType<ComponentRenderProps> = ({ inst
       </mesh>
 
       {anyLit && (
-        <pointLight position={[0, 2.4, 0]} color="#ff2a2a" intensity={5} distance={10} decay={2} />
+        <pointLight
+          position={[0, 2.4, 0]}
+          color="#ff2a2a"
+          intensity={peakFrac * 5}
+          distance={10}
+          decay={2}
+        />
       )}
     </group>
   );

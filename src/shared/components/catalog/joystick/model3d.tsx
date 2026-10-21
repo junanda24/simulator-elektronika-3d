@@ -1,7 +1,8 @@
-import type { ComponentType } from 'react';
-import type { ThreeEvent } from '@react-three/fiber';
+import { useRef, type ComponentType } from 'react';
+import { useFrame, type ThreeEvent } from '@react-three/fiber';
 import type { ComponentRenderProps } from '../../../types';
 import { alphaXOf, alphaYOf, pressedOf } from './electrical';
+import { useCircuitStore } from '../../../../features/wiring/store/circuitStore';
 
 const METAL = { color: '#cfd4dc', metalness: 0.9, roughness: 0.3 } as const;
 /** PCB modul joystick — hitam. */
@@ -30,10 +31,38 @@ export const JoystickRender3D: ComponentType<ComponentRenderProps> = ({
   const alphaX = alphaXOf(instance);
   const alphaY = alphaYOf(instance);
   const pressed = pressedOf(instance);
+  const setDragging3D = useCircuitStore((s) => s.setDragging3D);
+
+  // Cermin state terbaru ke ref agar useFrame pegas tidak membaca
+  // closure basi: status drag, posisi sumbu, dan callback interact.
+  const draggingRef = useRef(false);
+  const alphaRef = useRef({ x: alphaX, y: alphaY });
+  alphaRef.current = { x: alphaX, y: alphaY };
+  const onInteractRef = useRef(onInteract);
+  onInteractRef.current = onInteract;
+  const springClockRef = useRef(0);
 
   // Tuas miring: alphaX menggerakkan rotasi Z, alphaY rotasi X.
   const tiltZ = -(alphaX - 0.5) * 2 * MAX_TILT_RAD;
   const tiltX = (alphaY - 0.5) * 2 * MAX_TILT_RAD;
+
+  // Pegas kembali: saat tidak di-drag, sumbu meluncur balik ke tengah
+  // (0.5, 0.5) seperti analog stick asli. onInteract dibatasi paling
+  // sering tiap ±33 ms agar solver tidak dibanjiri.
+  useFrame((_state, delta) => {
+    if (draggingRef.current) return;
+    const { x, y } = alphaRef.current;
+    if (Math.abs(x - 0.5) <= 0.01 && Math.abs(y - 0.5) <= 0.01) return;
+    springClockRef.current += delta;
+    if (springClockRef.current < 0.033) return;
+    const dt = springClockRef.current;
+    springClockRef.current = 0;
+    const k = Math.min(1, dt * 12);
+    onInteractRef.current({
+      alphaX: x + (0.5 - x) * k,
+      alphaY: y + (0.5 - y) * k,
+    });
+  });
 
   const handleStickPointerDown = (e: ThreeEvent<PointerEvent>) => {
     e.stopPropagation();
@@ -41,6 +70,9 @@ export const JoystickRender3D: ComponentType<ComponentRenderProps> = ({
       onInteract({ pressed: !pressed });
       return;
     }
+    draggingRef.current = true;
+    springClockRef.current = 0;
+    setDragging3D?.(true);
     let accX = alphaX;
     let accY = alphaY;
     const onMove = (ev: PointerEvent) => {
@@ -51,6 +83,8 @@ export const JoystickRender3D: ComponentType<ComponentRenderProps> = ({
     const onUp = () => {
       window.removeEventListener('pointermove', onMove);
       window.removeEventListener('pointerup', onUp);
+      draggingRef.current = false;
+      setDragging3D?.(false);
     };
     window.addEventListener('pointermove', onMove);
     window.addEventListener('pointerup', onUp);

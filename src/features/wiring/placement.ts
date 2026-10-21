@@ -1,6 +1,8 @@
 import { EMPTY_SIM_RESULT, type ComponentInstanceState } from '../../shared/types';
 import { getComponentMeta } from '../../shared/components/catalogMeta';
 import {
+  TERMINAL_COLS,
+  TERMINAL_ROWS,
   holeWorldPosition,
   parseHole,
   terminalHoleId,
@@ -11,24 +13,15 @@ export interface Placement {
   pinHoles: Record<string, string>;
 }
 
+/** Rotasi penempatan yang dipilih pengguna (derajat, kelipatan 90°). */
+export type PlacementRotation = 0 | 90 | 180 | 270;
+
 let counter = 0;
 function nextId(type: string): string {
   counter += 1;
   return `${type}-${Date.now().toString(36)}-${counter}`;
 }
 
-/**
- * Hitung penempatan komponen dari lubang yang diklik pengguna.
- * - LED: lubang klik = anoda; katoda = lubang 2 baris di bawahnya (kolom sama).
- * - Resistor: lubang klik = kaki A; kaki B = 4 baris di atasnya (kolom sama),
- *   badan diputar 90° agar membentang sepanjang baris (beda strip).
- * - Push Button: membentang melintasi kanal — sisi A di bank L kolom 4,
- *   sisi B di bank R kolom 0. Klik valid hanya pada lubang A1 (L,4) atau
- *   B1 (R,0); A2/B2 = 2 baris di bawahnya.
- * - Potensiometer: lubang klik = kaki A; Wiper = 1 baris di bawahnya,
- *   kaki B = 2 baris di bawahnya (bank & kolom sama).
- * Mengembalikan null bila lubang tujuan tidak valid / terisi komponen lain.
- */
 /**
  * Spesifikasi penempatan generik "satu kolom": pin-pin segaris dalam
  * satu kolom breadboard dengan offset baris dari lubang klik. Dipakai
@@ -115,10 +108,121 @@ const COLUMN_SPECS: Record<string, Array<{ id: string; rowOffset: number }>> = {
   ],
 };
 
+/** Offset satu pin relatif terhadap lubang jangkar (lubang yang diklik). */
+interface PinOffset {
+  id: string;
+  /** Offset indeks kolom GLOBAL papan (bank L = 0..4, bank R = 5..9). */
+  dCol: number;
+  /** Offset baris dari baris lubang jangkar. */
+  dRow: number;
+}
+
+/**
+ * Offset grid tiap pin pada rotasi 0°, relatif terhadap lubang klik.
+ * Mengembalikan null bila lubang klik bukan titik jangkar yang sah
+ * untuk komponen tersebut (precondition klik dipertahankan dari
+ * perilaku lama, tidak tergantung rotasi):
+ * - LED: lubang klik = anoda; katoda 2 baris di bawahnya.
+ * - Resistor: lubang klik = kaki A; kaki B 4 baris di atasnya, badan
+ *   diputar 90° (baseRotation π/2) agar membentang sepanjang baris.
+ * - Push Button: membentang melintasi kanal — klik sah hanya pada A1
+ *   (bank L kolom 4) atau B1 (bank R kolom 0); sisi B selalu +1 kolom
+ *   global dari sisi A.
+ * - Potensiometer: klik = kaki A; WIPER +1 baris, kaki B +2 baris.
+ * - Relay: klik = VCC; sisi kontak 3 kolom di kanan pada bank yang sama
+ *   (klik dengan col + 3 > 4 ditolak, sama seperti perilaku lama).
+ */
+function pinOffsetsFor(
+  type: string,
+  bank: 'L' | 'R',
+  col: number,
+): { offsets: PinOffset[]; baseRotation: number } | null {
+  if (type === 'led-5mm') {
+    return {
+      baseRotation: 0,
+      offsets: [
+        { id: 'ANODE', dCol: 0, dRow: 0 },
+        { id: 'CATHODE', dCol: 0, dRow: 2 },
+      ],
+    };
+  }
+  if (type === 'resistor') {
+    return {
+      baseRotation: Math.PI / 2,
+      offsets: [
+        { id: 'A', dCol: 0, dRow: 0 },
+        { id: 'B', dCol: 0, dRow: -4 },
+      ],
+    };
+  }
+  if (type === 'push-button') {
+    const isA1 = bank === 'L' && col === 4;
+    const isB1 = bank === 'R' && col === 0;
+    if (!isA1 && !isB1) return null;
+    const aCol = isA1 ? 0 : -1;
+    const bCol = isA1 ? 1 : 0;
+    return {
+      baseRotation: 0,
+      offsets: [
+        { id: 'A1', dCol: aCol, dRow: 0 },
+        { id: 'A2', dCol: aCol, dRow: 2 },
+        { id: 'B1', dCol: bCol, dRow: 0 },
+        { id: 'B2', dCol: bCol, dRow: 2 },
+      ],
+    };
+  }
+  if (type === 'potentiometer') {
+    return {
+      baseRotation: 0,
+      offsets: [
+        { id: 'A', dCol: 0, dRow: 0 },
+        { id: 'WIPER', dCol: 0, dRow: 1 },
+        { id: 'B', dCol: 0, dRow: 2 },
+      ],
+    };
+  }
+  if (type === 'relay') {
+    if (col + 3 > 4) return null;
+    return {
+      baseRotation: 0,
+      offsets: [
+        { id: 'VCC', dCol: 0, dRow: 0 },
+        { id: 'IN', dCol: 0, dRow: 1 },
+        { id: 'GND', dCol: 0, dRow: 2 },
+        { id: 'COM', dCol: 3, dRow: 0 },
+        { id: 'NO', dCol: 3, dRow: 1 },
+        { id: 'NC', dCol: 3, dRow: 2 },
+      ],
+    };
+  }
+  const spec = COLUMN_SPECS[type];
+  if (spec) {
+    return {
+      baseRotation: 0,
+      offsets: spec.map((p) => ({ id: p.id, dCol: 0, dRow: p.rowOffset })),
+    };
+  }
+  return null;
+}
+
+/**
+ * Hitung penempatan komponen dari lubang yang diklik pengguna.
+ *
+ * `rotationDeg` memutar seluruh footprint di ruang grid lubang
+ * (indeks kolom global, baris) relatif terhadap lubang jangkar:
+ * 90° memetakan offset (dCol, dRow) → (dRow, −dCol), 180° → (−dCol, −dRow),
+ * 270° → (−dRow, dCol). Semua lubang hasil harus berada di papan dan
+ * kosong; bila tidak, penempatan tidak valid (null) — tidak dipaksakan.
+ *
+ * Nilai `rotation` pada instance (radian, untuk render) adalah
+ * baseRotation bawaan komponen DITAMBAH rotationDeg dalam radian.
+ * Mengembalikan null bila lubang tujuan tidak valid / terisi komponen lain.
+ */
 export function computePlacement(
   type: string,
   clickedHoleId: string,
   occupiedHoles: Set<string>,
+  rotationDeg: PlacementRotation = 0,
 ): Placement | null {
   const plugin = getComponentMeta(type);
   const clicked = parseHole(clickedHoleId);
@@ -127,65 +231,32 @@ export function computePlacement(
   const row = clicked.row as number;
   const col = clicked.col as number;
 
-  let pinHoles: Record<string, string> = {};
-  let rotation = 0;
+  const plan = pinOffsetsFor(type, bank, col);
+  if (!plan) return null;
 
-  if (type === 'led-5mm') {
-    const cathodeRow = row + 2;
-    if (cathodeRow >= 63) return null;
-    pinHoles = {
-      ANODE: clickedHoleId,
-      CATHODE: terminalHoleId(bank, cathodeRow, col),
-    };
-  } else if (type === 'resistor') {
-    const rowB = row - 4;
-    if (rowB < 0) return null;
-    pinHoles = {
-      A: clickedHoleId,
-      B: terminalHoleId(bank, rowB, col),
-    };
-    rotation = Math.PI / 2;
-  } else if (type === 'push-button') {
-    // Hanya dua lubang klik yang valid: A1 di L kolom 4, atau B1 di R kolom 0
-    // (baris yang sama — instance di tengah kanal di antara keduanya).
-    const isA1 = bank === 'L' && col === 4;
-    const isB1 = bank === 'R' && col === 0;
-    if (!isA1 && !isB1) return null;
-    if (row + 2 >= 63) return null;
-    pinHoles = {
-      A1: terminalHoleId('L', row, 4),
-      A2: terminalHoleId('L', row + 2, 4),
-      B1: terminalHoleId('R', row, 0),
-      B2: terminalHoleId('R', row + 2, 0),
-    };
-  } else if (type === 'potentiometer') {
-    if (row + 2 >= 63) return null;
-    pinHoles = {
-      A: clickedHoleId,
-      WIPER: terminalHoleId(bank, row + 1, col),
-      B: terminalHoleId(bank, row + 2, col),
-    };
-  } else if (type === 'relay') {
-    // Dua kolom: sisi koil (klik = VCC) dan sisi kontak 3 kolom di kanan.
-    if (row + 2 >= 63 || col + 3 > 4) return null;
-    pinHoles = {
-      VCC: clickedHoleId,
-      IN: terminalHoleId(bank, row + 1, col),
-      GND: terminalHoleId(bank, row + 2, col),
-      COM: terminalHoleId(bank, row, col + 3),
-      NO: terminalHoleId(bank, row + 1, col + 3),
-      NC: terminalHoleId(bank, row + 2, col + 3),
-    };
-  } else if (COLUMN_SPECS[type]) {
-    const spec = COLUMN_SPECS[type];
-    const maxRow = row + Math.max(...spec.map((p) => p.rowOffset));
-    if (maxRow >= 63) return null;
-    pinHoles = {};
-    for (const pinSpec of spec) {
-      pinHoles[pinSpec.id] = terminalHoleId(bank, row + pinSpec.rowOffset, col);
+  const anchorGlobalCol = bank === 'L' ? col : col + TERMINAL_COLS;
+  const pinHoles: Record<string, string> = {};
+  for (const pin of plan.offsets) {
+    let dCol = pin.dCol;
+    let dRow = pin.dRow;
+    if (rotationDeg === 90) {
+      const prevCol = dCol;
+      dCol = dRow;
+      dRow = -prevCol;
+    } else if (rotationDeg === 180) {
+      dCol = -dCol;
+      dRow = -dRow;
+    } else if (rotationDeg === 270) {
+      const prevCol = dCol;
+      dCol = -dRow;
+      dRow = prevCol;
     }
-  } else {
-    return null;
+    const g = anchorGlobalCol + dCol;
+    const r = row + dRow;
+    if (g < 0 || g >= TERMINAL_COLS * 2 || r < 0 || r >= TERMINAL_ROWS) return null;
+    const targetBank = g < TERMINAL_COLS ? 'L' : 'R';
+    const targetCol = g < TERMINAL_COLS ? g : g - TERMINAL_COLS;
+    pinHoles[pin.id] = terminalHoleId(targetBank, r, targetCol);
   }
 
   for (const holeId of Object.values(pinHoles)) {
@@ -208,7 +279,7 @@ export function computePlacement(
       id: nextId(type),
       type,
       position: center,
-      rotation,
+      rotation: plan.baseRotation + (rotationDeg * Math.PI) / 180,
       props: { ...plugin.defaultProps },
       interactiveState: {},
       simState: EMPTY_SIM_RESULT,

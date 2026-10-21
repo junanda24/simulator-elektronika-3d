@@ -1,11 +1,22 @@
 import type { ComponentType } from 'react';
+import { Color } from 'three';
 import type { ThreeEvent } from '@react-three/fiber';
 import type { ComponentRenderProps } from '../../../types';
 import { moistureOf } from './electrical';
+import { useCircuitStore } from '../../../../features/wiring/store/circuitStore';
+import { SensorGizmo3D } from '../../../../features/stage3d/gizmos/SensorGizmo3D';
 
 const METAL = { color: '#cfd4dc', metalness: 0.9, roughness: 0.3 } as const;
 /** Papan modul sensor tanah — biru khas. */
 const PCB = { color: '#1d4ed8', roughness: 0.5 } as const;
+
+/** Warna tanah di antara garpu: cokelat kering → biru basah. */
+const SOIL_DRY = new Color('#92400E');
+const SOIL_WET = new Color('#2563EB');
+
+function soilColor(moisture: number): Color {
+  return new Color().lerpColors(SOIL_DRY, SOIL_WET, moisture);
+}
 
 /** Posisi kaki header sesuai pin elektrik: VCC (-1), AO (0), GND (+1) pada sumbu Z. */
 const LEG_Z = [-1, 0, 1] as const;
@@ -25,9 +36,12 @@ export const SoilMoistureRender3D: ComponentType<ComponentRenderProps> = ({
   onInteract,
 }) => {
   const moisture = moistureOf(instance);
+  const selected = useCircuitStore((s) => s.selectedInstanceId === instance.id);
+  const setDragging3D = useCircuitStore((s) => s.setDragging3D);
 
   const handlePointerDown = (e: ThreeEvent<PointerEvent>) => {
     e.stopPropagation();
+    setDragging3D?.(true);
     const startY = e.clientY;
     const startMoisture = moisture;
     const onMove = (ev: PointerEvent) => {
@@ -40,6 +54,7 @@ export const SoilMoistureRender3D: ComponentType<ComponentRenderProps> = ({
     const onUp = () => {
       window.removeEventListener('pointermove', onMove);
       window.removeEventListener('pointerup', onUp);
+      setDragging3D?.(false);
     };
     window.addEventListener('pointermove', onMove);
     window.addEventListener('pointerup', onUp);
@@ -74,6 +89,26 @@ export const SoilMoistureRender3D: ComponentType<ComponentRenderProps> = ({
           <meshStandardMaterial {...METAL} />
         </mesh>
       ))}
+
+      {/* Lapisan tanah di antara dua garpu — warnanya mengikuti kelembaban */}
+      <mesh position={[0, -1.15, 0]}>
+        <boxGeometry args={[0.9, 2.5, 1.5]} />
+        <meshStandardMaterial color={soilColor(moisture)} roughness={1} />
+      </mesh>
+
+      {/* Panel gizmo kelembapan saat sensor terpilih */}
+      {selected && (
+        <SensorGizmo3D
+          position={[0, 3.2, 0]}
+          label="Kelembapan"
+          value={Math.round(moisture * 100)}
+          min={0}
+          max={100}
+          step={1}
+          unit="%"
+          onChange={(v) => onInteract({ moisture: v / 100 })}
+        />
+      )}
     </group>
   );
 };

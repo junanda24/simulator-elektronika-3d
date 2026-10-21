@@ -1,5 +1,6 @@
 import { useCircuitStore } from '../features/wiring/store/circuitStore';
 import { getComponentPlugin } from '../shared/components/registry';
+import { boardPinWorldPosition, getBoardDefinition } from '../shared/boards/definitions';
 
 /**
  * Kartu Autopsi Kerusakan — panel laporan forensik yang muncul saat
@@ -20,6 +21,8 @@ export default function AutopsyCard() {
   const replaceInstance = useCircuitStore((s) => s.replaceInstance);
   const replaceBoard = useCircuitStore((s) => s.replaceBoard);
   const closeAutopsy = useCircuitStore((s) => s.closeAutopsy);
+  const setCameraView = useCircuitStore((s) => s.setCameraView);
+  const boardId = useCircuitStore((s) => s.boardId);
 
   if (!autopsy) return null;
 
@@ -32,6 +35,21 @@ export default function AutopsyCard() {
       ? `Board Arduino Uno · Pin ${autopsy.boardPinId}`
       : 'Board Arduino Uno'
     : (plugin?.name ?? instance?.type ?? 'Komponen');
+
+  /** Arahkan kamera tepat ke titik rusak: posisi komponen, atau pin board. */
+  const handleFocusDamage = () => {
+    let target: [number, number, number] | null = null;
+    if (instance) {
+      target = [...instance.position] as [number, number, number];
+    } else {
+      const board = getBoardDefinition(boardId);
+      target =
+        (autopsy.boardPinId ? boardPinWorldPosition(board, autopsy.boardPinId) : null) ??
+        ([...board.origin] as [number, number, number]);
+    }
+    if (!target) return;
+    setCameraView(target, [target[0] + 7, target[1] + 6, target[2] + 8]);
+  };
 
   return (
     <section
@@ -72,7 +90,15 @@ export default function AutopsyCard() {
         </div>
       </div>
 
-      <div className="mt-4 flex gap-2">
+      <button
+        type="button"
+        onClick={handleFocusDamage}
+        className="mt-4 w-full rounded-lg border border-accent-primary/50 bg-accent-primary/10 px-3 py-2 text-sm font-semibold text-accent-primary transition hover:bg-accent-primary/20"
+      >
+        Lihat Titik Rusak
+      </button>
+
+      <div className="mt-2 flex gap-2">
         {isBoard ? (
           <button
             type="button"

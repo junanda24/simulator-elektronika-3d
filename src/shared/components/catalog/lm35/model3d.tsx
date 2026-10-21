@@ -1,9 +1,34 @@
 import type { ComponentType } from 'react';
+import { Color } from 'three';
 import type { ThreeEvent } from '@react-three/fiber';
 import type { ComponentRenderProps } from '../../../types';
 import { TEMP_MAX_C, TEMP_MIN_C, tempCOf } from './electrical';
+import { useCircuitStore } from '../../../../features/wiring/store/circuitStore';
+import { SensorGizmo3D } from '../../../../features/stage3d/gizmos/SensorGizmo3D';
 
 const METAL = { color: '#cfd4dc', metalness: 0.9, roughness: 0.3 } as const;
+
+/** Tahap warna indikator suhu: biru dingin → oranye hangat → merah panas. */
+const COLOR_COLD = new Color('#38BDF8');
+const COLOR_WARM = new Color('#F97316');
+const COLOR_HOT = new Color('#EF4444');
+
+/**
+ * Warna pendaran indikator mengikuti suhu (lerp dua tahap):
+ * biru penuh ≤ 15 °C, bergeser ke oranye pada 25 °C, bertahan oranye
+ * sampai 40 °C, lalu bergeser ke merah penuh pada 50 °C.
+ */
+function tempEmissiveColor(tempC: number): Color {
+  const out = new Color();
+  if (tempC <= 25) {
+    const t = Math.min(1, Math.max(0, (tempC - 15) / 10));
+    out.lerpColors(COLOR_COLD, COLOR_WARM, t);
+  } else {
+    const t = Math.min(1, Math.max(0, (tempC - 40) / 10));
+    out.lerpColors(COLOR_WARM, COLOR_HOT, t);
+  }
+  return out;
+}
 
 /** Posisi kaki sesuai pin elektrik: VCC (-1), OUT (0), GND (+1) pada sumbu Z. */
 const LEG_Z = [-1, 0, 1] as const;
@@ -19,9 +44,12 @@ const DRAG_PIXELS_FULL_RANGE = 120;
  */
 export const Lm35Render3D: ComponentType<ComponentRenderProps> = ({ instance, onInteract }) => {
   const tempC = tempCOf(instance);
+  const selected = useCircuitStore((s) => s.selectedInstanceId === instance.id);
+  const setDragging3D = useCircuitStore((s) => s.setDragging3D);
 
   const handlePointerDown = (e: ThreeEvent<PointerEvent>) => {
     e.stopPropagation();
+    setDragging3D?.(true);
     const startY = e.clientY;
     const startTemp = tempC;
     const onMove = (ev: PointerEvent) => {
@@ -32,6 +60,7 @@ export const Lm35Render3D: ComponentType<ComponentRenderProps> = ({ instance, on
     const onUp = () => {
       window.removeEventListener('pointermove', onMove);
       window.removeEventListener('pointerup', onUp);
+      setDragging3D?.(false);
     };
     window.addEventListener('pointermove', onMove);
     window.addEventListener('pointerup', onUp);
@@ -53,8 +82,8 @@ export const Lm35Render3D: ComponentType<ComponentRenderProps> = ({ instance, on
         <meshStandardMaterial
           color="#1b1d22"
           roughness={0.55}
-          emissive="#ef4444"
-          emissiveIntensity={(tempC / TEMP_MAX_C) * 0.25}
+          emissive={tempEmissiveColor(tempC)}
+          emissiveIntensity={Math.max(0, (tempC / TEMP_MAX_C) * 0.25)}
         />
       </mesh>
       {/* Pelat penutup sisi datar (-X) */}
@@ -62,6 +91,20 @@ export const Lm35Render3D: ComponentType<ComponentRenderProps> = ({ instance, on
         <boxGeometry args={[0.06, 2.5, 2.1]} />
         <meshStandardMaterial color="#1b1d22" roughness={0.55} />
       </mesh>
+
+      {/* Panel gizmo suhu saat sensor terpilih */}
+      {selected && (
+        <SensorGizmo3D
+          position={[0, 4.6, 0]}
+          label="Suhu"
+          value={Math.round(tempC)}
+          min={TEMP_MIN_C}
+          max={TEMP_MAX_C}
+          step={1}
+          unit="°C"
+          onChange={(v) => onInteract({ tempC: v })}
+        />
+      )}
     </group>
   );
 };

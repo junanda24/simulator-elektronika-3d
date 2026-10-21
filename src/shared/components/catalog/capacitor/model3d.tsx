@@ -43,6 +43,16 @@ export const CapacitorRender3D: ComponentType<ComponentRenderProps> = ({ instanc
         <cylinderGeometry args={[1.3, 1.3, 0.06, 28]} />
         <meshStandardMaterial color="#c8ccd2" metalness={0.7} roughness={0.4} />
       </mesh>
+
+      {/* Garis skor silang pengaman di tutup atas (khas kapasitor elektrolit) */}
+      <mesh position={[0, 3.956, 0]}>
+        <boxGeometry args={[1.8, 0.024, 0.16]} />
+        <meshStandardMaterial color="#6b7280" metalness={0.5} roughness={0.5} />
+      </mesh>
+      <mesh position={[0, 3.956, 0]}>
+        <boxGeometry args={[0.16, 0.024, 1.8]} />
+        <meshStandardMaterial color="#6b7280" metalness={0.5} roughness={0.5} />
+      </mesh>
     </group>
   );
 };

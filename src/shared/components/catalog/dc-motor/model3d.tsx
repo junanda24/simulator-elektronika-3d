@@ -66,6 +66,12 @@ export const DcMotorRender3D: ComponentType<ComponentRenderProps> = ({ instance,
         <meshStandardMaterial color="#8f959f" metalness={0.8} roughness={0.4} />
       </mesh>
 
+      {/* Pita label merah melingkari badan (khas motor DC mainan) */}
+      <mesh position={[0.15, 1.5, 0]} rotation={[0, 0, Math.PI / 2]} castShadow>
+        <cylinderGeometry args={[1.13, 1.13, 0.95, 24]} />
+        <meshStandardMaterial color="#c0272d" roughness={0.5} />
+      </mesh>
+
       {/* Poros + baling-baling yang berputar sebanding arus */}
       <group position={[1.6, 1.5, 0]}>
         <mesh rotation={[0, 0, Math.PI / 2]} castShadow>

@@ -1,5 +1,6 @@
-import type { ComponentType } from 'react';
-import type { ThreeEvent } from '@react-three/fiber';
+import { useRef, type ComponentType } from 'react';
+import { useFrame, type ThreeEvent } from '@react-three/fiber';
+import { MathUtils, type Group } from 'three';
 import type { ComponentRenderProps } from '../../../types';
 
 const METAL = { color: '#cfd4dc', metalness: 0.9, roughness: 0.3 } as const;
@@ -17,6 +18,24 @@ export const TiltSwitchRender3D: ComponentType<ComponentRenderProps> = ({
   onInteract,
 }) => {
   const tilted = instance.interactiveState.tilted === true;
+
+  // Animasi miring halus: sudut badan diinterpolasi menuju target state
+  // (±25°) lewat ref grup, bukan berganti seketika.
+  const bodyRef = useRef<Group>(null);
+  const targetAngle = tilted ? -TILT_RAD : TILT_RAD;
+  const targetAngleRef = useRef(targetAngle);
+  targetAngleRef.current = targetAngle;
+  const currentAngleRef = useRef(targetAngle);
+
+  useFrame((_state, delta) => {
+    const next = MathUtils.lerp(
+      currentAngleRef.current,
+      targetAngleRef.current,
+      1 - Math.exp(-12 * delta),
+    );
+    currentAngleRef.current = next;
+    if (bodyRef.current) bodyRef.current.rotation.z = next;
+  });
 
   const handlePointerDown = (e: ThreeEvent<PointerEvent>) => {
     e.stopPropagation();
@@ -37,8 +56,8 @@ export const TiltSwitchRender3D: ComponentType<ComponentRenderProps> = ({
         </mesh>
       ))}
 
-      {/* Tabung logam miring mengikuti state */}
-      <group position={[0, 0.7, 0]} rotation={[0, 0, tilted ? -TILT_RAD : TILT_RAD]}>
+      {/* Tabung logam miring mengikuti state (dianimasikan via useFrame) */}
+      <group ref={bodyRef} position={[0, 0.7, 0]} rotation={[0, 0, tilted ? -TILT_RAD : TILT_RAD]}>
         <mesh position={[0, 0.85, 0]} castShadow>
           <cylinderGeometry args={[0.55, 0.55, 1.9, 20]} />
           <meshStandardMaterial color="#d8b13c" metalness={0.85} roughness={0.3} />

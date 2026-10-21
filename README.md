@@ -45,7 +45,7 @@ Detail lengkap: [SIMULATION_RULES.md](SIMULATION_RULES.md).
 npm install
 npm run dev      # mode pengembangan
 npm run build    # build produksi
-npm test         # 85 tes (vitest)
+npm test         # 106 tes (vitest)
 ```
 
 ## Teknologi
@@ -63,4 +63,4 @@ Dokumen desain: [ARCHITECTURE.md](ARCHITECTURE.md) · [TECH_STACK.md](TECH_STACK
 
 ## Status
 
-Seluruh roadmap 5 batch selesai dan terverifikasi: 85/85 tes lulus, TypeScript bersih, build produksi hijau.
+Roadmap awal 5 batch selesai, dilanjutkan Batch 6–10 (overhaul interaktivitas): audio mekanis Web Audio, undo/redo, rotasi penempatan, kabel elastis + aliran arus + thermal glow, ghost penempatan, gizmo sensor 3D, gerak servo/joystick yang halus, efek ledakan berlapis, preset kamera, shortcut penuh, mode hapus, dan realisme visual (label tercetak breadboard, jejak PCB, material epoxy). Terverifikasi: 106/106 tes lulus, TypeScript bersih, build produksi hijau. Riwayat per batch di `openspec/changes/`.
