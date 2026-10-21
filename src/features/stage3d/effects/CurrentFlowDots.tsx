@@ -4,6 +4,11 @@ import { useFrame } from '@react-three/fiber';
 
 const DOT_COUNT = 5;
 
+/** Vektor temp bersama: getPointAt tanpa target mengalokasi Vector3 baru
+ *  di setiap panggilan (5 titik × tiap frame × tiap kabel). Dipakai ulang
+ *  secara sinkron di dalam loop, aman dari satu-satunya thread render. */
+const TMP_POINT = new THREE.Vector3();
+
 /**
  * Titik-titik cahaya kuning yang mengalir di sepanjang kurva kabel,
  * mengikuti arah & besar beda potensial kedua ujungnya (Batch 6).
@@ -42,7 +47,7 @@ export default function CurrentFlowDots({
       if (!mesh) continue;
       const frac = (offset.current + i / DOT_COUNT) % 1;
       const t = forward ? frac : (1 - frac) % 1;
-      mesh.position.copy(curve.getPointAt(t));
+      mesh.position.copy(curve.getPointAt(t, TMP_POINT));
     }
   });
 

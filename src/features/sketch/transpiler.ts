@@ -29,8 +29,17 @@
  * - Pembagian bilangan bulat mengikuti semantik JS (tidak dipotong seperti
  *   C++); cast ke tipe integer memakai Math.trunc, cast lain diteruskan.
  * - Deklarasi bertipe tak dikenal (kelas library: Servo, LiquidCrystal_I2C,
- *   DHT, ...) menjadi `let nama = null;` — runtime Batch 2 belum menyediakan
- *   objek library; pemanggilannya akan gagal saat runtime, bukan saat parse.
+ *   DHT, ...) menjadi stub `__libStub('NamaLibrary')` dari PREAMBLE — Proxy
+ *   yang melempar error Bahasa Indonesia menyebut library & method pada
+ *   pemanggilan pertama. (Dulu `null`, yang menghasilkan "Cannot read
+ *   properties of null" — tak berarti apa-apa bagi pemula.)
+ * - Fungsi Arduino murni yang murah disediakan PREAMBLE sebagai JS polos:
+ *   random/randomSeed, pow/sqrt/sq/sin/cos/tan, konstanta PI/TWO_PI/HALF_PI
+ *   dan DEC/HEX/OCT/BIN, micros (dari millis), delayMicroseconds (dari
+ *   delay). Fungsi yang belum bisa didukung jujur (tone/noTone, pulseIn,
+ *   shiftOut/shiftIn, attachInterrupt/detachInterrupt) adalah stub yang
+ *   melempar error "belum didukung" menyebut nama fungsinya — bukan
+ *   ReferenceError mentah.
  * - `struct`/`class`/`enum`/`union`/`typedef`, label/goto, dan lambda belum
  *   didukung — parser menolaknya dengan pesan Bahasa Indonesia.
  * - Parameter referensi (`int &x`) dan pointer (`int *p`) diterima tapi
@@ -50,6 +59,28 @@ const PREAMBLE = [
   "const HIGH = 1, LOW = 0, INPUT = 'INPUT', OUTPUT = 'OUTPUT', INPUT_PULLUP = 'INPUT_PULLUP';",
   "const A0='A0',A1='A1',A2='A2',A3='A3',A4='A4',A5='A5';",
   'const LED_BUILTIN = 13;',
+  // Builtin Arduino murni-JS (tidak butuh runtime): konstanta & matematika.
+  'const PI = Math.PI, TWO_PI = Math.PI * 2, HALF_PI = Math.PI / 2;',
+  'const DEC = 10, HEX = 16, OCT = 8, BIN = 2;',
+  'const pow = Math.pow, sqrt = Math.sqrt, sq = (x) => x * x, sin = Math.sin, cos = Math.cos, tan = Math.tan;',
+  // random Arduino: random(hi) -> [0, hi); random(lo, hi) -> [lo, hi).
+  'const random = (a, b) => { const lo = b === undefined ? 0 : a; const hi = b === undefined ? a : b; return Math.floor(Math.random() * (hi - lo)) + lo; };',
+  'const randomSeed = () => {};',
+  'const micros = () => Math.floor(millis() * 1000);',
+  'const delayMicroseconds = async (us) => { await delay(Math.max(0, Number(us) || 0) / 1000); };',
+  // Fungsi yang belum didukung: stub yang melempar error jelas menyebut
+  // nama fungsi (+ saran pengganti bila ada), bukan ReferenceError mentah.
+  "const __belumDidukung = (nama, saran) => { throw new Error('Fungsi ' + nama + '() belum didukung simulator' + (saran ? ' — ' + saran : '') + '. Sketch berhenti.'); };",
+  "const tone = () => __belumDidukung('tone', 'bunyi buzzer di simulator dibuat dengan digitalWrite HIGH/LOW pada pin buzzer');",
+  "const noTone = () => __belumDidukung('noTone', 'bunyi buzzer di simulator dibuat dengan digitalWrite HIGH/LOW pada pin buzzer');",
+  "const pulseIn = () => __belumDidukung('pulseIn', 'sensor ultrasonik HC-SR04 belum tersedia di simulator');",
+  "const shiftOut = () => __belumDidukung('shiftOut');",
+  "const shiftIn = () => __belumDidukung('shiftIn');",
+  "const attachInterrupt = () => __belumDidukung('attachInterrupt');",
+  "const detachInterrupt = () => __belumDidukung('detachInterrupt');",
+  // Stub objek library: akses method apa pun menghasilkan fungsi yang
+  // melempar error menyebut library & method yang dipanggil.
+  "const __libStub = (nama) => new Proxy({}, { get: (_t, prop) => { if (typeof prop === 'symbol') return undefined; return () => { throw new Error(\"Fungsi '\" + String(prop) + \"' dari library '\" + nama + \"' belum didukung simulator — objek library seperti Servo, DHT, dan LCD belum tersedia di simulator ini, jadi sketch berhenti. Sementara pakai fungsi bawaan dasar: pinMode, digitalWrite, analogWrite, digitalRead, analogRead, Serial, delay, millis.\"); }; } });",
 ].join('\n');
 
 /* ================================================================== */
@@ -418,10 +449,16 @@ interface TypeInfo {
   family: TypeFamily;
   /** Nilai default C++ untuk variabel tak terinisialisasi (sebagai kode JS). */
   defaultCode: string;
+  /** Nama tipe untuk keluarga 'object' (kelas library) — untuk stub error. */
+  objectName?: string;
 }
 
-function typeInfoFrom(words: string[], objectType: boolean): TypeInfo {
-  if (objectType) return { family: 'object', defaultCode: 'null' };
+function typeInfoFrom(
+  words: string[],
+  objectType: boolean,
+  objectName?: string,
+): TypeInfo {
+  if (objectType) return { family: 'object', defaultCode: 'null', objectName };
   if (words.includes('String')) return { family: 'str', defaultCode: "''" };
   if (words.includes('bool') || words.includes('boolean'))
     return { family: 'bool', defaultCode: 'false' };
@@ -509,6 +546,25 @@ class Parser {
     return this.next();
   }
 
+  /**
+   * Harapkan ';' di akhir pernyataan. Bila token saat ini bukan ';',
+   * kesalahan yang sebenarnya hampir selalu titik koma yang HILANG di
+   * akhir pernyataan sebelumnya — jadi baris yang dilaporkan adalah baris
+   * token terakhir pernyataan itu (tempat ';' seharusnya berada), bukan
+   * baris token berikutnya yang bisa beberapa baris lebih jauh dan
+   * menunjuk baris yang salah (temuan audit runner: `digitalWrite(...)\n
+   * delay(...);` dulu dilaporkan "Baris 4" padahal ';' hilang di baris 3).
+   */
+  private expectSemicolon(message: string): void {
+    const tok = this.peek();
+    if (tok.kind !== 'eof' && tok.value === ';') {
+      this.next();
+      return;
+    }
+    const prev = this.tokens[Math.max(0, this.pos - 1)];
+    throw new SketchError(prev ? prev.line : tok.line, message);
+  }
+
   private expectIdent(message: string): Token {
     const tok = this.peek();
     if (tok.kind !== 'ident') throw new SketchError(tok.line, message);
@@ -577,20 +633,20 @@ class Parser {
       if (type.family !== 'object' && !this.argsLookLikeValues()) {
         // Prototipe: lewati sampai ';'.
         while (this.peek().kind !== 'eof' && !this.at(';')) this.next();
-        this.expect(';', "titik koma ';' diharapkan setelah prototipe fungsi.");
+        this.expectSemicolon("titik koma ';' diharapkan setelah prototipe fungsi.");
         return '';
       }
       const decl = this.withSuppressedAwait(() =>
         this.parseDeclaratorList(type, name),
       );
-      this.expect(';', "titik koma ';' diharapkan setelah deklarasi.");
+      this.expectSemicolon("titik koma ';' diharapkan setelah deklarasi.");
       return `${decl};`;
     }
 
     const decl = this.withSuppressedAwait(() =>
       this.parseDeclaratorList(type, name),
     );
-    this.expect(';', "titik koma ';' diharapkan setelah deklarasi.");
+    this.expectSemicolon("titik koma ';' diharapkan setelah deklarasi.");
     return `${decl};`;
   }
 
@@ -652,7 +708,7 @@ class Parser {
     }
     if (tok.kind === 'ident') {
       this.next(); // nama tipe objek (kelas library)
-      return typeInfoFrom([], true);
+      return typeInfoFrom([], true, tok.value);
     }
     throw new SketchError(
       tok.line,
@@ -666,6 +722,16 @@ class Parser {
     if (t.kind === 'ident' && TYPE_WORDS.has(t.value)) return true;
     // Pola `TipeObjek nama ...` — dua identifier berurutan.
     return t.kind === 'ident' && this.peek(1).kind === 'ident';
+  }
+
+  /** Kode stub library untuk deklarasi bertipe objek (Servo, DHT, ...). */
+  private libStubCode(type: TypeInfo): string {
+    return `__libStub(${JSON.stringify(type.objectName ?? 'library')})`;
+  }
+
+  /** Nilai default deklarasi: objek library memakai stub, bukan null. */
+  private defaultCodeFor(type: TypeInfo): string {
+    return type.family === 'object' ? this.libStubCode(type) : type.defaultCode;
   }
 
   /**
@@ -704,14 +770,18 @@ class Parser {
         // Inisialisasi konstruktor: `String s("halo")`, `Servo s(9)`, `int x(5)`.
         const args = this.parseArgList();
         init =
-          type.family !== 'object' && args.length === 1 ? args[0] : 'null';
+          type.family === 'object'
+            ? this.libStubCode(type)
+            : args.length === 1
+              ? args[0]
+              : 'null';
       }
 
       if (isArray) {
         if (init !== null) parts.push(`${name} = ${init}`);
         else if (arraySize !== null)
           parts.push(
-            `${name} = new Array(${arraySize}).fill(${type.defaultCode})`,
+            `${name} = new Array(${arraySize}).fill(${this.defaultCodeFor(type)})`,
           );
         else
           throw new SketchError(
@@ -719,7 +789,7 @@ class Parser {
             `ukuran array '${name}' tidak diketahui dan tanpa nilai awal.`,
           );
       } else {
-        parts.push(`${name} = ${init ?? type.defaultCode}`);
+        parts.push(`${name} = ${init ?? this.defaultCodeFor(type)}`);
       }
 
       if (!this.eat(',')) break;
@@ -878,7 +948,7 @@ class Parser {
           this.expect('(', "kurung buka '(' diharapkan setelah 'while'.");
           const cond = this.parseExpr();
           this.expect(')', "kurung tutup ')' tidak ditemukan setelah kondisi 'do-while'.");
-          this.expect(';', "titik koma ';' diharapkan setelah 'do-while'.");
+          this.expectSemicolon("titik koma ';' diharapkan setelah 'do-while'.");
           return `do ${this.guardWrap(body)} while (${cond});`;
         }
         case 'for':
@@ -889,16 +959,16 @@ class Parser {
           this.next();
           if (this.eat(';')) return 'return;';
           const value = this.parseExpr();
-          this.expect(';', "titik koma ';' diharapkan setelah 'return'.");
+          this.expectSemicolon("titik koma ';' diharapkan setelah 'return'.");
           return `return ${value};`;
         }
         case 'break':
           this.next();
-          this.expect(';', "titik koma ';' diharapkan setelah 'break'.");
+          this.expectSemicolon("titik koma ';' diharapkan setelah 'break'.");
           return 'break;';
         case 'continue':
           this.next();
-          this.expect(';', "titik koma ';' diharapkan setelah 'continue'.");
+          this.expectSemicolon("titik koma ';' diharapkan setelah 'continue'.");
           return 'continue;';
         case 'struct':
         case 'class':
@@ -921,12 +991,12 @@ class Parser {
     if (this.isDeclarationStart()) {
       const type = this.parseTypeHead();
       const decl = this.parseDeclaratorList(type);
-      this.expect(';', "titik koma ';' diharapkan setelah deklarasi.");
+      this.expectSemicolon("titik koma ';' diharapkan setelah deklarasi.");
       return `${decl};`;
     }
 
     const expr = this.parseExpr();
-    this.expect(';', "titik koma ';' diharapkan setelah ekspresi.");
+    this.expectSemicolon("titik koma ';' diharapkan setelah ekspresi.");
     return `${expr};`;
   }
 
@@ -939,14 +1009,14 @@ class Parser {
     } else if (this.isDeclarationStart()) {
       const type = this.parseTypeHead();
       init = this.parseDeclaratorList(type);
-      this.expect(';', "titik koma ';' diharapkan setelah inisialisasi 'for'.");
+      this.expectSemicolon("titik koma ';' diharapkan setelah inisialisasi 'for'.");
     } else {
       init = this.parseExpr();
-      this.expect(';', "titik koma ';' diharapkan setelah inisialisasi 'for'.");
+      this.expectSemicolon("titik koma ';' diharapkan setelah inisialisasi 'for'.");
     }
     let cond = 'true';
     if (!this.at(';')) cond = this.parseExpr();
-    this.expect(';', "titik koma ';' diharapkan setelah kondisi 'for'.");
+    this.expectSemicolon("titik koma ';' diharapkan setelah kondisi 'for'.");
     let incr = '';
     if (!this.at(')')) {
       const parts = [this.parseExpr()];

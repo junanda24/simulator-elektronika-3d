@@ -83,7 +83,7 @@ export const SevenSegmentRender3D: ComponentType<ComponentRenderProps> = ({ inst
           position={[0, 2.4, 0]}
           color="#ff2a2a"
           intensity={peakFrac * 5}
-          distance={10}
+          distance={5}
           decay={2}
         />
       )}

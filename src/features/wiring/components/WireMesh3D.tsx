@@ -33,14 +33,34 @@ function wirePoints(
  * - <CurrentFlowDots> mengalir di sepanjang kurva sesuai beda tegangan
  *   net kedua ujung dari snapshot MNA.
  */
+/**
+ * Pembaca tegangan khusus titik aliran: HANYA komponen mungil ini yang
+ * berlangganan `voltages` (berubah tiap snapshot, ±60×/detik saat simulasi
+ * berjalan). WireMesh3D induknya sengaja TIDAK berlangganan tegangan agar
+ * geometri tube dan perhitungan netlist (mahal) tidak ikut dibangun ulang
+ * oleh badai snapshot — dulu keduanya terikat di memo yang sama.
+ */
+function WireFlowDots({
+  curve,
+  netA,
+  netB,
+}: {
+  curve: THREE.CatmullRomCurve3;
+  netA: string;
+  netB: string;
+}) {
+  const running = useCircuitStore((s) => s.running);
+  const voltages = useCircuitStore((s) => s.voltages);
+  const deltaV = (voltages[netA] ?? 0) - (voltages[netB] ?? 0);
+  return <CurrentFlowDots curve={curve} deltaV={deltaV} running={running} />;
+}
+
 export default function WireMesh3D({ wire }: { wire: WireConnection }) {
   const selectWire = useCircuitStore((s) => s.selectWire);
   const selected = useCircuitStore((s) => s.selectedWireId === wire.id);
   const boardFault = useCircuitStore((s) => s.boardFault);
-  const running = useCircuitStore((s) => s.running);
-  const voltages = useCircuitStore((s) => s.voltages);
   const boardId = useCircuitStore((s) => s.boardId);
-  // Langganan topologi agar nama net & deltaV dihitung ulang saat rangkaian berubah.
+  // Langganan topologi agar nama net dihitung ulang saat rangkaian berubah.
   const instances = useCircuitStore((s) => s.instances);
   const pinHoles = useCircuitStore((s) => s.pinHoles);
   const wires = useCircuitStore((s) => s.wires);
@@ -67,8 +87,10 @@ export default function WireMesh3D({ wire }: { wire: WireConnection }) {
   );
   useEffect(() => () => geometry?.dispose(), [geometry]);
 
-  // Nama net kanonis kedua ujung + status jalur korslet + beda tegangan.
-  const { thermal, deltaV } = useMemo(() => {
+  // Nama net kanonis kedua ujung + status jalur korslet. Memo ini HANYA
+  // bergantung pada topologi & status fault — bukan tegangan — supaya
+  // netNameOf (membangun netlist) tidak jalan ulang tiap snapshot.
+  const { netA, netB, thermal } = useMemo(() => {
     void instances;
     void pinHoles;
     void wires;
@@ -79,10 +101,11 @@ export default function WireMesh3D({ wire }: { wire: WireConnection }) {
     const isFaultNet = (net: string) =>
       net === 'GND' || railNets.has(net) || railNets.has(net.replace(/^board:/, ''));
     return {
+      netA,
+      netB,
       thermal: boardFault && (isFaultNet(netA) || isFaultNet(netB)),
-      deltaV: (voltages[netA] ?? 0) - (voltages[netB] ?? 0),
     };
-  }, [wire, board, boardFault, voltages, instances, pinHoles, wires]);
+  }, [wire, board, boardFault, instances, pinHoles, wires]);
 
   // Denyut membara untuk kabel jalur korslet.
   useFrame(({ clock }) => {
@@ -109,7 +132,7 @@ export default function WireMesh3D({ wire }: { wire: WireConnection }) {
           emissiveIntensity={thermal ? 0.6 : selected ? 0.35 : 0}
         />
       </mesh>
-      <CurrentFlowDots curve={curve} deltaV={deltaV} running={running} />
+      <WireFlowDots curve={curve} netA={netA} netB={netB} />
     </group>
   );
 }

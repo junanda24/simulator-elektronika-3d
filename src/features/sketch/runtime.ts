@@ -44,6 +44,51 @@ function analogPinId(pin: unknown): string {
   return String(pin);
 }
 
+/**
+ * Terjemahkan error runtime JavaScript menjadi pesan Bahasa Indonesia
+ * yang bisa dimengerti pemula. Kasus terpenting: transpiler menjadikan
+ * deklarasi library tak dikenal (Servo, DHT, LiquidCrystal, ...) sebagai
+ * `null`; memanggil method-nya melempar "Cannot read properties of null"
+ * yang tidak berarti apa-apa bagi siswa — jelaskan sebab & obatnya.
+ * Pesan mentah tetap disertakan sebagai detail teknis.
+ */
+export function explainSketchError(error: unknown): string {
+  const raw = error instanceof Error ? error.message : String(error);
+
+  if (/Cannot read propert(?:y|ies) of (?:null|undefined)/.test(raw)) {
+    const fn = /reading '([^']+)'/.exec(raw)?.[1];
+    const call = fn ? `Fungsi '${fn}'` : 'Sebuah fungsi';
+    return (
+      `${call} dipanggil pada objek library yang belum didukung simulator ` +
+      `(Servo, DHT, LCD, dan sejenisnya masih kosong/null di simulator), ` +
+      `jadi sketch berhenti. Sementara ini pakai fungsi bawaan dasar dulu: ` +
+      `pinMode, digitalWrite, analogWrite, digitalRead, analogRead, Serial, ` +
+      `delay, millis. (Detail teknis: ${raw})`
+    );
+  }
+
+  const notDefined = /(\w+) is not defined/.exec(raw);
+  if (notDefined) {
+    return (
+      `Nama '${notDefined[1]}' tidak dikenal — periksa lagi ejaannya dan ` +
+      `pastikan variabel/fungsi itu sudah dideklarasikan sebelum dipakai. ` +
+      `Sketch berhenti. (Detail teknis: ${raw})`
+    );
+  }
+
+  const notFunction = /([\w.]+) is not a function/.exec(raw);
+  if (notFunction) {
+    return (
+      `'${notFunction[1]}' bukan fungsi yang bisa dipanggil di simulator — ` +
+      `kemungkinan itu objek library yang belum didukung (Servo, DHT, LCD, ` +
+      `dan sejenisnya masih kosong/null). Sketch berhenti. ` +
+      `(Detail teknis: ${raw})`
+    );
+  }
+
+  return `Sketch berhenti karena error: ${raw}`;
+}
+
 /** Format cetak Serial ala Arduino: float selalu 2 desimal. */
 function formatSerialValue(value: unknown): string {
   if (typeof value === 'number') {
@@ -128,8 +173,11 @@ export function startSketchProgram(
         return -1;
       },
     },
+    // Arduino memetakan dengan aritmetika long: hasilnya bilangan bulat
+    // yang DIPOTONG (bukan dibulatkan) — disamakan agar angka yang
+    // tercetak di Serial cocok dengan board asli.
     map: (x: number, inMin: number, inMax: number, outMin: number, outMax: number) =>
-      ((x - inMin) * (outMax - outMin)) / (inMax - inMin) + outMin,
+      Math.trunc(((x - inMin) * (outMax - outMin)) / (inMax - inMin) + outMin),
     constrain: (x: number, min: number, max: number) => clamp(x, min, max),
     min: Math.min,
     max: Math.max,
@@ -155,7 +203,7 @@ export function startSketchProgram(
       }
     } catch (error) {
       if (!stopped) {
-        hooks.onError(error instanceof Error ? error.message : String(error));
+        hooks.onError(explainSketchError(error));
       }
     }
   })();

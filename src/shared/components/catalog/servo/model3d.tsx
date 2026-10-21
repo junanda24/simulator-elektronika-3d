@@ -64,7 +64,9 @@ export const ServoRender3D: ComponentType<ComponentRenderProps> = ({ instance })
       {([-1.95, 1.95] as const).map((sx) =>
         ([-1.25, 1.25] as const).map((sz) => (
           <group key={`screw-${sx}-${sz}`} position={[sx, 2.66, sz]}>
-            <mesh castShadow>
+            {/* Sekrup mungil (r=0,14): bayangannya tak terbaca di meja —
+                castShadow dimatikan demi pass bayangan yang lebih ringan. */}
+            <mesh>
               <cylinderGeometry args={[0.14, 0.14, 0.08, 12]} />
               <meshStandardMaterial {...METAL} />
             </mesh>

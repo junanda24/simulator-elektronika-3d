@@ -6,6 +6,11 @@ import { useCircuitStore } from '../features/wiring/store/circuitStore';
 /**
  * Right Dock (STYLE_GUIDE §5, lebar 380px): tab Kode Sketch
  * (editor + status pin + tombol upload) dan Serial Monitor.
+ *
+ * Error sketch ditampilkan sebagai banner lengket di bawah tab dan
+ * terlihat dari SEMUA tab — pengguna yang menekan Jalankan dari header
+ * harus langsung tahu sketch-nya berhenti dan kenapa, tanpa membuka
+ * tab tertentu.
  */
 export default function RightDock() {
   const [tab, setTab] = useState<'kode' | 'serial' | 'panduan'>('kode');
@@ -28,6 +33,11 @@ export default function RightDock() {
   }, [serialText, tab]);
 
   const pinEntries = Object.entries(pinStates);
+
+  // Baris yang disebut pesan error ("Baris 3: …") — editor menggambar
+  // latar merah tipis pada baris itu agar kesalahan mudah ditemukan.
+  const errorLineMatch = sketchError ? /Baris\s+(\d+)/.exec(sketchError) : null;
+  const errorLine = errorLineMatch ? Number(errorLineMatch[1]) : null;
 
   return (
     <aside className="flex w-[380px] shrink-0 flex-col border-l border-border-subtle bg-panel">
@@ -54,26 +64,52 @@ export default function RightDock() {
         ))}
       </div>
 
+      {sketchError && (
+        <button
+          type="button"
+          onClick={() => setTab('kode')}
+          title="Klik untuk membuka editor dan melihat baris yang salah"
+          className="mx-3 mt-3 flex shrink-0 items-start gap-2 rounded-md border border-accent-danger/50 bg-accent-danger/10 p-2.5 text-left transition-colors hover:bg-accent-danger/15"
+        >
+          <svg
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinejoin="round"
+            className="mt-px size-4 shrink-0 text-accent-danger"
+            aria-hidden="true"
+          >
+            <path d="M12 3 2.5 21h19L12 3z" />
+            <path d="M12 10v5" strokeLinecap="round" />
+            <circle cx="12" cy="18" r="0.4" fill="currentColor" />
+          </svg>
+          <span className="text-xs leading-relaxed text-red-200">{sketchError}</span>
+        </button>
+      )}
+
       {tab === 'panduan' ? (
         <LessonsPanel />
       ) : tab === 'kode' ? (
         <div className="flex min-h-0 flex-1 flex-col">
           <div className="min-h-0 flex-1">
-            <SketchEditor value={sketchCode} onChange={setSketchCode} />
+            <SketchEditor value={sketchCode} onChange={setSketchCode} errorLine={errorLine} />
           </div>
           <div className="shrink-0 border-t border-border-subtle p-3">
-            {sketchError ? (
-              <p className="mb-2 text-xs leading-relaxed text-accent-danger">{sketchError}</p>
-            ) : (
-              <p className="mb-2 text-xs text-zinc-500">
-                {running
-                  ? 'Sketch sedang berjalan. Ubah kode lalu upload ulang untuk menerapkan.'
-                  : 'Tekan Upload & Jalankan untuk menyalakan board dan menjalankan sketch.'}
-              </p>
-            )}
+            <p className="mb-2 text-xs text-zinc-500">
+              {running
+                ? 'Sketch sedang berjalan. Ubah kode lalu upload ulang untuk menerapkan.'
+                : 'Tekan Upload & Jalankan untuk menyalakan board dan menjalankan sketch.'}
+            </p>
             <button
               type="button"
-              onClick={restartSketch}
+              onClick={(e) => {
+                restartSketch();
+                // Lepas fokus tombol: bila fokus tertinggal di sini, menekan
+                // Space untuk jalan/jeda akan "mengklik" tombol ini lagi
+                // (aktivasi Space pada button) dan membatalkan perintah user.
+                e.currentTarget.blur();
+              }}
               className="h-8 w-full rounded-md bg-accent-run text-[13px] font-semibold text-[#032117] transition-colors hover:bg-emerald-400"
             >
               Upload &amp; Jalankan

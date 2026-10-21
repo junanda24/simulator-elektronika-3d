@@ -92,7 +92,7 @@ export const RgbLedRender3D: ComponentType<ComponentRenderProps> = ({ instance }
 
       {/* Cahaya titik berwarna campuran saat ada kanal menyala */}
       {!damaged && peak > 0.05 && (
-        <pointLight position={[0, 3.2, 0]} color={mixed} intensity={peak * 30} distance={16} decay={2} />
+        <pointLight position={[0, 3.2, 0]} color={mixed} intensity={peak * 30} distance={5} decay={2} />
       )}
     </group>
   );

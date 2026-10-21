@@ -10,11 +10,12 @@ import {
   projectToHash,
   toSharedProject,
 } from '../features/share/projectShare';
-import { CATALOG, CATEGORY_LABEL_ID, describeDefaultProps } from './catalogData';
+import CatalogPanel from './CatalogPanel';
+import ToolbarBar from './ToolbarBar';
 import { useCircuitStore } from '../features/wiring/store/circuitStore';
 import { getComponentPlugin } from '../shared/components/registry';
 import { BREADBOARD_ORIGIN, holeLabel } from '../shared/boards/breadboard';
-import { isSoundEnabled, playClick, setSoundEnabled } from '../shared/utils/soundFx';
+import { playClick } from '../shared/utils/soundFx';
 import {
   boardPinById,
   BOARD_DEFINITIONS,
@@ -55,13 +56,13 @@ function terminalDisplay(ref: TerminalRef, boardId: string): string {
  */
 export default function App() {
   const running = useCircuitStore((s) => s.running);
+  const sketchError = useCircuitStore((s) => s.sketchError);
   const setRunning = useCircuitStore((s) => s.setRunning);
   const boardId = useCircuitStore((s) => s.boardId);
   const setBoard = useCircuitStore((s) => s.setBoard);
   const instances = useCircuitStore((s) => s.instances);
   const wires = useCircuitStore((s) => s.wires);
   const placingType = useCircuitStore((s) => s.placingType);
-  const setPlacing = useCircuitStore((s) => s.setPlacing);
   const pendingFrom = useCircuitStore((s) => s.pendingFrom);
   const wireColor = useCircuitStore((s) => s.wireColor);
   const setWireColor = useCircuitStore((s) => s.setWireColor);
@@ -75,15 +76,9 @@ export default function App() {
   const hover = useCircuitStore((s) => s.hover);
   const loadShared = useCircuitStore((s) => s.loadShared);
   const pinHoles = useCircuitStore((s) => s.pinHoles);
-  const canUndo = useCircuitStore((s) => s.canUndo);
-  const canRedo = useCircuitStore((s) => s.canRedo);
-  const undo = useCircuitStore((s) => s.undo);
-  const redo = useCircuitStore((s) => s.redo);
   const deleteMode = useCircuitStore((s) => s.deleteMode);
-  const setDeleteMode = useCircuitStore((s) => s.setDeleteMode);
   const setCameraView = useCircuitStore((s) => s.setCameraView);
   const [shareNote, setShareNote] = useState<string | null>(null);
-  const [soundOn, setSoundOn] = useState<boolean>(() => isSoundEnabled());
   const importRef = useRef<HTMLInputElement>(null);
   const voltages = useCircuitStore((s) => s.voltages);
   const netNameOf = useCircuitStore((s) => s.netNameOf);
@@ -155,10 +150,17 @@ export default function App() {
         case 'R':
           if (state.placingType) state.rotatePlacement();
           break;
-        case ' ':
+        case ' ': {
           e.preventDefault();
+          // Tombol yang baru diklik (mis. "Jalankan") masih memegang fokus,
+          // dan Space akan memicu klik tombol itu pada keyup → Run menyala
+          // lalu mati sendiri. Lepaskan fokus tombol lebih dulu.
+          // (e.repeat sudah disaring di atas switch.)
+          const active = document.activeElement;
+          if (active instanceof HTMLButtonElement) active.blur();
           state.setRunning(!state.running);
           break;
+        }
         case '1':
         case '2':
         case '3':
@@ -319,12 +321,6 @@ export default function App() {
     }
   };
 
-  const toggleSound = () => {
-    const next = !soundOn;
-    setSoundEnabled(next);
-    setSoundOn(next);
-  };
-
   return (
     <div className="flex h-full flex-col bg-panel">
       {/* ===== Top Toolbar (48px) ===== */}
@@ -391,133 +387,31 @@ export default function App() {
         <div className="ml-auto flex items-center gap-2 text-xs text-zinc-400">
           <span
             className={`inline-block size-2 rounded-full ${
-              anyDamaged ? 'bg-accent-danger' : running ? 'bg-accent-run' : 'bg-zinc-500'
+              anyDamaged || sketchError
+                ? 'bg-accent-danger'
+                : running
+                  ? 'bg-accent-run'
+                  : 'bg-zinc-500'
             }`}
           />
           {anyDamaged
             ? 'Ada komponen rusak'
-            : running
-              ? 'Simulasi berjalan'
-              : 'Simulasi berhenti'}
+            : sketchError
+              ? 'Sketch berhenti — ada error'
+              : running
+                ? 'Simulasi berjalan'
+                : 'Simulasi berhenti'}
         </div>
       </header>
 
       {/* ===== Bar Peralatan: warna kabel, undo/redo, mode hapus, suara ===== */}
-      <div className="flex h-10 shrink-0 items-center gap-3 border-b border-border-subtle bg-panel px-4">
-        <div className="flex items-center gap-1.5" role="group" aria-label="Warna kabel aktif">
-          {SHORTCUT_WIRE_COLORS.map((c, i) => (
-            <button
-              key={c.hex}
-              type="button"
-              title={`${c.label} (tombol ${i + 1})`}
-              aria-label={`Warna kabel ${c.label}`}
-              onClick={() => setWireColor(c.hex)}
-              className={`flex size-6 items-center justify-center rounded-full border-2 text-[9px] font-bold text-white/90 transition-transform ${
-                wireColor.toLowerCase() === c.hex.toLowerCase()
-                  ? 'scale-110 border-accent-primary'
-                  : 'border-transparent'
-              }`}
-              style={{ backgroundColor: c.hex }}
-            >
-              {i + 1}
-            </button>
-          ))}
-        </div>
-
-        <div className="h-5 w-px bg-border-subtle" />
-
-        <div className="flex items-center gap-1.5">
-          <button
-            type="button"
-            onClick={undo}
-            disabled={!canUndo}
-            title="Urungkan (Ctrl+Z)"
-            className="h-7 rounded-md border border-border-subtle px-2.5 text-xs font-medium text-zinc-200 transition-colors hover:border-zinc-500 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:border-border-subtle"
-          >
-            Undo
-          </button>
-          <button
-            type="button"
-            onClick={redo}
-            disabled={!canRedo}
-            title="Ulangi (Ctrl+Shift+Z)"
-            className="h-7 rounded-md border border-border-subtle px-2.5 text-xs font-medium text-zinc-200 transition-colors hover:border-zinc-500 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:border-border-subtle"
-          >
-            Redo
-          </button>
-          <button
-            type="button"
-            onClick={() => setDeleteMode(!deleteMode)}
-            aria-pressed={deleteMode}
-            title="Mode hapus: klik komponen/kabel untuk menghapusnya (Esc untuk keluar)"
-            className={`h-7 rounded-md border px-2.5 text-xs font-semibold transition-colors ${
-              deleteMode
-                ? 'border-accent-danger bg-accent-danger/20 text-accent-danger'
-                : 'border-border-subtle text-zinc-200 hover:border-zinc-500'
-            }`}
-          >
-            Mode Hapus
-          </button>
-          <button
-            type="button"
-            onClick={toggleSound}
-            aria-pressed={soundOn}
-            title="Suara mekanis & elektrik (Web Audio)"
-            className={`h-7 rounded-md border px-2.5 text-xs font-medium transition-colors ${
-              soundOn
-                ? 'border-accent-primary/60 bg-accent-primary/10 text-accent-primary'
-                : 'border-border-subtle text-zinc-400 hover:border-zinc-500'
-            }`}
-          >
-            Suara: {soundOn ? 'Nyala' : 'Mati'}
-          </button>
-        </div>
-
-        <p className="ml-auto hidden text-[11px] text-zinc-500 xl:block">
-          R putar · Spasi jalan · Del hapus · 1–6 warna
-        </p>
-      </div>
+      <ToolbarBar />
 
       {/* ===== Badan: Left Dock + Viewport ===== */}
       <div className="flex min-h-0 flex-1">
         <aside className="flex w-[260px] shrink-0 flex-col border-r border-border-subtle bg-panel">
-          <div className="border-b border-border-subtle px-4 py-3">
-            <h2 className="text-[13px] font-semibold text-zinc-100">Katalog Komponen</h2>
-            <p className="mt-0.5 text-xs text-zinc-500">
-              Klik Pasang, lalu klik lubang breadboard.
-            </p>
-          </div>
-          <div className="flex-1 space-y-3 overflow-y-auto p-3">
-            {CATALOG.map((meta) => (
-              <article
-                key={meta.type}
-                className={`rounded-lg border bg-panel-elevated p-3 ${
-                  placingType === meta.type ? 'border-accent-primary' : 'border-border-subtle'
-                }`}
-              >
-                <div className="flex items-center justify-between gap-2">
-                  <h3 className="text-[13px] font-semibold text-zinc-100">{meta.name}</h3>
-                  <span className="rounded-full border border-border-subtle px-2 py-0.5 text-[11px] font-medium text-accent-primary">
-                    {CATEGORY_LABEL_ID[meta.category]}
-                  </span>
-                </div>
-                <p className="mt-1.5 text-xs leading-relaxed text-zinc-400">{meta.descriptionId}</p>
-                <p className="mt-2 font-mono text-[11px] text-zinc-500">
-                  {describeDefaultProps(meta)}
-                </p>
-                <button
-                  type="button"
-                  onClick={() => setPlacing(placingType === meta.type ? null : meta.type)}
-                  className={`mt-2.5 h-7 w-full rounded-md text-xs font-semibold transition-colors ${
-                    placingType === meta.type
-                      ? 'bg-accent-warning text-[#2a1a00]'
-                      : 'bg-accent-primary/15 text-accent-primary hover:bg-accent-primary/25'
-                  }`}
-                >
-                  {placingType === meta.type ? 'Klik lubang breadboard…' : 'Pasang'}
-                </button>
-              </article>
-            ))}
+          <CatalogPanel />
+          <div className="max-h-[44%] shrink-0 space-y-3 overflow-y-auto border-t border-border-subtle p-3">
 
             {/* Warna kabel aktif */}
             <div className="rounded-lg border border-border-subtle bg-panel-elevated p-3">
@@ -648,9 +542,7 @@ export default function App() {
           </p>
         </aside>
 
-        <main
-          className={`relative min-w-0 flex-1 ${deleteMode ? 'cursor-crosshair' : ''}`}
-        >
+        <main className={`relative min-w-0 flex-1 ${deleteMode ? 'cursor-trash' : ''}`}>
           <Workbench resetSignal={resetSignal} />
           {/* Preset sudut kamera — dibedakan per area: Umum, Board, Breadboard */}
           <div className="absolute left-3 top-3 z-10 flex w-[172px] flex-col gap-2.5 rounded-md border border-border-subtle bg-panel/70 p-2 backdrop-blur-md">
@@ -703,10 +595,19 @@ export default function App() {
             Kontrol kamera: seret untuk memutar, roda tetikus untuk memperbesar,
             seret kanan untuk menggeser.
           </div>
-          {placingType && (
-            <div className="absolute left-1/2 top-3 -translate-x-1/2 rounded-md border border-accent-primary/50 bg-panel/90 px-3 py-2 text-xs font-medium text-accent-primary backdrop-blur-md">
-              Mode pasang: klik lubang breadboard untuk menaruh{' '}
-              {getComponentPlugin(placingType)?.name ?? placingType} (Esc untuk batal)
+          {(placingType || deleteMode) && (
+            <div className="pointer-events-none absolute left-1/2 top-3 z-10 flex -translate-x-1/2 flex-col items-center gap-2">
+              {placingType && (
+                <div className="rounded-md border border-accent-primary/50 bg-panel/90 px-3 py-2 text-xs font-medium text-accent-primary backdrop-blur-md">
+                  Mode pasang: klik lubang breadboard untuk menaruh{' '}
+                  {getComponentPlugin(placingType)?.name ?? placingType} (Esc untuk batal)
+                </div>
+              )}
+              {deleteMode && (
+                <div className="rounded-md border border-accent-danger/60 bg-panel/90 px-3 py-2 text-xs font-semibold text-accent-danger backdrop-blur-md">
+                  Mode Hapus aktif — klik komponen atau kabel untuk menghapus (Esc keluar)
+                </div>
+              )}
             </div>
           )}
           <AutopsyCard />

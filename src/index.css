@@ -27,3 +27,13 @@ body,
   color: #e8ecf3;
   font-family: var(--font-sans);
 }
+
+/* Kursor Mode Hapus: emoji tong sampah sebagai SVG data-URI (permintaan
+   eksplisit user — satu-satunya pengecualian aturan tanpa-emoji di UI).
+   Hotspot di tengah ikon 26px; fallback crosshair bila SVG gagal dimuat. */
+.cursor-trash {
+  cursor:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='26' height='26'%3E%3Ctext y='21' font-size='21'%3E🗑️%3C/text%3E%3C/svg%3E")
+      13 13,
+    crosshair;
+}

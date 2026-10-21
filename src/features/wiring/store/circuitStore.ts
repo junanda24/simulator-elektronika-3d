@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import {
   EMPTY_SIM_RESULT,
   type ComponentInstanceState,
+  type ComponentSimResult,
   type DamageReport,
   type PinState,
 } from '../../../shared/types';
@@ -46,12 +47,21 @@ interface CircuitSnapshot {
 
 const HISTORY_LIMIT = 50;
 
-function takeSnapshot(state: CircuitSnapshot): CircuitSnapshot {
-  return structuredClone({
-    instances: state.instances,
-    pinHoles: state.pinHoles,
-    wires: state.wires,
-  });
+/**
+ * Deep-clone snapshot histori — DEFENSIF: bila ada nilai yang tidak bisa
+ * di-klon (mis. fungsi nyasar di interactiveState), kembalikan null agar
+ * pencatatan histori dilewati TANPA menggagalkan aksi user (placeAt dsb.).
+ */
+function tryTakeSnapshot(state: CircuitSnapshot): CircuitSnapshot | null {
+  try {
+    return structuredClone({
+      instances: state.instances,
+      pinHoles: state.pinHoles,
+      wires: state.wires,
+    });
+  } catch {
+    return null;
+  }
 }
 
 type SetFn = (partial: Partial<CircuitStore>) => void;
@@ -59,7 +69,14 @@ type SetFn = (partial: Partial<CircuitStore>) => void;
 /** Dorong snapshot state SAAT INI ke tumpukan undo — panggil SEBELUM mutasi. */
 function pushHistory(set: SetFn, get: () => CircuitStore): void {
   const s = get();
-  const past = [...s.past, takeSnapshot(s)].slice(-HISTORY_LIMIT);
+  const snap = tryTakeSnapshot(s);
+  if (!snap) {
+    // Tidak bisa dicatat: mutasi tetap jalan, tumpukan redo dibatalkan
+    // (mutasi baru memang membatalkan masa depan alternatif), past dibiarkan.
+    set({ future: [], canRedo: false });
+    return;
+  }
+  const past = [...s.past, snap].slice(-HISTORY_LIMIT);
   set({ past, future: [], canUndo: true, canRedo: false });
 }
 
@@ -183,6 +200,45 @@ function sameTerminal(a: TerminalRef, b: TerminalRef): boolean {
   return false;
 }
 
+/** Perbandingan dangkal dua record angka (pinVoltages / branchCurrents). */
+function sameNumberRecord(
+  a: Record<string, number>,
+  b: Record<string, number>,
+): boolean {
+  if (a === b) return true;
+  const aKeys = Object.keys(a);
+  if (aKeys.length !== Object.keys(b).length) return false;
+  return aKeys.every((k) => a[k] === b[k]);
+}
+
+function sameDamageReport(a?: DamageReport, b?: DamageReport): boolean {
+  if (a === b) return true;
+  if (!a || !b) return false;
+  return (
+    a.ruleId === b.ruleId &&
+    a.titleId === b.titleId &&
+    a.explanationId === b.explanationId &&
+    a.measured === b.measured &&
+    a.limit === b.limit &&
+    a.unit === b.unit
+  );
+}
+
+/**
+ * Kesetaraan NILAI dua hasil simulasi. Solver selalu membuat objek hasil
+ * baru di setiap solve — tanpa perbandingan ini, applySnapshot akan
+ * mengganti objek SEMUA instance di setiap snapshot (±60/dtk) dan
+ * menghancurkan memo React di panggung 3D (animasi patah-patah).
+ */
+function sameSimResult(a: ComponentSimResult, b: ComponentSimResult): boolean {
+  return (
+    a.isDamaged === b.isDamaged &&
+    sameNumberRecord(a.pinVoltages, b.pinVoltages) &&
+    sameNumberRecord(a.branchCurrents, b.branchCurrents) &&
+    sameDamageReport(a.damageReport, b.damageReport)
+  );
+}
+
 function syncSim(get: () => CircuitStore): void {
   const { instances, pinHoles, wires, boardId } = get();
   simSetCircuit({ instances, pinHoles, wires, boardId });
@@ -258,10 +314,17 @@ export const useCircuitStore = create<CircuitStore>((set, get) => ({
   undo: () => {
     const state = get();
     if (state.past.length === 0) return;
-    const restored = takeSnapshot(state.past[state.past.length - 1]);
+    const restored = tryTakeSnapshot(state.past[state.past.length - 1]);
+    if (!restored) {
+      // Entri histori tidak bisa di-klon: buang entri itu, jangan gagalkan undo.
+      const past = state.past.slice(0, -1);
+      set({ past, canUndo: past.length > 0 });
+      return;
+    }
+    const current = tryTakeSnapshot(state);
     set({
       past: state.past.slice(0, -1),
-      future: [...state.future, takeSnapshot(state)],
+      future: current ? [...state.future, current] : state.future,
       instances: restored.instances,
       pinHoles: restored.pinHoles,
       wires: restored.wires,
@@ -269,7 +332,7 @@ export const useCircuitStore = create<CircuitStore>((set, get) => ({
       wireCursorPos: null,
       ...pruneAfterRestore(state, restored),
       canUndo: state.past.length - 1 > 0,
-      canRedo: true,
+      canRedo: current ? true : state.canRedo,
     });
     syncSim(get);
   },
@@ -277,9 +340,17 @@ export const useCircuitStore = create<CircuitStore>((set, get) => ({
   redo: () => {
     const state = get();
     if (state.future.length === 0) return;
-    const restored = takeSnapshot(state.future[state.future.length - 1]);
+    const restored = tryTakeSnapshot(state.future[state.future.length - 1]);
+    if (!restored) {
+      const future = state.future.slice(0, -1);
+      set({ future, canRedo: future.length > 0 });
+      return;
+    }
+    const current = tryTakeSnapshot(state);
     set({
-      past: [...state.past, takeSnapshot(state)].slice(-HISTORY_LIMIT),
+      past: current
+        ? [...state.past, current].slice(-HISTORY_LIMIT)
+        : state.past,
       future: state.future.slice(0, -1),
       instances: restored.instances,
       pinHoles: restored.pinHoles,
@@ -287,7 +358,7 @@ export const useCircuitStore = create<CircuitStore>((set, get) => ({
       pendingFrom: null,
       wireCursorPos: null,
       ...pruneAfterRestore(state, restored),
-      canUndo: true,
+      canUndo: current ? true : state.canUndo,
       canRedo: state.future.length - 1 > 0,
     });
     syncSim(get);
@@ -511,10 +582,17 @@ export const useCircuitStore = create<CircuitStore>((set, get) => ({
 
   applySnapshot: (snapshot) => {
     const state = get();
-    const nextInstances = state.instances.map((instance) => {
+    // Pertahankan referensi objek instance yang hasil simulasinya TIDAK
+    // berubah nilainya — hanya instance yang berubah yang dibuat baru,
+    // supaya React.memo di panggung 3D bisa melewati render ulang.
+    let instancesChanged = false;
+    const mappedInstances = state.instances.map((instance) => {
       const result = snapshot.results[instance.id];
-      return result ? { ...instance, simState: result } : instance;
+      if (!result || sameSimResult(instance.simState, result)) return instance;
+      instancesChanged = true;
+      return { ...instance, simState: result };
     });
+    const nextInstances = instancesChanged ? mappedInstances : state.instances;
     const serialText = snapshot.serialChunk
       ? (state.serialText + snapshot.serialChunk).slice(-6000)
       : state.serialText;
@@ -603,6 +681,14 @@ export const useCircuitStore = create<CircuitStore>((set, get) => ({
       deadPins: snapshot.deadPins,
       boardFault: snapshot.boardFault,
       sketchError: snapshot.sketchError,
+      // Kejujuran status: bila sketch mati karena error (snapshot
+      // melaporkan sketchRunning false) sementara UI mengira masih
+      // berjalan, samakan statusnya — header tidak boleh terus
+      // menampilkan "Simulasi berjalan" untuk sketch yang sudah berhenti.
+      running:
+        snapshot.sketchError !== null && !snapshot.sketchRunning
+          ? false
+          : state.running,
       lastDamageRuleId: damageRuleId,
       lessonChecks,
       completedLessons,

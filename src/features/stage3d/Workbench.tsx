@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef } from 'react';
+import { memo, useCallback, useEffect, useMemo, useRef } from 'react';
 import * as THREE from 'three';
 import gsap from 'gsap';
 import { Canvas, useThree, type ThreeEvent } from '@react-three/fiber';
@@ -13,6 +13,7 @@ import {
   getBoardDefinition,
 } from '../../shared/boards/definitions';
 import { getComponentPlugin } from '../../shared/components/registry';
+import type { ComponentInstanceState } from '../../shared/types';
 import {
   BREADBOARD_ORIGIN,
   holeAtLocal,
@@ -34,19 +35,42 @@ export const TARGET_HOME = new THREE.Vector3(2, 0, 0);
 function CameraRig({ resetSignal }: { resetSignal: number }) {
   const camera = useThree((s) => s.camera);
   const controls = useThree((s) => s.controls) as OrbitControlsImpl | null;
+  const gl = useThree((s) => s.gl);
   const focusNonce = useCircuitStore((s) => s.focusNonce);
   const focusPosition = useCircuitStore((s) => s.focusPosition);
   const cameraView = useCircuitStore((s) => s.cameraView);
   const firstFocus = useRef(true);
   const firstView = useRef(true);
 
+  // KEPEMILIKAN KAMERA TUNGGAL: begitu user menyentuh canvas (pointerdown /
+  // wheel), semua tween GSAP pada kamera dibunuh seketika. Tanpa ini, tween
+  // fokus/preset yang masih berjalan (ticker GSAP sendiri) terus menulis
+  // camera.position BERSAMAAN dengan OrbitControls — kamera terasa keset /
+  // patah-patah terutama tepat setelah drag dilepas. overwrite:'auto' di
+  // semua tween mencegah tween lama & baru bertumpuk pada properti sama.
+  useEffect(() => {
+    const el = gl.domElement;
+    const killCameraTweens = () => {
+      gsap.killTweensOf(camera.position);
+      if (controls) gsap.killTweensOf(controls.target);
+    };
+    el.addEventListener('pointerdown', killCameraTweens);
+    el.addEventListener('wheel', killCameraTweens, { passive: true });
+    return () => {
+      el.removeEventListener('pointerdown', killCameraTweens);
+      el.removeEventListener('wheel', killCameraTweens);
+    };
+  }, [gl, camera, controls]);
+
   useEffect(() => {
     if (resetSignal === 0 || !controls) return;
     gsap.to(camera.position, {
       x: CAMERA_HOME.x, y: CAMERA_HOME.y, z: CAMERA_HOME.z, duration: 0.6, ease: 'power3.out',
+      overwrite: 'auto',
     });
     gsap.to(controls.target, {
       x: TARGET_HOME.x, y: TARGET_HOME.y, z: TARGET_HOME.z, duration: 0.6, ease: 'power3.out',
+      overwrite: 'auto',
       onUpdate: () => controls.update(),
     });
   }, [resetSignal, controls, camera]);
@@ -60,9 +84,11 @@ function CameraRig({ resetSignal }: { resetSignal: number }) {
     const [x, y, z] = focusPosition;
     gsap.to(camera.position, {
       x: x + 13, y: y + 12, z: z + 16, duration: 0.6, ease: 'power3.out',
+      overwrite: 'auto',
     });
     gsap.to(controls.target, {
       x, y, z, duration: 0.6, ease: 'power3.out',
+      overwrite: 'auto',
       onUpdate: () => controls.update(),
     });
   }, [focusNonce, focusPosition, controls, camera]);
@@ -79,9 +105,11 @@ function CameraRig({ resetSignal }: { resetSignal: number }) {
     const [px, py, pz] = cameraView.position;
     gsap.to(camera.position, {
       x: px, y: py, z: pz, duration: 0.6, ease: 'power2.inOut',
+      overwrite: 'auto',
     });
     gsap.to(controls.target, {
       x: tx, y: ty, z: tz, duration: 0.6, ease: 'power2.inOut',
+      overwrite: 'auto',
       onUpdate: () => controls.update(),
     });
   }, [cameraView, controls, camera]);
@@ -228,6 +256,39 @@ function HoverMarkers() {
   );
 }
 
+/**
+ * Renderer satu komponen, di-memo: selama objek `instance` tidak berubah
+ * identitasnya, model 3D tidak ikut re-render oleh perubahan instance lain.
+ * Ini memangkas badai render saat drag interaktif — store `interact` hanya
+ * mengganti objek instance yang disentuh, jadi 19 model lain kini diam
+ * sementara dulu semuanya render ulang di tiap pointermove. `onInteract`
+ * dibuat stabil per instance (useCallback pada id) agar memo tidak bocor.
+ * Catatan: snapshot simulasi memang membuat objek instance baru (itu
+ * ranah store), jadi memo tidak menahan render ulang dari snapshot —
+ * manfaatnya terasa pada jalur interaksi & perubahan kabel/topologi.
+ */
+const InstanceView = memo(function InstanceView({
+  instance,
+  interact,
+}: {
+  instance: ComponentInstanceState;
+  interact: (instanceId: string, patch: Record<string, unknown>) => void;
+}) {
+  const plugin = getComponentPlugin(instance.type);
+  const handleInteract = useCallback(
+    (patch: Record<string, unknown>) => interact(instance.id, patch),
+    [interact, instance.id],
+  );
+  if (!plugin) return null;
+  const Render = plugin.Render3D;
+  return (
+    <>
+      <Render instance={instance} onInteract={handleInteract} />
+      {instance.simState.isDamaged && <Smoke position={instance.position} />}
+    </>
+  );
+});
+
 /** Semua isi scene yang digerakkan store sirkuit. */
 function CircuitScene() {
   const instances = useCircuitStore((s) => s.instances);
@@ -237,26 +298,17 @@ function CircuitScene() {
 
   return (
     <group>
-      {instances.map((instance) => {
-        const plugin = getComponentPlugin(instance.type);
-        if (!plugin) return null;
-        const Render = plugin.Render3D;
-        return (
-          <group
-            key={instance.id}
-            onClick={(e) => {
-              e.stopPropagation();
-              selectInstance(instance.id);
-            }}
-          >
-            <Render
-              instance={instance}
-              onInteract={(patch) => interact(instance.id, patch)}
-            />
-            {instance.simState.isDamaged && <Smoke position={instance.position} />}
-          </group>
-        );
-      })}
+      {instances.map((instance) => (
+        <group
+          key={instance.id}
+          onClick={(e) => {
+            e.stopPropagation();
+            selectInstance(instance.id);
+          }}
+        >
+          <InstanceView instance={instance} interact={interact} />
+        </group>
+      ))}
       {wires.map((wire) => (
         <WireMesh3D key={wire.id} wire={wire} />
       ))}
@@ -281,7 +333,7 @@ export default function Workbench({ resetSignal }: { resetSignal: number }) {
   return (
     <Canvas
       shadows="soft"
-      dpr={[1, 2]}
+      dpr={[1, 1.5]}
       camera={{ position: CAMERA_HOME.toArray(), fov: 45, near: 0.5, far: 600 }}
       style={{ position: 'absolute', inset: 0 }}
     >
@@ -293,8 +345,8 @@ export default function Workbench({ resetSignal }: { resetSignal: number }) {
         position={[34, 55, 24]}
         intensity={1.6}
         castShadow
-        shadow-mapSize-width={2048}
-        shadow-mapSize-height={2048}
+        shadow-mapSize-width={1024}
+        shadow-mapSize-height={1024}
         shadow-camera-left={-80}
         shadow-camera-right={80}
         shadow-camera-top={80}
@@ -307,8 +359,12 @@ export default function Workbench({ resetSignal }: { resetSignal: number }) {
         <meshStandardMaterial color="#0f241d" roughness={1} />
       </mesh>
       <gridHelper args={[420, 210, '#18382d', '#18382d']} position={[0, 0.02, 0]} />
-      {/* Bayangan kontak lembut tepat di bawah board & breadboard (tanpa HDR eksternal). */}
-      <ContactShadows position={[0, 0.01, 0]} opacity={0.55} scale={170} blur={2.2} far={4} resolution={1024} />
+      {/* Bayangan kontak lembut tepat di bawah board & breadboard (tanpa HDR eksternal).
+          frames={1}: bayangan kontak dibakar SEKALI (board & breadboard statis);
+          default drei me-render pass kedalaman seluruh scene TIAP frame — pajak
+          performa besar yang tidak membeli apa-apa di meja statis. Bayangan
+          bergerak tetap datang dari lampu arah. resolution 512 cukup untuk blur. */}
+      <ContactShadows position={[0, 0.01, 0]} opacity={0.55} scale={170} blur={2.2} far={4} frames={1} resolution={512} />
 
       <ActiveBoard />
       <Breadboard position={BREADBOARD_ORIGIN} />
@@ -322,6 +378,7 @@ export default function Workbench({ resetSignal }: { resetSignal: number }) {
       <OrbitControls
         makeDefault
         enabled={!isDragging3D}
+        enableDamping
         target={TARGET_HOME.toArray()}
         maxPolarAngle={1.45}
         minDistance={10}

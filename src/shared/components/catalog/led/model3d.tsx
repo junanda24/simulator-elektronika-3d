@@ -89,7 +89,7 @@ export const LedRender3D: ComponentType<ComponentRenderProps> = ({ instance }) =
           position={[0, 3.2, 0]}
           color={baseColor}
           intensity={intensity * 30}
-          distance={16}
+          distance={5}
           decay={2}
         />
       )}

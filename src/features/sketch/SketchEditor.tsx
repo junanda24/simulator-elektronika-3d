@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react';
-import { EditorState } from '@codemirror/state';
-import { EditorView, keymap, lineNumbers } from '@codemirror/view';
+import { EditorState, StateEffect, StateField } from '@codemirror/state';
+import { Decoration, EditorView, keymap, lineNumbers, type DecorationSet } from '@codemirror/view';
 import { defaultKeymap, history, historyKeymap } from '@codemirror/commands';
 import { syntaxHighlighting, defaultHighlightStyle } from '@codemirror/language';
 import { cpp } from '@codemirror/lang-cpp';
@@ -8,7 +8,32 @@ import { cpp } from '@codemirror/lang-cpp';
 /**
  * Editor sketch (CodeMirror 6, mode C++) dengan tema mengikuti
  * STYLE_GUIDE: panel #12151C, teks zinc, aksen cyan untuk seleksi.
+ * Baris yang disebut pesan error sketch mendapat latar merah tipis
+ * (danger #FF2A54) agar pengguna langsung melihat letak kesalahannya.
  */
+
+const setErrorLineEffect = StateEffect.define<number | null>();
+
+const errorLineDecoration = Decoration.line({ class: 'cm-sketch-error-line' });
+
+const errorLineField = StateField.define<DecorationSet>({
+  create: () => Decoration.none,
+  update(decorations, tr) {
+    let next = decorations.map(tr.changes);
+    for (const effect of tr.effects) {
+      if (effect.is(setErrorLineEffect)) {
+        if (effect.value === null || effect.value < 1 || effect.value > tr.state.doc.lines) {
+          next = Decoration.none;
+        } else {
+          const line = tr.state.doc.line(effect.value);
+          next = Decoration.set([errorLineDecoration.range(line.from)]);
+        }
+      }
+    }
+    return next;
+  },
+  provide: (field) => EditorView.decorations.from(field),
+});
 
 const workbenchTheme = EditorView.theme(
   {
@@ -30,6 +55,7 @@ const workbenchTheme = EditorView.theme(
     },
     '.cm-activeLine': { backgroundColor: 'rgba(0,229,255,0.05)' },
     '.cm-activeLineGutter': { backgroundColor: 'transparent', color: '#a1a1aa' },
+    '.cm-sketch-error-line': { backgroundColor: 'rgba(255,42,84,0.14)' },
     '&.cm-focused .cm-selectionBackground, .cm-selectionBackground': {
       backgroundColor: 'rgba(0,229,255,0.22)',
     },
@@ -41,9 +67,11 @@ const workbenchTheme = EditorView.theme(
 interface SketchEditorProps {
   value: string;
   onChange: (value: string) => void;
+  /** Baris (1-based) yang disebut pesan error sketch; null = tanpa tanda. */
+  errorLine?: number | null;
 }
 
-export default function SketchEditor({ value, onChange }: SketchEditorProps) {
+export default function SketchEditor({ value, onChange, errorLine = null }: SketchEditorProps) {
   const hostRef = useRef<HTMLDivElement>(null);
   const viewRef = useRef<EditorView | null>(null);
   const onChangeRef = useRef(onChange);
@@ -61,6 +89,7 @@ export default function SketchEditor({ value, onChange }: SketchEditorProps) {
         cpp(),
         syntaxHighlighting(defaultHighlightStyle, { fallback: true }),
         workbenchTheme,
+        errorLineField,
         EditorView.updateListener.of((update) => {
           if (update.docChanged) {
             const next = update.state.doc.toString();
@@ -90,6 +119,14 @@ export default function SketchEditor({ value, onChange }: SketchEditorProps) {
       });
     }
   }, [value]);
+
+  // Tandai baris yang salah; dekorasi mengikuti teks baris itu saat
+  // dokumen disunting (posisi dipetakan CodeMirror lewat perubahan).
+  useEffect(() => {
+    const view = viewRef.current;
+    if (!view) return;
+    view.dispatch({ effects: setErrorLineEffect.of(errorLine) });
+  }, [errorLine]);
 
   return <div ref={hostRef} className="h-full overflow-hidden" />;
 }

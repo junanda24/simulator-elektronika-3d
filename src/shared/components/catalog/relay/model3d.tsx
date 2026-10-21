@@ -78,7 +78,7 @@ export const RelayRender3D: ComponentType<ComponentRenderProps> = ({ instance })
         />
       </mesh>
       {active && (
-        <pointLight position={[2.7, 2.2, -1.55]} color="#ff2a2a" intensity={6} distance={8} decay={2} />
+        <pointLight position={[2.7, 2.2, -1.55]} color="#ff2a2a" intensity={6} distance={5} decay={2} />
       )}
     </group>
   );
