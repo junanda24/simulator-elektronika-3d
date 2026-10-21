@@ -50,6 +50,19 @@ const TILE_INFO: Record<string, { shortName: string; spec: string }> = {
   'seven-segment': { shortName: '7-Segment', spec: '1 digit' },
   fuse: { shortName: 'Sekering', spec: '500 mA' },
   'tilt-switch': { shortName: 'Tilt Switch', spec: 'Bola logam' },
+  'ntc-thermistor': { shortName: 'Termistor NTC', spec: '10 kΩ · B3950' },
+  'reed-switch': { shortName: 'Reed Switch', spec: 'Magnet NO' },
+  'fc-51': { shortName: 'Sensor Halangan FC-51', spec: 'IR · aktif-rendah' },
+  'ky-003': { shortName: 'Sensor Hall KY-003', spec: 'A3144 · open-collector' },
+  mosfet: { shortName: 'MOSFET IRLZ44N', spec: 'TO-220 · logic-level' },
+  'flame-sensor': { shortName: 'Sensor Api KY-026', spec: 'IR · AO/DO' },
+  'rain-sensor': { shortName: 'Sensor Hujan MH-RD', spec: 'AO/DO' },
+  mq2: { shortName: 'Sensor Gas MQ-2', spec: 'ppm · AO/DO' },
+  'sound-sensor': { shortName: 'Sensor Suara KY-038', spec: 'AO/DO' },
+  'led-bar-graph': { shortName: 'LED Bar Graph', spec: '10 segmen DC-10EWA' },
+  'regulator-7805': { shortName: 'Regulator L7805', spec: 'TO-220 · 5 V' },
+  'battery-9v': { shortName: 'Baterai 9V', spec: '6LR61 · di alas' },
+  'hc-sr04': { shortName: 'Ultrasonik HC-SR04', spec: '2–400 cm' },
 };
 
 function matchesQuery(meta: ComponentMeta, query: string): boolean {

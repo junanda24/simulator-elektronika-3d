@@ -43,8 +43,8 @@ function expectRefValid(ref: TerminalRef, boardId: string, where: string) {
 }
 
 describe('integritas kurikulum', () => {
-  it('kurikulum berisi tepat 20 modul dengan id unik', () => {
-    expect(LESSONS).toHaveLength(20);
+  it('kurikulum berisi tepat 24 modul dengan id unik', () => {
+    expect(LESSONS).toHaveLength(24);
     const ids = LESSONS.map((l) => l.id);
     expect(new Set(ids).size).toBe(ids.length);
   });

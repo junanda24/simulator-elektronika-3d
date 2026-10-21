@@ -20,6 +20,19 @@ import { buzzerPlugin } from './catalog/buzzer';
 import { sevenSegmentPlugin } from './catalog/seven-segment';
 import { fusePlugin } from './catalog/fuse';
 import { tiltSwitchPlugin } from './catalog/tilt-switch';
+import { ntcThermistorPlugin } from './catalog/ntc-thermistor';
+import { reedSwitchPlugin } from './catalog/reed-switch';
+import { fc51Plugin } from './catalog/fc-51';
+import { ky003Plugin } from './catalog/ky-003';
+import { mosfetPlugin } from './catalog/mosfet';
+import { flameSensorPlugin } from './catalog/flame-sensor';
+import { rainSensorPlugin } from './catalog/rain-sensor';
+import { mq2Plugin } from './catalog/mq2';
+import { soundSensorPlugin } from './catalog/sound-sensor';
+import { ledBarGraphPlugin } from './catalog/led-bar-graph';
+import { regulator7805Plugin } from './catalog/regulator-7805';
+import { battery9vPlugin } from './catalog/battery-9v';
+import { hcSr04Plugin } from './catalog/hc-sr04';
 
 /**
  * Single source of truth seluruh komponen (ARCHITECTURE.md §1.3).
@@ -53,6 +66,19 @@ const RAW_COMPONENT_REGISTRY: ComponentPlugin[] = [
   sevenSegmentPlugin,
   fusePlugin,
   tiltSwitchPlugin,
+  ntcThermistorPlugin,
+  reedSwitchPlugin,
+  fc51Plugin,
+  ky003Plugin,
+  mosfetPlugin,
+  flameSensorPlugin,
+  rainSensorPlugin,
+  mq2Plugin,
+  soundSensorPlugin,
+  ledBarGraphPlugin,
+  regulator7805Plugin,
+  battery9vPlugin,
+  hcSr04Plugin,
 ];
 
 export const COMPONENT_REGISTRY: ComponentPlugin[] = RAW_COMPONENT_REGISTRY.map(

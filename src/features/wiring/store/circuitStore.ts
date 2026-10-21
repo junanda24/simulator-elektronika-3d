@@ -13,15 +13,22 @@ import {
   normalizeWireColor,
   type WireColorHex,
 } from '../wireColors';
-import { computePlacement, type PlacementRotation } from '../placement';
+import {
+  computeFreePlacement,
+  computePlacement,
+  isFreePlacementType,
+  type PlacementRotation,
+} from '../placement';
 import { playClick, playSnap } from '../../../shared/utils/soundFx';
 import {
+  addSimRecoveryListener,
   setSimBusyListener,
   simClearBoardDamage,
   simSetCircuit,
   simSetPowered,
   simStartSketch,
   simStopSketch,
+  type SimRecoveryEntry,
   type SimSnapshot,
 } from '../../simulation/worker/bridge';
 import { DEFAULT_SKETCH } from '../../sketch/defaultSketch';
@@ -43,6 +50,15 @@ export interface HoverState {
   clientX: number;
   clientY: number;
 }
+
+/** Satu pemberitahuan self-healing yang menunggu ditampilkan ke pengguna. */
+export interface SimNoticeItem {
+  id: number;
+  text: string;
+}
+
+/** Batas tumpukan pemberitahuan — yang terlama dibuang lebih dulu. */
+const SIM_NOTICE_LIMIT = 5;
 
 /**
  * Keluarga MODE ALAT (satu sumber kebenaran untuk perilaku klik/drag di
@@ -147,6 +163,28 @@ interface CircuitStore {
   sketchError: string | null;
   /** Baris sketch yang sedang dieksekusi (dari snapshot sesi); null = tanpa sorot. */
   currentLine: number | null;
+  /**
+   * Kegagalan solver yang sedang berlaku (cermin `solverError` snapshot
+   * sesi, self-healing SH-2/SH-3): non-null selama solver gagal
+   * menghitung rangkaian dan snapshot menampilkan keadaan aman serba-0.
+   * UI menampilkannya sebagai pill status persisten; bersih sendiri
+   * saat snapshot sehat kembali.
+   */
+  solverError: string | null;
+  /**
+   * Antrian pemberitahuan self-healing dari snapshot (kolom `notice`
+   * one-shot sesi/bridge — pemulihan worker, solver gagal/pulih):
+   * dirender App sebagai pill di tumpukan pemberitahuan dan dibuang
+   * lewat dismissSimNotice (tombol tutup / hilang otomatis).
+   */
+  simNotices: SimNoticeItem[];
+  /**
+   * Teks notice pada snapshot TERAKHIR yang diproses — pembanding anti
+   * dobel: teks yang sama pada snapshot berturut-turut antri sekali;
+   * snapshot tanpa notice meresetnya ke null, jadi peristiwa yang sama
+   * di kemudian waktu tetap tampil lagi.
+   */
+  lastNoticeText: string | null;
   activeLessonId: string | null;
   lessonChecks: boolean[];
   completedLessons: string[];
@@ -185,6 +223,8 @@ interface CircuitStore {
 
   setPlacing: (type: string | null) => void;
   placeAt: (holeId: string) => boolean;
+  /** Penempatan terminal-bebas (baterai 9V): titik [x, z] di alas meja. */
+  placeFreeAt: (point: [number, number]) => boolean;
   clickTerminal: (ref: TerminalRef) => void;
   cancelPending: () => void;
   setWireColor: (color: string) => void;
@@ -207,6 +247,8 @@ interface CircuitStore {
   ) => void;
   setToolMode: (mode: ToolMode) => void;
   closeAutopsy: () => void;
+  /** Buang satu pemberitahuan self-healing dari antrian tampil. */
+  dismissSimNotice: (id: number) => void;
   setRunning: (running: boolean) => void;
   setBoard: (boardId: string) => void;
   setSketchCode: (code: string) => void;
@@ -227,11 +269,25 @@ function nextWireId(): string {
   return `wire-${Date.now().toString(36)}-${wireCounter}`;
 }
 
+let noticeCounter = 0;
+function nextNoticeId(): number {
+  noticeCounter += 1;
+  return noticeCounter;
+}
+
 function sameTerminal(a: TerminalRef, b: TerminalRef): boolean {
   if (a.kind !== b.kind) return false;
   if (a.kind === 'hole' && b.kind === 'hole') return a.holeId === b.holeId;
   if (a.kind === 'board' && b.kind === 'board') return a.pinId === b.pinId;
+  if (a.kind === 'component' && b.kind === 'component') {
+    return a.instanceId === b.instanceId && a.pinId === b.pinId;
+  }
   return false;
+}
+
+/** Kabel yang menyentuh terminal komponen milik instance tertentu. */
+function touchesComponentInstance(ref: TerminalRef, instanceId: string): boolean {
+  return ref.kind === 'component' && ref.instanceId === instanceId;
 }
 
 /** Perbandingan dangkal dua record angka (pinVoltages / branchCurrents). */
@@ -293,6 +349,9 @@ export const useCircuitStore = create<CircuitStore>((set, get) => ({
   boardFault: false,
   sketchError: null,
   currentLine: null,
+  solverError: null,
+  simNotices: [],
+  lastNoticeText: null,
   activeLessonId: null,
   lessonChecks: [],
   completedLessons: (() => {
@@ -448,6 +507,30 @@ export const useCircuitStore = create<CircuitStore>((set, get) => ({
     return true;
   },
 
+  placeFreeAt: (point) => {
+    // Gerbang Mode Tangan sama seperti placeAt.
+    if (get().toolMode === 'hand') return false;
+    const { placingType, instances, pinHoles, placementRotation } = get();
+    if (!placingType || !isFreePlacementType(placingType)) return false;
+    const others: Array<[number, number]> = instances
+      .filter((i) => isFreePlacementType(i.type))
+      .map((i) => [i.position[0], i.position[2]]);
+    const placement = computeFreePlacement(placingType, point, others, placementRotation);
+    if (!placement) return false;
+    pushHistory(set, get);
+    set({
+      instances: [...instances, placement.instance],
+      // pinHoles kosong: terminal baterai hidup sebagai TerminalRef
+      // 'component', bukan lubang (lihat placement.ts & netlist.ts).
+      pinHoles: { ...pinHoles, [placement.instance.id]: placement.pinHoles },
+      placingType: null,
+      selectedInstanceId: placement.instance.id,
+    });
+    syncSim(get);
+    playSnap();
+    return true;
+  },
+
   clickTerminal: (ref) => {
     // Gerbang Mode Tangan: klik terminal tidak memulai/menyambung kabel.
     if (get().toolMode === 'hand') return;
@@ -504,6 +587,16 @@ export const useCircuitStore = create<CircuitStore>((set, get) => ({
       return {
         instances: s.instances.filter((i) => i.id !== id),
         pinHoles,
+        // Kabel berujung terminal komponen milik instance ini ikut
+        // hilang — ujungnya tidak menunjuk apa-apa lagi (berbeda dari
+        // kabel lubang/board yang memang independen dari komponen).
+        wires: s.wires.filter(
+          (w) => !touchesComponentInstance(w.a, id) && !touchesComponentInstance(w.b, id),
+        ),
+        pendingFrom:
+          s.pendingFrom && touchesComponentInstance(s.pendingFrom, id)
+            ? null
+            : s.pendingFrom,
         selectedInstanceId: s.selectedInstanceId === id ? null : s.selectedInstanceId,
         autopsy: s.autopsy?.instanceId === id ? null : s.autopsy,
       };
@@ -588,6 +681,9 @@ export const useCircuitStore = create<CircuitStore>((set, get) => ({
   setHover: (hover) => set({ hover }),
   closeAutopsy: () => set({ autopsy: null }),
 
+  dismissSimNotice: (id) =>
+    set((s) => ({ simNotices: s.simNotices.filter((n) => n.id !== id) })),
+
   setBoard: (boardId) => {
     if (boardId === get().boardId) return;
     simStopSketch();
@@ -670,6 +766,21 @@ export const useCircuitStore = create<CircuitStore>((set, get) => ({
 
   applySnapshot: (snapshot) => {
     const state = get();
+    // --- Self-healing (SH-3): notice one-shot + status solver ---
+    // notice hanya antri bila teksnya berbeda dari notice snapshot
+    // sebelumnya (anti dobel berturut-turut); snapshot tanpa notice
+    // mereset pembanding, jadi peristiwa sama yang terjadi lagi di
+    // kemudian waktu tetap tampil. solverError dicerminkan apa adanya:
+    // persisten selama solver gagal, bersih saat snapshot sehat.
+    let simNotices = state.simNotices;
+    if (snapshot.notice && snapshot.notice !== state.lastNoticeText) {
+      simNotices = [
+        ...simNotices,
+        { id: nextNoticeId(), text: snapshot.notice },
+      ].slice(-SIM_NOTICE_LIMIT);
+    }
+    const lastNoticeText = snapshot.notice;
+    const solverError = snapshot.solverError;
     // Pertahankan referensi objek instance yang hasil simulasinya TIDAK
     // berubah nilainya — hanya instance yang berubah yang dibuat baru,
     // supaya React.memo di panggung 3D bisa melewati render ulang.
@@ -749,6 +860,9 @@ export const useCircuitStore = create<CircuitStore>((set, get) => ({
         deadPins: snapshot.deadPins,
         boardFault: snapshot.boardFault,
         sketchError: snapshot.sketchError,
+        solverError,
+        simNotices,
+        lastNoticeText,
         running: false,
         simBusy: false,
         currentLine: null,
@@ -771,6 +885,9 @@ export const useCircuitStore = create<CircuitStore>((set, get) => ({
       deadPins: snapshot.deadPins,
       boardFault: snapshot.boardFault,
       sketchError: snapshot.sketchError,
+      solverError,
+      simNotices,
+      lastNoticeText,
       simBusy: false,
       currentLine: snapshot.currentLine,
       // Kejujuran status: bila sketch mati karena error (snapshot
@@ -880,3 +997,32 @@ export { holeWorldPosition };
 setSimBusyListener((busy) => {
   if (busy) useCircuitStore.setState({ simBusy: true });
 });
+
+/**
+ * Reaksi store terhadap peristiwa pemulihan bridge (self-healing SH-3).
+ * Hanya pemulihan 'watchdog' yang meninggalkan sesi BERHENTI: sketch
+ * yang beku sengaja TIDAK diputar ulang oleh bridge (di bridge,
+ * restartSketch:false hanya dipakai jalur watchdog), jadi flag
+ * `running` harus padam dan sorot baris eksekusi hilang — store
+ * MENCERMINKAN keadaan sesi, bukan mengambil alih kendali. Pemulihan
+ * lain ('worker-error' / 'ping-gagal') memutar ulang sketch, jadi
+ * status jalan tidak disentuh.
+ *
+ * Kenapa tidak dicerminkan dari `sketchRunning` snapshot saja?
+ * Snapshot sketchRunning=false juga tiba pada momen yang sah: tepat
+ * setelah pengguna menekan Jalankan (snapshot setCircuit mendahului
+ * startSketch) dan selama putar-ulang pemulihan restart (setCircuit &
+ * setPowered terbit sebelum startSketch). Itulah kontrak F-1 yang
+ * terkunci tes: tanpa error, snapshot tidak menyentuh status. Saluran
+ * pemulihan bridge adalah satu-satunya sinyal yang membedakan "sesi
+ * dihentikan mesin" dari "sketch belum berjalan".
+ */
+export function handleSimRecoveryForStore(entry: SimRecoveryEntry): void {
+  if (entry.reason !== 'watchdog') return;
+  useCircuitStore.setState({ running: false, currentLine: null });
+}
+
+// Daftarkan sebagai pendengar TAMBAHAN (multi-pendengar): slot tunggal
+// setSimRecoveryListener adalah milik DiagnosticsPanel selama panel
+// terpasang — merebutnya akan membungkam salah satu konsumen.
+addSimRecoveryListener(handleSimRecoveryForStore);

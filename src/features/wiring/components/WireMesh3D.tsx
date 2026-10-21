@@ -83,10 +83,10 @@ export default function WireMesh3D({ wire }: { wire: WireConnection }) {
   const material = useRef<THREE.MeshStandardMaterial>(null);
 
   const points = useMemo(() => {
-    const a = terminalWorldPosition(wire.a, board);
-    const b = terminalWorldPosition(wire.b, board);
+    const a = terminalWorldPosition(wire.a, board, instances);
+    const b = terminalWorldPosition(wire.b, board, instances);
     return a && b ? wirePoints(a, b) : null;
-  }, [wire, board]);
+  }, [wire, board, instances]);
 
   const curve = useMemo(
     () =>

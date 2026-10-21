@@ -14,10 +14,21 @@ import {
   toSharedProject,
 } from '../features/share/projectShare';
 import CatalogPanel from './CatalogPanel';
+import DiagnosticsPanel from './DiagnosticsPanel';
 import ToolbarBar from './ToolbarBar';
+import RecoveryBoundary from './RecoveryBoundary';
+import {
+  clearSession,
+  restoreSession,
+  saveSession,
+} from './sessionPersistence';
+import { logError } from './errorLog';
 import { useExitPresence } from './useExitPresence';
 import { useUiSettings } from './uiSettings';
-import { useCircuitStore } from '../features/wiring/store/circuitStore';
+import {
+  useCircuitStore,
+  type SimNoticeItem,
+} from '../features/wiring/store/circuitStore';
 import { getComponentPlugin } from '../shared/components/registry';
 import { holeLabel } from '../shared/boards/breadboard';
 import { playClick } from '../shared/utils/soundFx';
@@ -44,6 +55,14 @@ const SHORTCUT_WIRE_COLORS: Array<{ hex: string; label: string }> = [
 
 function terminalDisplay(ref: TerminalRef, boardId: string): string {
   if (ref.kind === 'hole') return holeLabel(ref.holeId);
+  if (ref.kind === 'component') {
+    // Terminal komponen bebas (baterai 9V): label dari meta komponen.
+    return terminalLabel(
+      ref,
+      getBoardDefinition(boardId),
+      useCircuitStore.getState().instances,
+    );
+  }
   const board = getBoardDefinition(boardId);
   return `${board.name} ${boardPinById(board, ref.pinId)?.label ?? ref.pinId}`;
 }
@@ -183,10 +202,51 @@ function SpinnerIcon({ className = 'size-4' }: { className?: string }) {
   );
 }
 
+/**
+ * Pill pemberitahuan self-healing (notice one-shot dari sesi/bridge:
+ * pemulihan worker, solver gagal/pulih). Pola visual sama dengan
+ * pemberitahuan sesi SH-1 di tumpukan yang sama. Hilang sendiri
+ * setelah 12 detik — isinya memuat arahan ("tekan Jalankan untuk
+ * melanjutkan") yang perlu waktu baca — dan bisa ditutup manual.
+ */
+function SimNoticePill({
+  notice,
+  shadowClass,
+  onDismiss,
+}: {
+  notice: SimNoticeItem;
+  shadowClass: string;
+  onDismiss: (id: number) => void;
+}) {
+  useEffect(() => {
+    const t = setTimeout(() => onDismiss(notice.id), 12000);
+    return () => clearTimeout(t);
+  }, [notice.id, onDismiss]);
+  return (
+    <div
+      role="status"
+      className={`hud-content-enter pointer-events-auto flex items-center gap-3 rounded-full border border-border-subtle bg-panel py-1.5 pl-4 pr-1.5 text-xs text-zinc-200 ${shadowClass}`}
+    >
+      <span>{notice.text}</span>
+      <button
+        type="button"
+        onClick={() => onDismiss(notice.id)}
+        aria-label="Tutup pemberitahuan"
+        className="grid size-7 shrink-0 place-items-center rounded-full text-sm leading-none text-zinc-400 transition-colors hover:text-zinc-100 active:scale-[0.95]"
+      >
+        ×
+      </button>
+    </div>
+  );
+}
+
 export default function App() {
   const running = useCircuitStore((s) => s.running);
   const simBusy = useCircuitStore((s) => s.simBusy);
   const sketchError = useCircuitStore((s) => s.sketchError);
+  const solverError = useCircuitStore((s) => s.solverError);
+  const simNotices = useCircuitStore((s) => s.simNotices);
+  const dismissSimNotice = useCircuitStore((s) => s.dismissSimNotice);
   const setRunning = useCircuitStore((s) => s.setRunning);
   const boardId = useCircuitStore((s) => s.boardId);
   const setBoard = useCircuitStore((s) => s.setBoard);
@@ -206,6 +266,13 @@ export default function App() {
   const setCameraView = useCircuitStore((s) => s.setCameraView);
   const autopsy = useCircuitStore((s) => s.autopsy);
   const [shareNote, setShareNote] = useState<string | null>(null);
+  // Pemberitahuan pemulihan sesi (self-healing SH-1): 'restored' =
+  // autosave sesi terakhir dipulihkan saat boot (punya aksi "Mulai
+  // dari awal"); 'quarantined' = data simpanan rusak sudah
+  // dikesampingkan dan meja dimulai dari keadaan aman.
+  const [sessionNotice, setSessionNotice] = useState<
+    { kind: 'restored' | 'quarantined' } | null
+  >(null);
   const importRef = useRef<HTMLInputElement>(null);
   const voltages = useCircuitStore((s) => s.voltages);
   const netNameOf = useCircuitStore((s) => s.netNameOf);
@@ -285,10 +352,32 @@ export default function App() {
     if (mounted.current) return;
     mounted.current = true;
     initSim((snapshot) => useCircuitStore.getState().applySnapshot(snapshot));
+    // Prioritas sumber rangkaian saat boot (self-healing SH-1):
+    // 1. Tautan berbagi di hash — niat eksplisit pengguna, selalu menang
+    //    (projectFromHash kini memvalidasi mendalam; hash rusak → null).
+    // 2. Autosave sesi terakhir — pulihkan pekerjaan yang belum selesai.
+    //    Simpanan rusak sudah dikarantina oleh restoreSession; meja
+    //    mulai dari demo dan pengguna diberi tahu, tidak crash.
+    // 3. Demo bawaan.
     const shared = projectFromHash(window.location.hash);
     if (shared) {
       loadShared(shared);
       setShareNote('Proyek dimuat dari tautan bersama.');
+      return;
+    }
+    if (window.location.hash.includes('#s=')) {
+      // Hash berbagi ADA tapi gagal validasi mendalam (rusak/asing):
+      // jangan berpura-pura tautannya tidak pernah ada.
+      setShareNote('Tautan berbagi tidak valid dan tidak dimuat.');
+    }
+    const restored = restoreSession();
+    if (restored.status === 'restored') {
+      loadShared(restored.project);
+      setSessionNotice({ kind: 'restored' });
+    } else if (restored.status === 'quarantined') {
+      logError(new Error(restored.reason), 'session:karantina');
+      loadDemo();
+      setSessionNotice({ kind: 'quarantined' });
     } else {
       loadDemo();
     }
@@ -319,6 +408,65 @@ export default function App() {
     const t = setTimeout(() => setShareNote(null), 6000);
     return () => clearTimeout(t);
   }, [shareNote]);
+
+  // Autosave sesi (self-healing SH-1): langganan store yang HANYA
+  // bereaksi pada lima field yang terserialisasi (board, komponen,
+  // peta lubang, kabel, sketch) — snapshot simulasi ±60/dtk, hover,
+  // dan state transien lain tidak memicu penulisan. Penulisan
+  // ter-debounce 800ms dari perubahan terakhir; serialisasi memakai
+  // jalur berbagi yang sama (toSharedProject) dalam amplop berversi.
+  useEffect(() => {
+    let timer: number | undefined;
+    const unsubscribe = useCircuitStore.subscribe((state, prevState) => {
+      if (
+        state.boardId === prevState.boardId &&
+        state.instances === prevState.instances &&
+        state.pinHoles === prevState.pinHoles &&
+        state.wires === prevState.wires &&
+        state.sketchCode === prevState.sketchCode
+      ) {
+        return;
+      }
+      window.clearTimeout(timer);
+      timer = window.setTimeout(() => {
+        const s = useCircuitStore.getState();
+        saveSession(
+          toSharedProject({
+            boardId: s.boardId,
+            instances: s.instances,
+            pinHoles: s.pinHoles,
+            wires: s.wires,
+            sketchCode: s.sketchCode,
+          }),
+        );
+      }, 800);
+    });
+    return () => {
+      unsubscribe();
+      window.clearTimeout(timer);
+    };
+  }, []);
+
+  // Pemberitahuan sesi hilang sendiri: yang dipulihkan lebih lama
+  // (15 detik, ada aksi yang perlu sempat dibaca), yang karantina 8 detik.
+  useEffect(() => {
+    if (!sessionNotice) return;
+    const t = setTimeout(
+      () => setSessionNotice(null),
+      sessionNotice.kind === 'restored' ? 15000 : 8000,
+    );
+    return () => clearTimeout(t);
+  }, [sessionNotice]);
+
+  // Aksi "Mulai dari awal" pada pemberitahuan sesi pulih: buang
+  // simpanan lalu kembali ke rangkaian contoh. Autosave akan mencatat
+  // keadaan contoh ini sebagai sesi baru — memang itulah titik awalnya.
+  const startFresh = () => {
+    clearSession();
+    loadDemo();
+    setSessionNotice(null);
+    setShareNote('Sesi tersimpan dibuang — meja kembali ke contoh awal.');
+  };
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -580,7 +728,13 @@ export default function App() {
               : ''
         }`}
       >
-        <Workbench resetSignal={resetSignal} />
+        {/* Boundary kanvas (self-healing SH-1): gangguan render scene
+            hanya meruntuhkan area 3D menjadi kartu pemulihan — panel
+            HUD di lapisan overlay tetap hidup dan rangkaian tidak
+            tersentuh. */}
+        <RecoveryBoundary scope="canvas">
+          <Workbench resetSignal={resetSignal} />
+        </RecoveryBoundary>
       </div>
 
       {/* ===== Lapisan overlay: semua panel melayang ===== */}
@@ -637,7 +791,7 @@ export default function App() {
         </div>
 
         {/* Kapsul tengah: kontrol Run tunggal + status (terpusat pada rektangel bebas) */}
-        <div className="absolute left-[276px] right-[392px] top-3 z-20 flex justify-center max-[1279px]:left-[248px]">
+        <div className="absolute left-[276px] right-[392px] top-3 z-20 flex flex-col items-center gap-2 max-[1279px]:left-[248px]">
           <div
             className={`hud-enter hud-glass pointer-events-auto flex h-11 items-center gap-3 rounded-full border border-border-subtle py-1.5 pl-1.5 pr-4 ${capsuleShadow}`}
             style={{ animationDelay: '40ms' }}
@@ -701,6 +855,20 @@ export default function App() {
               </span>
             </div>
           </div>
+          {/* Pill status solver (self-healing SH-3): persisten dan
+              tenang selama snapshot melaporkan solverError — bukan
+              toast berulang. Pesan teknis lengkapnya di title;
+              pill hilang sendiri saat solver pulih. */}
+          {solverError && (
+            <div
+              role="status"
+              title={solverError}
+              className={`hud-content-enter pointer-events-auto flex items-center gap-2 rounded-full border border-accent-danger/40 bg-panel/90 px-3.5 py-1.5 text-xs text-zinc-200 backdrop-blur-md ${capsuleShadow}`}
+            >
+              <span className="inline-block size-2 shrink-0 rounded-full bg-accent-danger" />
+              Solver gagal menghitung rangkaian — menampilkan keadaan aman (0 V).
+            </div>
+          )}
         </div>
 
         {/* Kapsul kanan: Bagikan + menu Proyek + bantuan */}
@@ -923,8 +1091,8 @@ export default function App() {
               >
                 <h3 className="text-[13px] font-semibold text-zinc-100">Kabel Terpilih</h3>
                 <p className="mt-1 text-xs leading-relaxed text-zinc-400">
-                  {terminalLabel(shownWire.a, getBoardDefinition(boardId))} →{' '}
-                  {terminalLabel(shownWire.b, getBoardDefinition(boardId))}
+                  {terminalLabel(shownWire.a, getBoardDefinition(boardId), instances)} →{' '}
+                  {terminalLabel(shownWire.b, getBoardDefinition(boardId), instances)}
                 </p>
                 <button
                   type="button"
@@ -1115,11 +1283,51 @@ export default function App() {
                 />
               </div>
             </div>
+
+            {/* Bagian Diagnostik — "Periksa Kesehatan" self-healing */}
+            <DiagnosticsPanel />
           </div>
         )}
 
         {/* Toast shareNote + pill petunjuk kabel, terpusat di atas dock bawah */}
         <div className="absolute bottom-[68px] left-[288px] right-[404px] z-50 flex flex-col items-center gap-2 max-[1279px]:left-[248px]">
+          {simNotices.map((notice) => (
+            <SimNoticePill
+              key={notice.id}
+              notice={notice}
+              shadowClass={capsuleShadow}
+              onDismiss={dismissSimNotice}
+            />
+          ))}
+          {sessionNotice && (
+            <div
+              role="status"
+              className={`hud-content-enter pointer-events-auto flex items-center gap-3 rounded-full border border-border-subtle bg-panel py-1.5 pl-4 pr-1.5 text-xs text-zinc-200 ${capsuleShadow}`}
+            >
+              <span>
+                {sessionNotice.kind === 'restored'
+                  ? 'Sesi terakhir dipulihkan.'
+                  : 'Data tersimpan rusak dan sudah dikesampingkan — meja dimulai dari contoh awal.'}
+              </span>
+              {sessionNotice.kind === 'restored' && (
+                <button
+                  type="button"
+                  onClick={startFresh}
+                  className="h-7 shrink-0 rounded-full border border-border-interactive px-3 font-medium text-zinc-100 transition-colors hover:border-accent-primary hover:text-accent-primary active:scale-[0.97]"
+                >
+                  Mulai dari awal
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={() => setSessionNotice(null)}
+                aria-label="Tutup pemberitahuan"
+                className="grid size-7 shrink-0 place-items-center rounded-full text-sm leading-none text-zinc-400 transition-colors hover:text-zinc-100 active:scale-[0.95]"
+              >
+                ×
+              </button>
+            </div>
+          )}
           {toastP.mounted && (
             <div
               role="status"

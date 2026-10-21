@@ -18,10 +18,19 @@ const UNO_DEF = getBoardDefinition('uno');
 /** Resistansi bleed high-Z pin mode INPUT ke GND (Ω) — lihat buildNetlist. */
 export const INPUT_BLEED_OHMS = 10_000_000;
 
-/** Ujung kabel: lubang breadboard atau pin board. */
+/**
+ * Ujung kabel: lubang breadboard, pin board, atau terminal komponen
+ * terminal-bebas (komponen yang tidak menancap ke lubang — baterai 9V;
+ * lihat FREE_PLACEMENT_TYPES di placement.ts). Pin board adalah
+ * preseden terminal non-lubang; terminal komponen memperluas pola yang
+ * sama ke pin instance: net dasarnya `pin:<instanceId>:<pinId>`, persis
+ * net yang diterima pin komponen tanpa lubang di buildNetlist, jadi
+ * kabel berujung 'component' bergabung ke net pin itu sendiri.
+ */
 export type TerminalRef =
   | { kind: 'hole'; holeId: string }
-  | { kind: 'board'; pinId: string };
+  | { kind: 'board'; pinId: string }
+  | { kind: 'component'; instanceId: string; pinId: string };
 
 export interface WireConnection {
   id: string;
@@ -33,13 +42,27 @@ export interface WireConnection {
 /** Net bawaan sebuah terminal sebelum digabung kabel. */
 export function terminalBaseNet(ref: TerminalRef, board: BoardDefinition = UNO_DEF): string {
   if (ref.kind === 'hole') return holeNetKey(ref.holeId) ?? `hole:${ref.holeId}`;
+  if (ref.kind === 'component') return `pin:${ref.instanceId}:${ref.pinId}`;
   const pin = boardPinById(board, ref.pinId);
   return `board:${pin ? pin.net : ref.pinId}`;
 }
 
-export function terminalLabel(ref: TerminalRef, board: BoardDefinition = UNO_DEF): string {
+export function terminalLabel(
+  ref: TerminalRef,
+  board: BoardDefinition = UNO_DEF,
+  instances: ComponentInstanceState[] = [],
+): string {
   if (ref.kind === 'board') {
     return `${board.name} ${boardPinById(board, ref.pinId)?.label ?? ref.pinId}`;
+  }
+  if (ref.kind === 'component') {
+    // Label manusiawi bila instance-nya dikenal pemanggil: nama
+    // komponen + label pin meta ("Baterai 9V (6LR61) Terminal + …").
+    const instance = instances.find((i) => i.id === ref.instanceId);
+    const meta = instance ? getComponentMeta(instance.type) : undefined;
+    const pin = meta?.pins.find((p) => p.id === ref.pinId);
+    if (meta && pin) return `${meta.name} ${pin.label}`;
+    return `Terminal ${ref.pinId}`;
   }
   return ref.holeId;
 }
@@ -126,7 +149,10 @@ export function buildNetlist(
     for (const pin of plugin.pins) {
       const holeId = pinHoles[instance.id]?.[pin.id];
       if (holeId) register(holeNetKey(holeId) ?? `hole:${holeId}`);
-      else register(`float:${instance.id}:${pin.id}`);
+      // Pin tanpa lubang (komponen terminal-bebas): net pin-nya sendiri —
+      // nama yang sama dengan net dasar TerminalRef 'component', jadi
+      // kabel yang diklik ke terminal itu bergabung tepat ke net ini.
+      else register(`pin:${instance.id}:${pin.id}`);
     }
   }
   // Semua pin board terdaftar: pin tak berkabel tetap net sendiri (mengambang)
@@ -159,7 +185,7 @@ export function buildNetlist(
     if (!plugin) continue;
     for (const pin of plugin.pins) {
       const holeId = pinHoles[instance.id]?.[pin.id];
-      const base = holeId ? (holeNetKey(holeId) ?? `hole:${holeId}`) : `float:${instance.id}:${pin.id}`;
+      const base = holeId ? (holeNetKey(holeId) ?? `hole:${holeId}`) : `pin:${instance.id}:${pin.id}`;
       pinNets[`${instance.id}:${pin.id}`] = canonicalName(base);
     }
   }

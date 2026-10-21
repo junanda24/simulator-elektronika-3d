@@ -52,10 +52,12 @@
  * - Fungsi Arduino murni yang murah disediakan PREAMBLE sebagai JS polos:
  *   random/randomSeed, pow/sqrt/sq/sin/cos/tan, konstanta PI/TWO_PI/HALF_PI
  *   dan DEC/HEX/OCT/BIN, micros (dari millis), delayMicroseconds (dari
- *   delay). Fungsi yang belum bisa didukung jujur (tone/noTone, pulseIn,
- *   shiftOut/shiftIn, attachInterrupt/detachInterrupt) adalah stub yang
- *   melempar error "belum didukung" menyebut nama fungsinya — bukan
- *   ReferenceError mentah.
+ *   delay). pulseIn adalah builtin runtime ASLI (bukan stub): lebar pulsa
+ *   dihitung ANALITIK oleh sesi dari jadwal ECHO HC-SR04 (jarak × 58 µs),
+ *   bukan polling pin per tick — lihat runtime.ts & simSession.ts.
+ *   Fungsi yang belum bisa didukung jujur (tone/noTone, shiftOut/shiftIn,
+ *   attachInterrupt/detachInterrupt) adalah stub yang melempar error
+ *   "belum didukung" menyebut nama fungsinya — bukan ReferenceError mentah.
  * - `struct`/`class`/`enum`/`union`/`typedef`, label/goto, dan lambda belum
  *   didukung — parser menolaknya dengan pesan Bahasa Indonesia.
  * - Parameter referensi (`int &x`) dan pointer (`int *p`) diterima tapi
@@ -71,7 +73,7 @@ export interface TranspileResult {
 
 /** Awalan wajib kode hasil: destrukturisasi API + konstanta Arduino. */
 const PREAMBLE = [
-  "const { pinMode, digitalWrite, digitalRead, analogWrite, analogRead, delay, millis, guard, Serial, map, constrain, min, max, abs, __line } = __api;",
+  "const { pinMode, digitalWrite, digitalRead, analogWrite, analogRead, pulseIn, delay, millis, guard, Serial, map, constrain, min, max, abs, __line } = __api;",
   "const HIGH = 1, LOW = 0, INPUT = 'INPUT', OUTPUT = 'OUTPUT', INPUT_PULLUP = 'INPUT_PULLUP', INPUT_PULLDOWN = 'INPUT_PULLDOWN';",
   "const A0='A0',A1='A1',A2='A2',A3='A3',A4='A4',A5='A5',A6='A6',A7='A7';",
   // Konstanta pin digital D0..D39 sebagai STRING id pin (konsisten dengan
@@ -94,7 +96,6 @@ const PREAMBLE = [
   "const __belumDidukung = (nama, saran) => { throw new Error('Fungsi ' + nama + '() belum didukung simulator' + (saran ? ' — ' + saran : '') + '. Sketch berhenti.'); };",
   "const tone = () => __belumDidukung('tone', 'bunyi buzzer di simulator dibuat dengan digitalWrite HIGH/LOW pada pin buzzer');",
   "const noTone = () => __belumDidukung('noTone', 'bunyi buzzer di simulator dibuat dengan digitalWrite HIGH/LOW pada pin buzzer');",
-  "const pulseIn = () => __belumDidukung('pulseIn', 'sensor ultrasonik HC-SR04 belum tersedia di simulator');",
   "const shiftOut = () => __belumDidukung('shiftOut');",
   "const shiftIn = () => __belumDidukung('shiftIn');",
   "const attachInterrupt = () => __belumDidukung('attachInterrupt');",

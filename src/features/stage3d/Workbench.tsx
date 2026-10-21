@@ -33,7 +33,13 @@ import { useUiSettings } from '../../app/uiSettings';
 import { useCircuitStore } from '../wiring/store/circuitStore';
 import { terminalWorldPosition } from '../wiring/terminals';
 import type { TerminalRef } from '../wiring/netlist';
-import { computePlacement, type PlacementRotation } from '../wiring/placement';
+import {
+  computePlacement,
+  isFreePlacementType,
+  type PlacementRotation,
+} from '../wiring/placement';
+import { getComponentMeta } from '../../shared/components/catalogMeta';
+import { componentPinWorldPosition } from '../wiring/terminals';
 import WireMesh3D from '../wiring/components/WireMesh3D';
 import DanglingWirePreview from '../wiring/components/DanglingWirePreview';
 import GhostPlacementMesh from './effects/GhostPlacementMesh';
@@ -446,9 +452,8 @@ function HoverMarkers() {
     return placement ? Object.values(placement.pinHoles) : [];
   }, [placingType, hover, pinHoles, placementRotation]);
 
-  void instances;
-  const hoverPos = hover ? terminalWorldPosition(hover.ref, board) : null;
-  const pendingPos = pendingFrom ? terminalWorldPosition(pendingFrom, board) : null;
+  const hoverPos = hover ? terminalWorldPosition(hover.ref, board, instances) : null;
+  const pendingPos = pendingFrom ? terminalWorldPosition(pendingFrom, board, instances) : null;
 
   let stripBox: { x: number; z: number } | null = null;
   if (hover?.ref.kind === 'hole') {
@@ -564,14 +569,20 @@ function ActiveBoard() {
 }
 
 /**
- * Handler klik ruang kosong di permukaan di luar bidang interaksi
- * (alas meja): klik tanpa seret (>6px = drag kamera, diabaikan) saat
- * Mode Tangan membatalkan pilihan — padanan InteractionPlane untuk
- * area yang tidak tertutup bidang interaksi.
+ * Handler klik di permukaan alas meja (bidang di luar bidang interaksi
+ * breadboard/board). Dua peran, keduanya hanya untuk klik tanpa seret
+ * (>6px = drag kamera, diabaikan):
+ * - Mode pasang komponen TERMINAL-BEBAS (baterai 9V): klik menempatkan
+ *   komponen di titik alas itu (store.placeFreeAt) — padanan placeAt
+ *   untuk komponen yang tidak menancap ke lubang.
+ * - Mode Tangan: klik membatalkan pilihan — padanan InteractionPlane
+ *   untuk area yang tidak tertutup bidang interaksi.
  */
-function useEmptySurfaceDeselect() {
+function useMatSurfaceClick() {
   const toolMode = useCircuitStore((s) => s.toolMode);
+  const placingType = useCircuitStore((s) => s.placingType);
   const selectInstance = useCircuitStore((s) => s.selectInstance);
+  const placeFreeAt = useCircuitStore((s) => s.placeFreeAt);
   const downPos = useRef<{ x: number; y: number } | null>(null);
   return {
     onPointerDown: (e: ThreeEvent<PointerEvent>) => {
@@ -580,11 +591,100 @@ function useEmptySurfaceDeselect() {
     onPointerUp: (e: ThreeEvent<PointerEvent>) => {
       const down = downPos.current;
       downPos.current = null;
-      if (!down || toolMode !== 'hand') return;
+      if (!down) return;
       if (Math.hypot(e.clientX - down.x, e.clientY - down.y) > 6) return;
+      if (placingType && isFreePlacementType(placingType)) {
+        placeFreeAt([e.point.x, e.point.z]);
+        return;
+      }
+      if (toolMode !== 'hand') return;
       selectInstance(null);
     },
   };
+}
+
+/**
+ * Target klik terminal untuk komponen terminal-bebas (baterai 9V):
+ * bola tak terlihat di posisi dunia setiap pin (terminal snap di muka
+ * atas baterai). Klik tanpa seret memulai/menyambung kabel lewat
+ * store.clickTerminal dengan TerminalRef { kind: 'component' } —
+ * mekanisme endpoint yang sama seperti pin board. Hover mengumpan
+ * store.hover agar marker cincin + tooltip tegangan bekerja seperti
+ * terminal lain. Di Mode Tangan klik hanya memilih instance (gerbang
+ * clickTerminal di store juga sudah menolak, ini menjaga seleksi).
+ */
+function FreeTerminalMarkers() {
+  const instances = useCircuitStore((s) => s.instances);
+  const placingType = useCircuitStore((s) => s.placingType);
+  const toolMode = useCircuitStore((s) => s.toolMode);
+  const clickTerminal = useCircuitStore((s) => s.clickTerminal);
+  const selectInstance = useCircuitStore((s) => s.selectInstance);
+  const setHover = useCircuitStore((s) => s.setHover);
+  const downPos = useRef<{ x: number; y: number } | null>(null);
+
+  const targets = useMemo(() => {
+    const list: Array<{
+      key: string;
+      instanceId: string;
+      ref: TerminalRef;
+      pos: [number, number, number];
+    }> = [];
+    for (const instance of instances) {
+      if (!isFreePlacementType(instance.type)) continue;
+      for (const pin of getComponentMeta(instance.type)?.pins ?? []) {
+        const pos = componentPinWorldPosition(instance, pin.id);
+        if (!pos) continue;
+        list.push({
+          key: `${instance.id}:${pin.id}`,
+          instanceId: instance.id,
+          ref: { kind: 'component', instanceId: instance.id, pinId: pin.id },
+          pos,
+        });
+      }
+    }
+    return list;
+  }, [instances]);
+
+  if (targets.length === 0) return null;
+  return (
+    <group>
+      {targets.map((t) => (
+        <mesh
+          key={t.key}
+          position={t.pos}
+          onPointerMove={(e) => {
+            setHover({ ref: t.ref, clientX: e.clientX, clientY: e.clientY });
+          }}
+          onPointerLeave={() => setHover(null)}
+          onPointerDown={(e) => {
+            downPos.current = { x: e.clientX, y: e.clientY };
+          }}
+          onPointerUp={(e) => {
+            const down = downPos.current;
+            downPos.current = null;
+            if (!down) return;
+            if (Math.hypot(e.clientX - down.x, e.clientY - down.y) > 6) return;
+            e.stopPropagation();
+            if (toolMode !== 'build') {
+              // Mode Tangan & Mode Hapus: klik terminal = memilih
+              // instance-nya, bukan menyambung kabel.
+              selectInstance(t.instanceId);
+              return;
+            }
+            // Mode pasang sedang aktif: klik terminal tidak menyambung
+            // kabel (konsisten dengan InteractionPlane yang memprioritaskan
+            // penempatan selama placingType terisi).
+            if (placingType) return;
+            clickTerminal(t.ref);
+          }}
+          onClick={(e) => e.stopPropagation()}
+        >
+          <sphereGeometry args={[1.15, 12, 12]} />
+          <meshBasicMaterial transparent opacity={0} depthWrite={false} colorWrite={false} />
+        </mesh>
+      ))}
+    </group>
+  );
 }
 
 /**
@@ -594,7 +694,7 @@ function useEmptySurfaceDeselect() {
 export default function Workbench({ resetSignal }: { resetSignal: number }) {
   const isDragging3D = useCircuitStore((s) => s.isDragging3D);
   const toolMode = useCircuitStore((s) => s.toolMode);
-  const matDeselect = useEmptySurfaceDeselect();
+  const matDeselect = useMatSurfaceClick();
   return (
     <Canvas
       shadows="soft"
@@ -660,6 +760,7 @@ export default function Workbench({ resetSignal }: { resetSignal: number }) {
       <ActiveBoard />
       <Breadboard position={BREADBOARD_ORIGIN} />
       <CircuitScene />
+      <FreeTerminalMarkers />
       <HoverMarkers />
       <DanglingWirePreview />
       <GhostPlacementMesh />

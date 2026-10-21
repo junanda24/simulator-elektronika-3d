@@ -12,7 +12,7 @@ import type { ComponentInstanceState } from '../../../shared/types';
  * dijalankan di SimSession; assertion dievaluasi dari snapshot
  * persis seperti store melakukannya (dengan penempelan sticky).
  *
- * Perluasan audit 2026-10-21 (T6): SEMUA modul 1–20 kini dijalankan
+ * Perluasan audit 2026-10-21 (T6): SEMUA modul 1–24 kini dijalankan
  * end-to-end — fase A keadaan bawaan, lalu fase interaksi yang
  * diperintahkan goal modul (tombol ditekan, knop diputar ke dua
  * ujung, LDR digelapkan, PIR digerakkan, LM35 dipanaskan). Aturan
@@ -157,7 +157,7 @@ describe('integrasi lesson', () => {
   }, 15000);
 });
 
-describe('integrasi lesson — audit menyeluruh 20 modul (T6)', () => {
+describe('integrasi lesson — audit menyeluruh 24 modul (T6)', () => {
   interface AuditCase {
     phases: RunPhase[];
     /** Checks yang diharapkan di akhir fase A (keadaan bawaan). */
@@ -170,6 +170,58 @@ describe('integrasi lesson — audit menyeluruh 20 modul (T6)', () => {
 
   const T = true;
   const F = false;
+
+  // Penolong khusus modul 24: tambal FC-51 ke-idx berdasarkan urutan
+  // penempatan (patchInteractive bawaan menambal SEMUA instance satu
+  // tipe — tidak bisa membedakan dua sinar). Kontrak: FC-51 luar =
+  // indeks 0, dalam = indeks 1, sesuai urutan placements di starter.
+  const patchFc51 =
+    (idx: number, patch: Record<string, unknown>) =>
+    (instances: ComponentInstanceState[]): ComponentInstanceState[] => {
+      let seen = -1;
+      return instances.map((inst) => {
+        if (inst.type !== 'fc-51') return inst;
+        seen += 1;
+        return seen === idx
+          ? { ...inst, interactiveState: { ...inst.interactiveState, ...patch } }
+          : inst;
+      });
+    };
+  const SINAR_PUTUS = { distanceCm: 10 }; // <= ambang 20 cm -> OUT LOW
+  const SINAR_BEBAS = { distanceCm: 35 }; // bawaan gizmo -> OUT HIGH
+
+  // Fase modul 23 dipakai bersama oleh CASES dan tes bespoke
+  // histeresis di bawah — satu sumber kebenaran.
+  const PHASES_23: RunPhase[] = [
+    // Fase A BUKAN bawaan gizmo: suhu disetel ke 35 °C (ADC 602
+    // terukur, pita tengah histeresis) sejak awal.
+    { waitMs: 2400, mutate: patchInteractive('ntc-thermistor', { tempC: 35 }) },
+    { waitMs: 1200, mutate: patchInteractive('ntc-thermistor', { tempC: 45 }) },
+    { waitMs: 1000, mutate: patchInteractive('ntc-thermistor', { tempC: 35 }) },
+    { waitMs: 1200, mutate: patchInteractive('rain-sensor', { wetness: 1 }) },
+    { waitMs: 1000, mutate: patchInteractive('ldr', { light: 0 }) },
+  ];
+
+  // Fase modul 24 (15 fase: diam, batal, masuk x2, keluar) — juga
+  // satu sumber kebenaran untuk CASES dan tes bespoke pembatalan.
+  const PHASES_24: RunPhase[] = [
+    { waitMs: 2400 }, // A diam
+    { waitMs: 600, mutate: patchFc51(0, SINAR_PUTUS) }, // B batal-1
+    { waitMs: 600, mutate: patchFc51(0, SINAR_BEBAS) }, // C batal-2
+    { waitMs: 500, mutate: patchFc51(0, SINAR_PUTUS) }, // D masuk1-1
+    { waitMs: 500, mutate: patchFc51(1, SINAR_PUTUS) }, // E masuk1-2
+    { waitMs: 500, mutate: patchFc51(0, SINAR_BEBAS) }, // F masuk1-3
+    { waitMs: 700, mutate: patchFc51(1, SINAR_BEBAS) }, // G masuk1-4 (commit 1)
+    { waitMs: 500, mutate: patchFc51(0, SINAR_PUTUS) }, // H masuk2-1
+    { waitMs: 500, mutate: patchFc51(1, SINAR_PUTUS) }, // I masuk2-2
+    { waitMs: 500, mutate: patchFc51(0, SINAR_BEBAS) }, // J masuk2-3
+    { waitMs: 700, mutate: patchFc51(1, SINAR_BEBAS) }, // K masuk2-4 (commit 2)
+    { waitMs: 500, mutate: patchFc51(1, SINAR_PUTUS) }, // L keluar-1
+    { waitMs: 500, mutate: patchFc51(0, SINAR_PUTUS) }, // M keluar-2
+    { waitMs: 500, mutate: patchFc51(1, SINAR_BEBAS) }, // N keluar-3
+    { waitMs: 700, mutate: patchFc51(0, SINAR_BEBAS) }, // O keluar-4 (commit 1)
+  ];
+
   const CASES: Record<string, AuditCase> = {
     'modul-1-led-pertama': {
       phases: [{ waitMs: 2400 }],
@@ -323,9 +375,51 @@ describe('integrasi lesson — audit menyeluruh 20 modul (T6)', () => {
       // (hitungan mencapai 2) di fase-fase berikutnya.
       expectPhaseA: [T, T, T, T, F, T],
     },
+    'modul-21-alarm-gas-api': {
+      phases: [
+        { waitMs: 2400 },
+        { waitMs: 1500, mutate: patchInteractive('mq2', { ppm: 5000 }) },
+        {
+          waitMs: 1500,
+          // Gas dibersihkan DAN api dinyalakan dalam satu fase
+          // gabungan (pola mutasi majemuk Modul 19).
+          mutate: (instances) =>
+            patchInteractive('flame-sensor', { flame: 0.85 })(
+              patchInteractive('mq2', { ppm: 0 })(instances),
+            ),
+        },
+      ],
+      // Udara bersih: tujuh checks dasar terpenuhi; lima checks
+      // bahaya (s7, motor, buzzer, dua teks Serial) HARUS tetap
+      // false — alarm tidak boleh berbunyi di dapur yang bersih.
+      expectPhaseA: [T, T, T, T, T, T, T, F, F, F, F, F],
+    },
+    'modul-22-sensor-parkir': {
+      phases: [
+        { waitMs: 2800 },
+        { waitMs: 1800, mutate: patchInteractive('hc-sr04', { distanceCm: 25 }) },
+        { waitMs: 1800, mutate: patchInteractive('hc-sr04', { noObstacle: true }) },
+      ],
+      // Rintangan bawaan 100 cm: jarak terbaca, 5 segmen menyala,
+      // buzzer berbunyi. Checks jarak dekat, segmen ke-9, dan cabang
+      // timeout HARUS tetap false di fase ini.
+      expectPhaseA: [T, T, T, T, T, T, F, F, F],
+    },
+    'modul-23-rumah-kaca': {
+      phases: PHASES_23,
+      // Pita tengah dari sisi dingin: bacaan suhu terbaca (ADC 602),
+      // tetapi ventilasi & pompa HARUS tetap diam — ambang tunggal
+      // 600 akan gagal di sini, histeresis yang lulus.
+      expectPhaseA: [T, T, T, T, F, F, F, F, F],
+    },
+    'modul-24-penghitung-pengunjung': {
+      phases: PHASES_24,
+      // Diam: display 0 (segmen A menyala), belum ada lintasan apa pun.
+      expectPhaseA: [T, T, T, T, T, F, F, F, F, F, F],
+    },
   };
 
-  it('tabel audit mencakup tepat 20 modul kurikulum', () => {
+  it('tabel audit mencakup tepat 24 modul kurikulum', () => {
     expect(Object.keys(CASES).sort()).toEqual(LESSONS.map((l) => l.id).sort());
   });
 
@@ -356,4 +450,54 @@ describe('integrasi lesson — audit menyeluruh 20 modul (T6)', () => {
       ).toEqual([...(auditCase.allowedDamage ?? [])].sort());
     }, 30000);
   }
+
+  it('modul-23-rumah-kaca: histeresis terbukti dua arah (fase C identik fase B)', async () => {
+    const lesson = getLesson('modul-23-rumah-kaca');
+    if (!lesson) throw new Error('modul 23 hilang');
+    const result = await runLessonPhased(lesson, PHASES_23);
+
+    // Fase C (suhu kembali ke 35 °C / ADC 602 — bacaan yang IDENTIK
+    // dengan fase A) tidak boleh melatch check baru apa pun terhadap
+    // fase B (45 °C): sistem mempertahankan keadaan panasnya. Pada
+    // fase A bacaan yang sama menghasilkan checks yang berbeda
+    // (ventilasi diam) — dua saksi ini bersama membuktikan
+    // histeresis, bukan sekadar ambang.
+    expect(result.checksByPhase[2]).toEqual(result.checksByPhase[1]);
+    expect(result.checksByPhase[1]).not.toEqual(result.checksByPhase[0]);
+
+    // Saksi independen kedua: teks penutupan karena suhu hanya
+    // tercetak bila ventilasi benar-benar menutup lewat ambang
+    // bawah — selama seluruh run ia tidak boleh muncul sekali pun
+    // (penutupan di fase D adalah karena HUJAN, teksnya berbeda).
+    expect(result.serial).not.toContain('VENT TUTUP (suhu turun)');
+    expect(result.serial).toContain('VENT TUTUP (HUJAN)');
+
+    // Fase D: walau suhu di pita tengah, prioritas hujan melatch
+    // check penutupan-hujan (indeks 7).
+    expect(result.checksByPhase[3][7]).toBe(true);
+    expect(result.sketchError).toBeNull();
+    expect([...result.damageRules]).toEqual([]);
+  }, 30000);
+
+  it('modul-24-penghitung-pengunjung: lintasan yang dibatalkan tidak mengubah apa pun', async () => {
+    const lesson = getLesson('modul-24-penghitung-pengunjung');
+    if (!lesson) throw new Error('modul 24 hilang');
+    const result = await runLessonPhased(lesson, PHASES_24);
+
+    // Fase B–C: sinar luar putus lalu bebas lagi tanpa sinar dalam
+    // tersentuh (orang mundur). Checks di akhir fase C HARUS sama
+    // persis dengan fase A — mesin yang menghitung di tepi pertama
+    // akan mencetak "Masuk. Pengunjung: 1" di sini dan ketahuan.
+    expect(result.checksByPhase[2]).toEqual(result.checksByPhase[0]);
+    expect(result.checksByPhase[1]).toEqual(result.checksByPhase[0]);
+    expect(result.serial).not.toContain('Keluar. Pengunjung: 0');
+
+    // Sesudah dua lintasan masuk penuh dan satu keluar, ketiga teks
+    // hitungan hadir — urutan lengkap mesin keadaan bekerja.
+    expect(result.serial).toContain('Masuk. Pengunjung: 1');
+    expect(result.serial).toContain('Masuk. Pengunjung: 2');
+    expect(result.serial).toContain('Keluar. Pengunjung: 1');
+    expect(result.sketchError).toBeNull();
+    expect([...result.damageRules]).toEqual([]);
+  }, 30000);
 });

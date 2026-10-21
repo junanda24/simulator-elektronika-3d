@@ -3,7 +3,11 @@ import * as THREE from 'three';
 import { getComponentPlugin } from '../../../shared/components/registry';
 import { holeWorldPosition } from '../../../shared/boards/breadboard';
 import { useCircuitStore } from '../../wiring/store/circuitStore';
-import { computePlacement, type PlacementRotation } from '../../wiring/placement';
+import {
+  computePlacement,
+  isFreePlacementType,
+  type PlacementRotation,
+} from '../../wiring/placement';
 import { terminalWorldPosition } from '../../wiring/terminals';
 
 /**
@@ -46,6 +50,10 @@ export default function GhostPlacementMesh() {
   }, [placement]);
 
   if (!placingType || !hoverHoleId) return null;
+  // Komponen terminal-bebas (baterai 9V) tidak menancap ke lubang:
+  // ghost lubang tidak berlaku — penempatannya dari klik di alas meja
+  // (Workbench), jadi tidak ada pratinjau selubung valid/gagal di sini.
+  if (isFreePlacementType(placingType)) return null;
 
   const plugin = placement ? getComponentPlugin(placingType) : undefined;
 

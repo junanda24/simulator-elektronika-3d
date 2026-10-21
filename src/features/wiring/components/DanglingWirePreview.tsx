@@ -17,15 +17,16 @@ export default function DanglingWirePreview() {
   const wireColor = useCircuitStore((s) => s.wireColor);
   const hover = useCircuitStore((s) => s.hover);
   const wireCursorPos = useCircuitStore((s) => s.wireCursorPos);
+  const instances = useCircuitStore((s) => s.instances);
   const boardId = useCircuitStore((s) => s.boardId);
   const board = getBoardDefinition(boardId);
 
   const geometry = useMemo(() => {
     if (!pendingFrom) return null;
-    const start = terminalWorldPosition(pendingFrom, board);
+    const start = terminalWorldPosition(pendingFrom, board, instances);
     if (!start) return null;
     const end =
-      wireCursorPos ?? (hover ? terminalWorldPosition(hover.ref, board) : null);
+      wireCursorPos ?? (hover ? terminalWorldPosition(hover.ref, board, instances) : null);
     if (!end) return null;
     const dist = Math.hypot(end[0] - start[0], end[2] - start[2]);
     const mid: [number, number, number] = [
@@ -39,7 +40,7 @@ export default function DanglingWirePreview() {
       new THREE.Vector3(...end),
     ]);
     return new THREE.TubeGeometry(curve, 24, 0.04, 8, false);
-  }, [pendingFrom, wireCursorPos, hover, board]);
+  }, [pendingFrom, wireCursorPos, hover, board, instances]);
   useEffect(() => () => geometry?.dispose(), [geometry]);
 
   if (!geometry) return null;

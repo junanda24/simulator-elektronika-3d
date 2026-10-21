@@ -8,7 +8,12 @@ import { solveCircuit } from '../../../../features/simulation/solver/engine';
 import { electricalOf } from '../../electricalRegistry';
 import { COMPONENT_REGISTRY, getComponentPlugin } from '../../registry';
 import { CATALOG_META } from '../../catalogMeta';
-import { computePlacement } from '../../../../features/wiring/placement';
+import {
+  computeFreePlacement,
+  computePlacement,
+  isFreePlacementType,
+} from '../../../../features/wiring/placement';
+import { buildNetlist, type TerminalRef } from '../../../../features/wiring/netlist';
 import { terminalHoleId } from '../../../boards/breadboard';
 
 /**
@@ -94,11 +99,22 @@ const STATE_VARIANTS: Array<Record<string, unknown>> = [
   { tilted: true },
   { locked: true },
   { motion: true },
+  // Kunci gizmo gelombang ekspansi 2026-10-21 (reed/Hall, ultrasonik,
+  // modul KY/MQ) — memperluas cakupan arah (a) ke keadaan aktif
+  // komponen baru; komponen lama mengabaikan kunci asing.
+  { magnet: true },
+  { echoOn: true },
+  { distanceCm: 10 },
+  { flame: 1 },
+  { wetness: 1 },
+  { ppm: 5000 },
+  { noise: 1 },
+  { tempC: 80 },
 ];
 
 describe('Audit konsistensi — (c) registrasi tiga registry', () => {
-  it('tepat 20 tipe, dan himpunan tipe registry == catalogMeta', () => {
-    expect(ALL_TYPES).toHaveLength(20);
+  it('tepat 33 tipe, dan himpunan tipe registry == catalogMeta', () => {
+    expect(ALL_TYPES).toHaveLength(33);
     expect(COMPONENT_REGISTRY.map((p) => p.type).sort()).toEqual(ALL_TYPES);
   });
 
@@ -153,10 +169,16 @@ describe('Audit konsistensi — (b) placement == meta', () => {
   function anchorFor(type: string): string {
     if (type === 'push-button') return terminalHoleId('L', 30, 4);
     if (type === 'relay') return terminalHoleId('L', 30, 4);
+    if (type === 'led-bar-graph') return terminalHoleId('L', 30, 4);
     return terminalHoleId('L', 30, 0);
   }
 
-  it.each(ALL_TYPES)(
+  // Tipe terminal-bebas (baterai 9V) memang TIDAK punya placement
+  // lubang — properti "placement menghasilkan semua pin" untuknya
+  // dibuktikan di describe (b2) lewat jalur terminal-bebasnya.
+  const HOLE_TYPES = ALL_TYPES.filter((t) => !isFreePlacementType(t));
+
+  it.each(HOLE_TYPES)(
     '%s: kunci pinHoles computePlacement == kunci pin meta',
     (type) => {
       const placement = computePlacement(type, anchorFor(type), new Set());
@@ -164,6 +186,58 @@ describe('Audit konsistensi — (b) placement == meta', () => {
       expect(Object.keys(placement?.pinHoles ?? {}).sort()).toEqual(
         (CATALOG_META[type]?.pins ?? []).map((p) => p.id).sort(),
       );
+    },
+  );
+});
+
+describe('Audit konsistensi — (b2) penempatan terminal-bebas == meta', () => {
+  const FREE_TYPES = ALL_TYPES.filter((t) => isFreePlacementType(t));
+
+  it('tepat satu tipe terminal-bebas: battery-9v', () => {
+    expect(FREE_TYPES).toEqual(['battery-9v']);
+  });
+
+  it.each(FREE_TYPES)(
+    '%s: jalur lubang null; jalur bebas menghasilkan instance di alas dengan pinHoles kosong',
+    (type) => {
+      expect(computePlacement(type, terminalHoleId('L', 30, 0), new Set())).toBeNull();
+      const placement = computeFreePlacement(type, [45, 0], [], 0);
+      expect(placement).not.toBeNull();
+      expect(placement?.instance.type).toBe(type);
+      expect(placement?.instance.position[1]).toBe(0);
+      expect(placement?.pinHoles).toEqual({});
+    },
+  );
+
+  it.each(FREE_TYPES)(
+    '%s: semua pin meta menjadi terminal component yang bergabung ke net kabelnya',
+    (type) => {
+      const placement = computeFreePlacement(type, [45, 0], [], 0);
+      expect(placement).not.toBeNull();
+      const inst = placement!.instance;
+      const meta = CATALOG_META[type];
+      // Satu kabel per pin ke strip breadboard yang berbeda-beda.
+      const wires = (meta?.pins ?? []).map((pin, i) => ({
+        id: `w-${pin.id}`,
+        a: { kind: 'component', instanceId: inst.id, pinId: pin.id } as TerminalRef,
+        b: { kind: 'hole', holeId: terminalHoleId('L', 10 + i * 3, 0) } as TerminalRef,
+        color: '#000000',
+      }));
+      const netlist = buildNetlist([inst], { [inst.id]: {} }, wires);
+      for (const [i, pin] of (meta?.pins ?? []).entries()) {
+        const holeRef: TerminalRef = {
+          kind: 'hole',
+          holeId: terminalHoleId('L', 10 + i * 3, 0),
+        };
+        // Net pin komponen == net lubang ujung kabelnya == net terminalnya.
+        expect(netlist.netOfPin(inst.id, pin.id)).toBe(netlist.netOfTerminal(holeRef));
+        expect(
+          netlist.netOfTerminal({ kind: 'component', instanceId: inst.id, pinId: pin.id }),
+        ).toBe(netlist.netOfPin(inst.id, pin.id));
+      }
+      // Pin-pin berbeda tetap net berbeda (tidak korslet oleh konstruksi).
+      const nets = (meta?.pins ?? []).map((pin) => netlist.netOfPin(inst.id, pin.id));
+      expect(new Set(nets).size).toBe(nets.length);
     },
   );
 });

@@ -143,6 +143,33 @@
           function (event) {
             var target = event && event.target;
             if (target && target.tagName === 'SCRIPT') {
+              // Penyembuhan chunk basi (self-healing SH-1): sesudah
+              // deploy baru, index.html lama di cache meminta berkas JS
+              // hash lama yang sudah tidak ada → muat ulang SATU kali
+              // agar browser mengambil versi terbaru. Penanda waktu di
+              // sessionStorage mencegah loop: upaya kedua dalam 60
+              // detik menyerah ke pesan bootFail biasa. KONTRAK kunci +
+              // jendela ini sama dengan src/app/chunkHealing.ts.
+              var reloadAt = 0;
+              try {
+                reloadAt = Number(
+                  window.sessionStorage.getItem('sim3d:chunk-reload-at') || 0,
+                );
+              } catch (ignore) {
+                reloadAt = 0;
+              }
+              if (!(reloadAt > 0) || Date.now() - reloadAt > 60000) {
+                try {
+                  window.sessionStorage.setItem(
+                    'sim3d:chunk-reload-at',
+                    String(Date.now()),
+                  );
+                } catch (ignore) {
+                  /* penanda gagal — reload tetap dicoba sekali ini */
+                }
+                window.location.reload();
+                return;
+              }
               bootFail(
                 'Gagal memuat aplikasi. Periksa koneksi internet, lalu muat ulang halaman.',
               );

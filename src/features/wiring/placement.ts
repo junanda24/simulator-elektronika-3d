@@ -1,6 +1,7 @@
 import { EMPTY_SIM_RESULT, type ComponentInstanceState } from '../../shared/types';
 import { getComponentMeta } from '../../shared/components/catalogMeta';
 import {
+  BREADBOARD_ORIGIN,
   TERMINAL_COLS,
   TERMINAL_ROWS,
   holeWorldPosition,
@@ -106,6 +107,64 @@ const COLUMN_SPECS: Record<string, Array<{ id: string; rowOffset: number }>> = {
     { id: 'DP', rowOffset: 7 },
     { id: 'COM', rowOffset: 8 },
   ],
+  // Gelombang ekspansi katalog 2026-10-21: komponen 2/3/4 pin sebaris
+  // mengikuti konvensi yang sama (z lokal meta = offset − rata-rata).
+  'ntc-thermistor': [
+    { id: 'A', rowOffset: 0 },
+    { id: 'B', rowOffset: 2 },
+  ],
+  'fc-51': [
+    { id: 'VCC', rowOffset: 0 },
+    { id: 'GND', rowOffset: 1 },
+    { id: 'OUT', rowOffset: 2 },
+  ],
+  'ky-003': [
+    { id: 'GND', rowOffset: 0 },
+    { id: 'VCC', rowOffset: 1 },
+    { id: 'S', rowOffset: 2 },
+  ],
+  // MOSFET IRLZ44N (TO-220): urutan muka bercetak G-D-S.
+  mosfet: [
+    { id: 'G', rowOffset: 0 },
+    { id: 'D', rowOffset: 1 },
+    { id: 'S', rowOffset: 2 },
+  ],
+  // Regulator L7805 (TO-220): urutan muka depan IN-GND-OUT.
+  'regulator-7805': [
+    { id: 'IN', rowOffset: 0 },
+    { id: 'GND', rowOffset: 1 },
+    { id: 'OUT', rowOffset: 2 },
+  ],
+  'flame-sensor': [
+    { id: 'GND', rowOffset: 0 },
+    { id: 'VCC', rowOffset: 1 },
+    { id: 'DO', rowOffset: 2 },
+    { id: 'AO', rowOffset: 3 },
+  ],
+  'rain-sensor': [
+    { id: 'VCC', rowOffset: 0 },
+    { id: 'GND', rowOffset: 1 },
+    { id: 'DO', rowOffset: 2 },
+    { id: 'AO', rowOffset: 3 },
+  ],
+  mq2: [
+    { id: 'VCC', rowOffset: 0 },
+    { id: 'GND', rowOffset: 1 },
+    { id: 'DO', rowOffset: 2 },
+    { id: 'AO', rowOffset: 3 },
+  ],
+  'sound-sensor': [
+    { id: 'AO', rowOffset: 0 },
+    { id: 'GND', rowOffset: 1 },
+    { id: 'VCC', rowOffset: 2 },
+    { id: 'DO', rowOffset: 3 },
+  ],
+  'hc-sr04': [
+    { id: 'VCC', rowOffset: 0 },
+    { id: 'TRIG', rowOffset: 1 },
+    { id: 'ECHO', rowOffset: 2 },
+    { id: 'GND', rowOffset: 3 },
+  ],
 };
 
 /** Offset satu pin relatif terhadap lubang jangkar (lubang yang diklik). */
@@ -135,6 +194,9 @@ interface PinOffset {
  *   sebank dengan baris kendali, jadi net COM/NO/NC independen penuh
  *   dari net VCC/IN/GND (perbaikan audit T2: footprint lama menaruh
  *   kontak sebaris kendali sehingga COM ≡ VCC, NO ≡ IN, NC ≡ GND).
+ * - Reed switch: pola resistor (aksial, baseRotation π/2, rentang 6).
+ * - LED bar graph: pola DIP relay — klik = A1 (bank L col 4), anoda di
+ *   bank L, katoda menyeberang ke kolom 0 bank R.
  */
 function pinOffsetsFor(
   type: string,
@@ -203,6 +265,36 @@ function pinOffsetsFor(
         { id: 'NC', dCol: 1, dRow: 2 },
       ],
     };
+  }
+  if (type === 'reed-switch') {
+    // Kapsul aksial seperti resistor: kaki A/B membentang sepanjang
+    // sumbu x lokal (∓3) — pola resistor persis (baseRotation π/2),
+    // rentang 6 satuan → kaki B enam baris di atas kaki A.
+    return {
+      baseRotation: Math.PI / 2,
+      offsets: [
+        { id: 'A', dCol: 0, dRow: 0 },
+        { id: 'B', dCol: 0, dRow: -6 },
+      ],
+    };
+  }
+  if (type === 'led-bar-graph') {
+    // DIP-20 menjembatani kanal seperti relay & push-button: klik sah
+    // hanya pada lubang A1 (bank L kolom 4). Baris anoda (A1..A10)
+    // tetap di bank L, baris katoda (K1..K10) menyeberang ke kolom 0
+    // bank R (dCol +1) — x lokal meta ∓1,5 persis pola relay, dan
+    // dRow segmen ke-i = i−1 menempatkan pusat paket di baris +4,5
+    // sehingga z lokal = dRow − 4,5 = segmen − 5,5 sesuai meta
+    // (pemetaan pin fisik terverifikasi datasheet Kingbright).
+    if (bank !== 'L' || col !== 4) return null;
+    const offsets: PinOffset[] = [];
+    for (let seg = 1; seg <= 10; seg += 1) {
+      offsets.push({ id: `A${seg}`, dCol: 0, dRow: seg - 1 });
+    }
+    for (let seg = 1; seg <= 10; seg += 1) {
+      offsets.push({ id: `K${seg}`, dCol: 1, dRow: seg - 1 });
+    }
+    return { baseRotation: 0, offsets };
   }
   const spec = COLUMN_SPECS[type];
   if (spec) {
@@ -294,5 +386,113 @@ export function computePlacement(
       simState: EMPTY_SIM_RESULT,
     },
     pinHoles,
+  };
+}
+
+/**
+ * ===== Penempatan TERMINAL-BEBAS (pola baru, gelombang ekspansi) =====
+ *
+ * Sebagian komponen fisik TIDAK menancap ke lubang breadboard: baterai
+ * 9V berdiri di alas meja dan kedua terminal snap-nya menjadi ujung
+ * kabel lewat TerminalRef { kind: 'component' } (preseden konseptual:
+ * pin board adalah terminal non-lubang yang bisa diklik untuk kabel —
+ * lihat netlist.ts). Untuk tipe-tipe ini:
+ * - computePlacement (jalur lubang) tetap mengembalikan null;
+ * - penempatan berjalan lewat computeFreePlacement dari titik klik di
+ *   alas meja (bidang alas Workbench), BUKAN snap lubang;
+ * - pinHoles instance = {} — netlist memberi net `pin:<id>:<pin>` untuk
+ *   pin tanpa lubang, dan kabel berujung 'component' bergabung ke net
+ *   itu (lihat buildNetlist).
+ */
+export const FREE_PLACEMENT_TYPES: ReadonlySet<string> = new Set(['battery-9v']);
+
+export function isFreePlacementType(type: string): boolean {
+  return FREE_PLACEMENT_TYPES.has(type);
+}
+
+/** Setengah lebar (x) & setengah tebal (z) badan baterai 9V (48,5 × 17,5 mm). */
+const BATTERY_HALF_X = 5.2;
+const BATTERY_HALF_Z = 3.45;
+/** Margin aman antar badan / terhadap benda lain di meja. */
+const FREE_MARGIN = 0.4;
+
+/**
+ * Persegi terlarang di alas: badan komponen bebas tidak boleh menimpa
+ * breadboard maupun board aktif. Board: semua definisi board ber-origin
+ * x = −21 dengan ukuran maksimum 27 × 27 — zona konservatif di bawah
+ * menelan keempat board. Breadboard: bidang 22 × 66 di BREADBOARD_ORIGIN.
+ */
+const FORBIDDEN_RECTS: Array<{ minX: number; maxX: number; minZ: number; maxZ: number }> = [
+  {
+    minX: BREADBOARD_ORIGIN[0] - 11,
+    maxX: BREADBOARD_ORIGIN[0] + 11,
+    minZ: BREADBOARD_ORIGIN[2] - 33,
+    maxZ: BREADBOARD_ORIGIN[2] + 33,
+  },
+  { minX: -36, maxX: -6, minZ: -15, maxZ: 15 },
+];
+
+/** Batas area kerja alas yang masuk akal untuk penempatan bebas. */
+const FREE_AREA = { minX: -95, maxX: 95, minZ: -60, maxZ: 60 };
+
+/**
+ * Hitung penempatan terminal-bebas dari titik klik di alas meja.
+ *
+ * `point` = [x, z] dunia di permukaan alas (y selalu 0 — permukaan
+ * meja). `others` = posisi instance terminal-bebas lain yang sudah ada
+ * (pusat badan) untuk uji tumpang-tindih antar badan. rotationDeg
+ * (kelipatan 90°) menjadi rotasi instance; pada 90°/270° lebar dan
+ * tebal badan bertukar tempat untuk uji tabrakan.
+ *
+ * Mengembalikan null bila titik di luar area kerja, badan menimpa
+ * breadboard/board, atau bertabrakan dengan badan bebas lain — sama
+ * seperti jalur lubang: penempatan tidak valid tidak dipaksakan.
+ * pinHoles selalu {} — terminal komponen ini hidup sebagai
+ * TerminalRef 'component', bukan lubang.
+ */
+export function computeFreePlacement(
+  type: string,
+  point: [number, number],
+  others: Array<[number, number]> = [],
+  rotationDeg: PlacementRotation = 0,
+): Placement | null {
+  const plugin = getComponentMeta(type);
+  if (!plugin || !isFreePlacementType(type)) return null;
+  const [x, z] = point;
+  if (x < FREE_AREA.minX || x > FREE_AREA.maxX || z < FREE_AREA.minZ || z > FREE_AREA.maxZ) {
+    return null;
+  }
+  const rotated = rotationDeg === 90 || rotationDeg === 270;
+  const halfX = (rotated ? BATTERY_HALF_Z : BATTERY_HALF_X) + FREE_MARGIN;
+  const halfZ = (rotated ? BATTERY_HALF_X : BATTERY_HALF_Z) + FREE_MARGIN;
+  for (const rect of FORBIDDEN_RECTS) {
+    if (
+      x + halfX > rect.minX &&
+      x - halfX < rect.maxX &&
+      z + halfZ > rect.minZ &&
+      z - halfZ < rect.maxZ
+    ) {
+      return null;
+    }
+  }
+  for (const [ox, oz] of others) {
+    // Uji kotak konservatif: dua badan bebas tidak boleh tumpang tindih
+    // (setengah-diagonal efektif kedua badan dijumlahkan per sumbu).
+    if (Math.abs(x - ox) < halfX + BATTERY_HALF_X + FREE_MARGIN &&
+        Math.abs(z - oz) < halfZ + BATTERY_HALF_X + FREE_MARGIN) {
+      return null;
+    }
+  }
+  return {
+    instance: {
+      id: nextId(type),
+      type,
+      position: [x, 0, z],
+      rotation: (rotationDeg * Math.PI) / 180,
+      props: { ...plugin.defaultProps },
+      interactiveState: {},
+      simState: EMPTY_SIM_RESULT,
+    },
+    pinHoles: {},
   };
 }

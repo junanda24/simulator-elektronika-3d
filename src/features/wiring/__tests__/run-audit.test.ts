@@ -40,6 +40,8 @@ function makeSnapshot(results: Record<string, ComponentSimResult>): SimSnapshot 
     sketchError: null,
     sketchRunning: true,
     currentLine: null,
+    solverError: null,
+    notice: null,
   };
 }
 

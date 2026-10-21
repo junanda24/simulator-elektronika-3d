@@ -4,9 +4,10 @@ import { DEFAULT_SKETCH } from '../sketch/defaultSketch';
 import type { Assertion } from './engine';
 
 /**
- * Kurikulum mode Lesson — 20 modul Bahasa Indonesia (8 modul awal
+ * Kurikulum mode Lesson — 24 modul Bahasa Indonesia (8 modul awal
  * ROADMAP Batch 4 + modul 9–14 gelombang lanjutan + modul 15–20
- * gelombang proyek easy→hard).
+ * gelombang proyek easy→hard + modul 21–24 gelombang proyek hard:
+ * sensor gas/api, sonar, kontrol multi-sensor, mesin keadaan arah).
  * Rangkaian awal dinyatakan dengan id lubang breadboard & pin board
  * yang stabil, mengikuti aturan placement masing-masing komponen.
  */
@@ -1278,6 +1279,745 @@ void loop() {
         label: 'Segmen G menyala setelah tombol ditekan sampai angka 2 atau lebih',
       },
       { kind: 'serial-contains', text: 'Angka:', label: 'Serial Monitor mengumumkan angka yang tampil' },
+    ],
+  },
+  {
+    id: 'modul-21-alarm-gas-api',
+    title: 'Modul 21 — Alarm Gas & Api: Penjaga Dapur',
+    boardId: 'uno',
+    intro:
+      'Dapur adalah tempat paling berbahaya di rumah: gas LPG yang bocor tidak terlihat, dan api kompor bisa menyambar tanpa peringatan. Modul ini membangun penjaga dapur dari dua sensor analog yang arah bacaannya BERLAWANAN — dan itu pelajaran pertamanya. AO MQ-2 NAIK saat gas naik: resistansi elemennya turun dari ±83 kΩ di udara bersih ke ±2,8 kΩ di gas pekat, menarik simpul pembaginya ke atas. AO KY-026 justru TURUN saat api mendekat, karena fototransistornya makin menghantar dan menarik simpulnya ke bawah. Tidak ada aturan "nilai naik berarti bahaya" — arah adalah sifat rangkaian tiap modul. Perhatikan juga pemanas MQ-2: elemennya membakar ±160 mA terus-menerus dari rel, jadi sensor ini diberi makan dari rel, tidak pernah dari pin. Bila bahaya terdeteksi, pin D13 hanya memberi tegangan ke gerbang MOSFET — arus gerbangnya praktis nol — dan saluran Drain–Source MOSFET-lah yang mengalirkan 0,42 A dari rel ke motor kipas. Sepuluh segmen bar graph menampilkan level gas, dan setiap segmen punya resistor 220 Ω sendiri di anodanya. Kedua sensor juga punya pin DO berkomparator (aktif-LOW) yang sengaja tidak dipakai di modul ini — jalur analog memberi kita level, bukan cuma ya/tidak.',
+    goal: 'Jalankan sketch di udara bersih — semua segmen mati dan kipas diam — lalu naikkan penggeser Gas pada MQ-2 ke 5000 ppm: level bar graph naik, dan pada gas berbahaya kipas exhaust berputar serta buzzer berbunyi. Kembalikan Gas ke 0, lalu naikkan penggeser Api pada KY-026 ke 85%: alarm harus berbunyi lagi, kali ini karena api, walau gas bersih. Tantangan: tambahkan tingkat WASPADA — pada gas menengah (ADC gas 250–470) buat buzzer berbunyi putus-putus (bunyi 100 ms tiap detik memakai millis()) TANPA menyalakan kipas, agar penghuni diperingatkan sebelum keadaan menjadi bahaya.',
+    starter: {
+      placements: [
+        { type: 'mq2', holeId: T('R', 8, 2) },
+        { type: 'flame-sensor', holeId: T('R', 16, 2) },
+        { type: 'led-bar-graph', holeId: T('L', 52, 4) },
+        { type: 'resistor', holeId: T('L', 4, 2), props: { resistance: 220 } },
+        { type: 'resistor', holeId: T('L', 9, 2), props: { resistance: 220 } },
+        { type: 'resistor', holeId: T('L', 14, 2), props: { resistance: 220 } },
+        { type: 'resistor', holeId: T('L', 19, 2), props: { resistance: 220 } },
+        { type: 'resistor', holeId: T('L', 24, 2), props: { resistance: 220 } },
+        { type: 'resistor', holeId: T('L', 29, 2), props: { resistance: 220 } },
+        { type: 'resistor', holeId: T('L', 34, 2), props: { resistance: 220 } },
+        { type: 'resistor', holeId: T('L', 39, 2), props: { resistance: 220 } },
+        { type: 'resistor', holeId: T('L', 44, 2), props: { resistance: 220 } },
+        { type: 'resistor', holeId: T('L', 49, 2), props: { resistance: 220 } },
+        { type: 'buzzer', holeId: T('R', 24, 2) },
+        { type: 'mosfet', holeId: T('R', 30, 2) },
+        { type: 'dc-motor', holeId: T('R', 36, 2) },
+      ],
+      wires: [
+        // Rel daya
+        { a: pin('5V#3'), b: hole(RAIL('L+', 4)), color: RED },
+        { a: hole(RAIL('R-', 4)), b: pin('GND#2'), color: DARK },
+        // MQ-2: catu dari rel (pemanas ±161 mA), AO ke A0
+        { a: hole(RAIL('L+', 20)), b: hole(T('R', 8, 4)), color: RED },
+        { a: hole(T('R', 9, 4)), b: hole(RAIL('R-', 15)), color: DARK },
+        { a: pin('A0'), b: hole(T('R', 11, 4)), color: YELLOW },
+        // KY-026: catu dari rel, AO ke A1
+        { a: hole(RAIL('L+', 24)), b: hole(T('R', 17, 4)), color: RED },
+        { a: hole(T('R', 16, 4)), b: hole(RAIL('R-', 18)), color: DARK },
+        { a: pin('A1'), b: hole(T('R', 19, 4)), color: YELLOW },
+        // Bar graph: pin board -> kaki A resistor segmen 1..10 (D2..D11)
+        { a: pin('D2'), b: hole(T('L', 4, 4)), color: BLUE },
+        { a: pin('D3'), b: hole(T('L', 9, 4)), color: BLUE },
+        { a: pin('D4'), b: hole(T('L', 14, 4)), color: BLUE },
+        { a: pin('D5'), b: hole(T('L', 19, 4)), color: BLUE },
+        { a: pin('D6'), b: hole(T('L', 24, 4)), color: BLUE },
+        { a: pin('D7'), b: hole(T('L', 29, 4)), color: BLUE },
+        { a: pin('D8'), b: hole(T('L', 34, 4)), color: BLUE },
+        { a: pin('D9'), b: hole(T('L', 39, 4)), color: BLUE },
+        { a: pin('D10'), b: hole(T('L', 44, 4)), color: BLUE },
+        { a: pin('D11'), b: hole(T('L', 49, 4)), color: BLUE },
+        // Kaki B resistor segmen 1..10 -> strip anoda segmen yang sama
+        { a: hole(T('L', 0, 0)), b: hole(T('L', 52, 0)), color: BLUE },
+        { a: hole(T('L', 5, 0)), b: hole(T('L', 53, 0)), color: BLUE },
+        { a: hole(T('L', 10, 0)), b: hole(T('L', 54, 0)), color: BLUE },
+        { a: hole(T('L', 15, 0)), b: hole(T('L', 55, 0)), color: BLUE },
+        { a: hole(T('L', 20, 0)), b: hole(T('L', 56, 0)), color: BLUE },
+        { a: hole(T('L', 25, 0)), b: hole(T('L', 57, 0)), color: BLUE },
+        { a: hole(T('L', 30, 0)), b: hole(T('L', 58, 0)), color: BLUE },
+        { a: hole(T('L', 35, 0)), b: hole(T('L', 59, 0)), color: BLUE },
+        { a: hole(T('L', 40, 0)), b: hole(T('L', 60, 0)), color: BLUE },
+        { a: hole(T('L', 45, 0)), b: hole(T('L', 61, 0)), color: BLUE },
+        // Katoda: rantai daisy K1 -> K2 -> ... -> K10 -> rel R-
+        { a: hole(T('R', 52, 4)), b: hole(T('R', 53, 4)), color: DARK },
+        { a: hole(T('R', 53, 4)), b: hole(T('R', 54, 4)), color: DARK },
+        { a: hole(T('R', 54, 4)), b: hole(T('R', 55, 4)), color: DARK },
+        { a: hole(T('R', 55, 4)), b: hole(T('R', 56, 4)), color: DARK },
+        { a: hole(T('R', 56, 4)), b: hole(T('R', 57, 4)), color: DARK },
+        { a: hole(T('R', 57, 4)), b: hole(T('R', 58, 4)), color: DARK },
+        { a: hole(T('R', 58, 4)), b: hole(T('R', 59, 4)), color: DARK },
+        { a: hole(T('R', 59, 4)), b: hole(T('R', 60, 4)), color: DARK },
+        { a: hole(T('R', 60, 4)), b: hole(T('R', 61, 4)), color: DARK },
+        { a: hole(T('R', 61, 2)), b: hole(RAIL('R-', 29)), color: DARK },
+        // Buzzer dari D12
+        { a: pin('D12'), b: hole(T('R', 24, 4)), color: BLUE },
+        { a: hole(T('R', 26, 4)), b: hole(RAIL('R-', 25)), color: DARK },
+        // MOSFET + motor kipas: D13 hanya ke gerbang; daya motor dari rel
+        { a: pin('D13'), b: hole(T('R', 30, 4)), color: BLUE },
+        { a: hole(T('R', 32, 4)), b: hole(RAIL('R-', 32)), color: DARK },
+        { a: hole(T('R', 31, 4)), b: hole(T('R', 38, 4)), color: BLUE },
+        { a: hole(RAIL('L+', 40)), b: hole(T('R', 36, 4)), color: RED },
+      ],
+      sketch: `// Penjaga dapur: MQ-2 (A0) + KY-026 (A1) -> bar graph, kipas, buzzer
+int pinSegmen[10] = {2, 3, 4, 5, 6, 7, 8, 9, 10, 11};
+
+void tampilkanLevel(int level) {
+  for (int i = 0; i < 10; i++) {
+    digitalWrite(pinSegmen[i], i < level ? HIGH : LOW);
+  }
+}
+
+void setup() {
+  for (int i = 0; i < 10; i++) {
+    pinMode(pinSegmen[i], OUTPUT);
+  }
+  pinMode(12, OUTPUT);
+  pinMode(13, OUTPUT);
+  Serial.begin(9600);
+}
+
+void loop() {
+  int adcGas = analogRead(A0);
+  int adcApi = analogRead(A1);
+
+  // Level gas untuk bar graph: ADC udara bersih ±58, gas pekat ±750
+  int level = constrain(map(adcGas, 55, 760, 0, 10), 0, 10);
+  tampilkanLevel(level);
+
+  // Dua arah berlawanan: gas BAHAYA saat ADC gas TINGGI (> 470,
+  // ±1.500 ppm), api BAHAYA saat ADC api RENDAH (< 460) karena
+  // AO KY-026 turun saat api mendekat.
+  bool bahayaGas = adcGas > 470;
+  bool adaApi = adcApi < 460;
+
+  if (adaApi) {
+    digitalWrite(13, HIGH);
+    digitalWrite(12, HIGH);
+    Serial.println("API TERDETEKSI! Kipas & alarm menyala");
+  } else if (bahayaGas) {
+    digitalWrite(13, HIGH);
+    digitalWrite(12, HIGH);
+    Serial.println("BAHAYA GAS! Kipas & alarm menyala");
+  } else {
+    digitalWrite(13, LOW);
+    digitalWrite(12, LOW);
+  }
+
+  Serial.print("Gas ADC: ");
+  Serial.print(adcGas);
+  Serial.print(" Api ADC: ");
+  Serial.println(adcApi);
+  delay(300);
+}
+`,
+    },
+    assertions: [
+      { kind: 'component-present', type: 'mq2', label: 'Sensor gas MQ-2 terpasang' },
+      { kind: 'component-present', type: 'flame-sensor', label: 'Sensor api KY-026 terpasang' },
+      { kind: 'component-present', type: 'led-bar-graph', label: 'Bar graph 10 segmen terpasang' },
+      { kind: 'component-present', type: 'mosfet', label: 'MOSFET driver kipas terpasang' },
+      { kind: 'pin-mode', pinId: 'D13', mode: 'OUTPUT', label: 'Pin D13 menggerakkan gerbang MOSFET' },
+      {
+        kind: 'net-voltage',
+        target: { kind: 'component', type: 'mq2', pinId: 'AO' },
+        minV: 0.15,
+        maxV: 0.5,
+        label: 'AO MQ-2 di udara bersih ±0,29 V (sensor berdaya, pembagi hidup)',
+      },
+      {
+        kind: 'serial-number-range',
+        min: 40,
+        max: 75,
+        label: 'Bacaan ADC gas udara bersih (±58) tercetak di Serial',
+      },
+      {
+        kind: 'branch-current',
+        type: 'led-bar-graph',
+        branch: 's7',
+        minA: 0.004,
+        maxA: 0.025,
+        label: 'Segmen ke-7 bar graph menyala (level gas tinggi)',
+      },
+      {
+        kind: 'branch-current',
+        type: 'dc-motor',
+        branch: 'main',
+        minA: 0.3,
+        maxA: 0.5,
+        label: 'Motor kipas berputar lewat MOSFET (arus 0,3–0,5 A dari rel)',
+      },
+      {
+        kind: 'branch-current',
+        type: 'buzzer',
+        branch: 'main',
+        minA: 0.02,
+        maxA: 0.035,
+        label: 'Buzzer alarm berbunyi pada keadaan bahaya',
+      },
+      { kind: 'serial-contains', text: 'BAHAYA GAS', label: 'Serial mengumumkan bahaya gas' },
+      { kind: 'serial-contains', text: 'API TERDETEKSI', label: 'Serial mengumumkan api terdeteksi' },
+    ],
+  },
+  {
+    id: 'modul-22-sensor-parkir',
+    title: 'Modul 22 — Sensor Parkir Ultrasonik HC-SR04',
+    boardId: 'uno',
+    intro:
+      "Sensor parkir mobil dan pengukur jarak robot memakai trik yang sama: kirim pulsa ultrasonik, lalu UKUR berapa lama gema kembali. HC-SR04 tidak memberi angka jarak — ia memberi pulsa di pin ECHO yang lebarnya adalah waktu tempuh suara: jarak (cm) = lebar pulsa (µs) dibagi 58. Fungsi pulseIn() mengukur lebar itu; di simulator ini pulseIn dihitung analitik dari jadwal modul, jadi angkanya eksak seperti di board asli. Jebakan klasiknya: pulseIn mengembalikan 0 bila TIDAK ADA gema sampai batas waktu (timeout) — itu berarti 'tidak ada objek dalam jangkauan', BUKAN jarak 0 cm. Sketch yang memperlakukan 0 sebagai 'sangat dekat' akan membunyikan alarm terus di jalan kosong. TRIG butuh pulsa HIGH minimal 10 µs untuk memulai pengukuran, dan pengukuran berikutnya baru boleh dimulai setelah ±60 ms. Karena proyek ini butuh 13 pin sinyal, buzzer dipindah ke A0 — di Uno, pin analog sah dipakai sebagai pin digital biasa.",
+    goal: "Jalankan sketch dengan rintangan bawaan 100 cm — Serial mencetak 'Jarak: 100 cm', lima segmen bar graph menyala, dan buzzer berbunyi berjeda sedang. Geser penggeser Jarak rintangan pada HC-SR04 ke 25 cm: sembilan segmen menyala dan bunyi buzzer merapat. Terakhir aktifkan tombol 'Tanpa rintangan': bar graph padam, buzzer diam, dan Serial menyatakan tidak ada objek — BUKAN jarak 0. Tantangan: tambahkan peringatan mendadak — bila jarak menyusut lebih dari 50 cm dalam waktu kurang dari satu detik (objek datang tiba-tiba), bunyikan buzzer terus selama 1 detik memakai millis() dan variabel bacaan sebelumnya.",
+    starter: {
+      placements: [
+        { type: 'hc-sr04', holeId: T('R', 8, 2) },
+        { type: 'led-bar-graph', holeId: T('L', 52, 4) },
+        { type: 'resistor', holeId: T('L', 4, 2), props: { resistance: 220 } },
+        { type: 'resistor', holeId: T('L', 9, 2), props: { resistance: 220 } },
+        { type: 'resistor', holeId: T('L', 14, 2), props: { resistance: 220 } },
+        { type: 'resistor', holeId: T('L', 19, 2), props: { resistance: 220 } },
+        { type: 'resistor', holeId: T('L', 24, 2), props: { resistance: 220 } },
+        { type: 'resistor', holeId: T('L', 29, 2), props: { resistance: 220 } },
+        { type: 'resistor', holeId: T('L', 34, 2), props: { resistance: 220 } },
+        { type: 'resistor', holeId: T('L', 39, 2), props: { resistance: 220 } },
+        { type: 'resistor', holeId: T('L', 44, 2), props: { resistance: 220 } },
+        { type: 'resistor', holeId: T('L', 49, 2), props: { resistance: 220 } },
+        { type: 'buzzer', holeId: T('R', 16, 2) },
+      ],
+      wires: [
+        // Rel daya
+        { a: pin('5V#3'), b: hole(RAIL('L+', 4)), color: RED },
+        { a: hole(RAIL('R-', 4)), b: pin('GND#2'), color: DARK },
+        // HC-SR04: catu dari rel, TRIG dari D12, ECHO ke D13
+        { a: hole(RAIL('L+', 20)), b: hole(T('R', 8, 4)), color: RED },
+        { a: hole(T('R', 11, 4)), b: hole(RAIL('R-', 15)), color: DARK },
+        { a: pin('D12'), b: hole(T('R', 9, 4)), color: BLUE },
+        { a: pin('D13'), b: hole(T('R', 10, 4)), color: BLUE },
+        // Buzzer dari A0 (pin analog sebagai pin digital)
+        { a: pin('A0'), b: hole(T('R', 16, 4)), color: BLUE },
+        { a: hole(T('R', 18, 4)), b: hole(RAIL('R-', 20)), color: DARK },
+        // Bar graph: pin board -> kaki A resistor segmen 1..10 (D2..D11)
+        { a: pin('D2'), b: hole(T('L', 4, 4)), color: BLUE },
+        { a: pin('D3'), b: hole(T('L', 9, 4)), color: BLUE },
+        { a: pin('D4'), b: hole(T('L', 14, 4)), color: BLUE },
+        { a: pin('D5'), b: hole(T('L', 19, 4)), color: BLUE },
+        { a: pin('D6'), b: hole(T('L', 24, 4)), color: BLUE },
+        { a: pin('D7'), b: hole(T('L', 29, 4)), color: BLUE },
+        { a: pin('D8'), b: hole(T('L', 34, 4)), color: BLUE },
+        { a: pin('D9'), b: hole(T('L', 39, 4)), color: BLUE },
+        { a: pin('D10'), b: hole(T('L', 44, 4)), color: BLUE },
+        { a: pin('D11'), b: hole(T('L', 49, 4)), color: BLUE },
+        // Kaki B resistor segmen 1..10 -> strip anoda segmen yang sama
+        { a: hole(T('L', 0, 0)), b: hole(T('L', 52, 0)), color: BLUE },
+        { a: hole(T('L', 5, 0)), b: hole(T('L', 53, 0)), color: BLUE },
+        { a: hole(T('L', 10, 0)), b: hole(T('L', 54, 0)), color: BLUE },
+        { a: hole(T('L', 15, 0)), b: hole(T('L', 55, 0)), color: BLUE },
+        { a: hole(T('L', 20, 0)), b: hole(T('L', 56, 0)), color: BLUE },
+        { a: hole(T('L', 25, 0)), b: hole(T('L', 57, 0)), color: BLUE },
+        { a: hole(T('L', 30, 0)), b: hole(T('L', 58, 0)), color: BLUE },
+        { a: hole(T('L', 35, 0)), b: hole(T('L', 59, 0)), color: BLUE },
+        { a: hole(T('L', 40, 0)), b: hole(T('L', 60, 0)), color: BLUE },
+        { a: hole(T('L', 45, 0)), b: hole(T('L', 61, 0)), color: BLUE },
+        // Katoda: rantai daisy K1 -> K2 -> ... -> K10 -> rel R-
+        { a: hole(T('R', 52, 4)), b: hole(T('R', 53, 4)), color: DARK },
+        { a: hole(T('R', 53, 4)), b: hole(T('R', 54, 4)), color: DARK },
+        { a: hole(T('R', 54, 4)), b: hole(T('R', 55, 4)), color: DARK },
+        { a: hole(T('R', 55, 4)), b: hole(T('R', 56, 4)), color: DARK },
+        { a: hole(T('R', 56, 4)), b: hole(T('R', 57, 4)), color: DARK },
+        { a: hole(T('R', 57, 4)), b: hole(T('R', 58, 4)), color: DARK },
+        { a: hole(T('R', 58, 4)), b: hole(T('R', 59, 4)), color: DARK },
+        { a: hole(T('R', 59, 4)), b: hole(T('R', 60, 4)), color: DARK },
+        { a: hole(T('R', 60, 4)), b: hole(T('R', 61, 4)), color: DARK },
+        { a: hole(T('R', 61, 2)), b: hole(RAIL('R-', 29)), color: DARK },
+      ],
+      sketch: `// Sensor parkir: TRIG di D12, ECHO di D13, buzzer di A0 (pin analog
+// yang dipakai sebagai pin digital), bar graph 10 segmen di D2-D11.
+int pinSegmen[10] = {2, 3, 4, 5, 6, 7, 8, 9, 10, 11};
+
+void tampilkanLevel(int level) {
+  for (int i = 0; i < 10; i++) {
+    digitalWrite(pinSegmen[i], i < level ? HIGH : LOW);
+  }
+}
+
+void setup() {
+  pinMode(12, OUTPUT);
+  pinMode(13, INPUT);
+  pinMode(A0, OUTPUT);
+  for (int i = 0; i < 10; i++) {
+    pinMode(pinSegmen[i], OUTPUT);
+  }
+  Serial.begin(9600);
+}
+
+void loop() {
+  // Pulsa pemicu: LOW sebentar, HIGH 10 us, lalu LOW lagi.
+  digitalWrite(12, LOW);
+  delayMicroseconds(2);
+  digitalWrite(12, HIGH);
+  delayMicroseconds(10);
+  digitalWrite(12, LOW);
+
+  // Ukur lebar pulsa ECHO. Timeout 30 ms (±5 m) dipilih sadar agar
+  // loop tidak menggantung 1 detik penuh (bawaan Arduino) saat
+  // tidak ada objek.
+  long durasi = pulseIn(13, HIGH, 30000);
+
+  if (durasi == 0) {
+    // 0 = TIDAK ADA gema yang kembali (timeout) — bukan jarak 0 cm!
+    tampilkanLevel(0);
+    digitalWrite(A0, LOW);
+    Serial.println("Tidak ada objek dalam jangkauan");
+    delay(200);
+  } else {
+    long jarak = durasi / 58;
+    int j = constrain(jarak, 10, 200);
+    int level = map(j, 200, 10, 0, 10);
+    tampilkanLevel(level);
+    Serial.print("Jarak: ");
+    Serial.print(jarak);
+    Serial.println(" cm");
+    // Buzzer: bunyi 50 ms, lalu jeda yang memendek saat objek dekat.
+    digitalWrite(A0, HIGH);
+    delay(50);
+    digitalWrite(A0, LOW);
+    delay(map(j, 10, 200, 40, 500));
+  }
+}
+`,
+    },
+    assertions: [
+      { kind: 'component-present', type: 'hc-sr04', label: 'Sensor ultrasonik HC-SR04 terpasang' },
+      { kind: 'component-present', type: 'led-bar-graph', label: 'Bar graph 10 segmen terpasang' },
+      { kind: 'pin-mode', pinId: 'D12', mode: 'OUTPUT', label: 'Pin D12 menggerakkan TRIG HC-SR04' },
+      {
+        kind: 'serial-number-range',
+        min: 90,
+        max: 110,
+        label: 'Jarak bawaan ±100 cm terbaca dari lebar pulsa ECHO',
+      },
+      {
+        kind: 'branch-current',
+        type: 'led-bar-graph',
+        branch: 's5',
+        minA: 0.004,
+        maxA: 0.025,
+        label: 'Lima segmen menyala pada jarak 100 cm',
+      },
+      {
+        kind: 'branch-current',
+        type: 'buzzer',
+        branch: 'main',
+        minA: 0.02,
+        maxA: 0.035,
+        label: 'Buzzer berbunyi berjeda dari pin A0',
+      },
+      {
+        kind: 'serial-number-range',
+        min: 20,
+        max: 30,
+        label: 'Jarak dekat ±25 cm terbaca setelah rintangan didekatkan',
+      },
+      {
+        kind: 'branch-current',
+        type: 'led-bar-graph',
+        branch: 's9',
+        minA: 0.004,
+        maxA: 0.025,
+        label: 'Sembilan segmen menyala saat objek dekat (25 cm)',
+      },
+      {
+        kind: 'serial-contains',
+        text: 'Tidak ada objek',
+        label: 'Sketch membedakan timeout (bukan jarak 0) saat tanpa rintangan',
+      },
+    ],
+  },
+  {
+    id: 'modul-23-rumah-kaca',
+    title: 'Modul 23 — Rumah Kaca Otomatis: Kontrol Multi-Sensor',
+    boardId: 'uno',
+    intro:
+      'Rumah kaca otomatis mengambil keputusan dari TIGA sensor sekaligus, dan keputusannya tidak boleh gelisah. Termistor NTC dirangkai sebagai pembagi tegangan dengan resistor 10 kΩ: resistansinya jatuh dari 10 kΩ pada 25 °C ke ±4,3 kΩ pada 45 °C, jadi simpul A0 naik dari 2,50 V ke 3,48 V saat udara memanas. Ambang tunggal membuat ventilasi membuka-tutup belasan kali di sekitar titik ambang, jadi sketch memakai HISTERESIS: ventilasi membuka di ADC 650 (±40 °C) tetapi baru menutup di ADC 520 (±30 °C) — di antara keduanya, keadaan sebelumnya dipertahankan. Di atas suhu ada satu penguasa: hujan. AO sensor hujan MH-RD TURUN saat basah (4,95 V saat kering menjadi 1,67 V saat terendam — arah yang berlawanan dengan NTC), dan begitu hujan terdeteksi, ventilasi dipaksa menutup dan pompa berhenti walau sedang panas-panasnya. Pompa digerakkan MOSFET dari D7, ventilasi adalah servo di D9, dan lampu tumbuh menyala sendiri saat LDR merasa hari sudah gelap.',
+    goal: 'Atur penggeser Suhu pada NTC ke 35 °C dan jalankan sketch: ventilasi harus tetap TERTUTUP walau ADC suhu (602) sudah di atas 600 — itulah pita histeresis bekerja dari sisi dingin. Naikkan suhu ke 45 °C: ventilasi membuka penuh dan pompa menyala. Turunkan kembali ke 35 °C: keduanya harus BERTAHAN menyala — histeresis dari sisi panas. Lalu naikkan penggeser Kebasahan ke 100%: hujan memaksa ventilasi menutup dan pompa berhenti. Terakhir turunkan penggeser Cahaya pada LDR ke 0: lampu tumbuh menyala. Tantangan: tambahkan mode hemat air — pompa hanya boleh menyala maksimal 10 detik lalu wajib beristirahat 20 detik walau suhu masih tinggi, memakai millis() dan variabel waktu.',
+    starter: {
+      placements: [
+        { type: 'ntc-thermistor', holeId: T('L', 10, 2) },
+        { type: 'resistor', holeId: T('L', 16, 4), props: { resistance: 10000 } },
+        { type: 'ldr', holeId: T('L', 22, 2) },
+        { type: 'resistor', holeId: T('L', 28, 4), props: { resistance: 10000 } },
+        { type: 'led-5mm', holeId: T('L', 34, 4), props: { color: 'red' } },
+        { type: 'resistor', holeId: T('L', 40, 2), props: { resistance: 220 } },
+        { type: 'rain-sensor', holeId: T('R', 8, 2) },
+        { type: 'servo', holeId: T('R', 16, 2) },
+        { type: 'mosfet', holeId: T('R', 24, 2) },
+        { type: 'dc-motor', holeId: T('R', 32, 2) },
+      ],
+      wires: [
+        // Rel daya
+        { a: pin('5V#3'), b: hole(RAIL('L+', 4)), color: RED },
+        { a: hole(RAIL('L-', 4)), b: pin('GND#1'), color: DARK },
+        { a: hole(RAIL('R-', 4)), b: pin('GND#2'), color: DARK },
+        // Pembagi NTC: rel -> NTC -> simpul A0 -> 10k -> GND
+        { a: hole(T('L', 10, 4)), b: hole(RAIL('L+', 29)), color: RED },
+        { a: pin('A0'), b: hole(T('L', 12, 0)), color: YELLOW },
+        { a: hole(T('L', 16, 0)), b: hole(RAIL('L-', 29)), color: DARK },
+        // Pembagi LDR: rel -> LDR -> simpul A2 -> 10k -> GND
+        { a: hole(T('L', 22, 4)), b: hole(RAIL('L+', 34)), color: RED },
+        { a: pin('A2'), b: hole(T('L', 24, 0)), color: YELLOW },
+        { a: hole(T('L', 28, 0)), b: hole(RAIL('L-', 34)), color: DARK },
+        // Lampu tumbuh: D6 -> anoda; katoda -> resistor -> rel L-
+        { a: pin('D6'), b: hole(T('L', 34, 0)), color: BLUE },
+        { a: hole(T('L', 40, 0)), b: hole(RAIL('L-', 40)), color: DARK },
+        // MH-RD: catu dari rel, AO ke A1
+        { a: hole(RAIL('L+', 20)), b: hole(T('R', 8, 4)), color: RED },
+        { a: hole(T('R', 9, 4)), b: hole(RAIL('R-', 15)), color: DARK },
+        { a: pin('A1'), b: hole(T('R', 11, 4)), color: YELLOW },
+        // Servo ventilasi: daya dari rel, SIG dari D9
+        { a: hole(T('R', 16, 4)), b: hole(RAIL('R-', 18)), color: DARK },
+        { a: hole(RAIL('L+', 24)), b: hole(T('R', 17, 4)), color: RED },
+        { a: pin('D9'), b: hole(T('R', 18, 4)), color: BLUE },
+        // MOSFET + pompa: D7 ke gerbang, daya motor dari rel
+        { a: pin('D7'), b: hole(T('R', 24, 4)), color: BLUE },
+        { a: hole(T('R', 26, 4)), b: hole(RAIL('R-', 25)), color: DARK },
+        { a: hole(T('R', 25, 4)), b: hole(T('R', 34, 4)), color: BLUE },
+        { a: hole(RAIL('L+', 40)), b: hole(T('R', 32, 4)), color: RED },
+      ],
+      sketch: `// Rumah kaca: NTC (A0) + hujan MH-RD (A1) + LDR (A2)
+// Ambang suhu dalam ADC: MEMBUKA di 650 (±40 C), MENUTUP di 520
+// (±30 C). Di antara keduanya keadaan DIPERTAHANKAN (histeresis).
+// Ambang tutup dipilih terhadap bacaan SAAT POMPA MENYALA: beban
+// motor menurunkan tegangan rel, jadi ADC suhu 35 C terbaca 557
+// berbeban (602 tanpa beban) — ambang 570 akan menutup palsu.
+bool ventTerbuka = false;
+bool pompaNyala = false;
+
+void setup() {
+  pinMode(7, OUTPUT);
+  pinMode(9, OUTPUT);
+  pinMode(6, OUTPUT);
+  digitalWrite(7, LOW);
+  digitalWrite(6, LOW);
+  analogWrite(9, 0);
+  Serial.begin(9600);
+}
+
+void loop() {
+  int adcSuhu = analogRead(A0);
+  int adcHujan = analogRead(A1);
+  int adcCahaya = analogRead(A2);
+
+  // AO hujan TURUN saat basah: kering ±1013, terendam ±341
+  bool hujan = adcHujan < 700;
+
+  // Keputusan suhu dengan histeresis (hanya berubah di luar pita)
+  if (adcSuhu >= 650) {
+    if (!ventTerbuka) {
+      ventTerbuka = true;
+      Serial.println("VENT BUKA (panas)");
+    }
+    pompaNyala = true;
+  } else if (adcSuhu <= 520) {
+    if (ventTerbuka) {
+      ventTerbuka = false;
+      Serial.println("VENT TUTUP (suhu turun)");
+    }
+    pompaNyala = false;
+  }
+  // Di pita 571-649 tidak ada cabang: ventTerbuka & pompaNyala
+  // mempertahankan nilai sebelumnya. Itulah histeresis.
+
+  // Prioritas tertinggi: hujan menimpa keputusan suhu
+  if (hujan) {
+    if (ventTerbuka) {
+      Serial.println("VENT TUTUP (HUJAN)");
+    }
+    ventTerbuka = false;
+    pompaNyala = false;
+  }
+
+  analogWrite(9, ventTerbuka ? 255 : 0);
+  digitalWrite(7, pompaNyala ? HIGH : LOW);
+
+  // Lampu tumbuh: menyala saat cahaya kurang (ADC LDR < 500)
+  digitalWrite(6, adcCahaya < 500 ? HIGH : LOW);
+
+  Serial.print("Suhu ADC: ");
+  Serial.print(adcSuhu);
+  Serial.print(" Hujan ADC: ");
+  Serial.print(adcHujan);
+  Serial.print(" Cahaya ADC: ");
+  Serial.println(adcCahaya);
+  delay(200);
+}
+`,
+    },
+    assertions: [
+      { kind: 'component-present', type: 'ntc-thermistor', label: 'Termistor NTC terpasang sebagai sensor suhu' },
+      { kind: 'component-present', type: 'rain-sensor', label: 'Sensor hujan MH-RD terpasang' },
+      { kind: 'component-present', type: 'servo', label: 'Servo ventilasi terpasang' },
+      {
+        kind: 'serial-number-range',
+        min: 600,
+        max: 640,
+        label: 'Bacaan ADC suhu NTC tercetak (pita tengah ±602 pada 35 °C)',
+      },
+      {
+        kind: 'branch-current',
+        type: 'servo',
+        branch: 'angle',
+        minA: 155,
+        maxA: 180,
+        label: 'Ventilasi membuka penuh saat suhu melewati ambang atas',
+      },
+      {
+        kind: 'branch-current',
+        type: 'dc-motor',
+        branch: 'main',
+        minA: 0.3,
+        maxA: 0.5,
+        label: 'Pompa menyala lewat MOSFET saat panas',
+      },
+      { kind: 'serial-contains', text: 'VENT BUKA', label: 'Serial mengumumkan ventilasi membuka' },
+      {
+        kind: 'serial-contains',
+        text: 'VENT TUTUP (HUJAN)',
+        label: 'Hujan memaksa ventilasi menutup (prioritas hujan di atas suhu)',
+      },
+      {
+        kind: 'branch-current',
+        type: 'led-5mm',
+        branch: 'led',
+        minA: 0.004,
+        maxA: 0.025,
+        label: 'Lampu tumbuh menyala saat cahaya kurang',
+      },
+    ],
+  },
+  {
+    id: 'modul-24-penghitung-pengunjung',
+    title: 'Modul 24 — Penghitung Pengunjung Dua Arah',
+    boardId: 'uno',
+    intro:
+      'Penghitung pengunjung di toko, perpustakaan, dan parkir bekerja dengan dua sinar yang putus BERURUTAN: arah urutannya memberi tahu apakah seseorang masuk atau keluar. Satu sensor saja tidak bisa membedakan keduanya, dan urutan yang dibatalkan di tengah jalan — orang yang mengurungkan niat lalu mundur — tidak boleh mengubah hitungan. Sketch modul ini adalah mesin keadaan empat tahap yang hanya mengubah hitungan saat SELURUH urutan lintasan selesai: luar, keduanya, dalam, bebas berarti masuk; urutan cerminnya berarti keluar. Dua FC-51 menjadi kedua sinarnya (OUT aktif-LOW: halangan menariknya ke 0 V, dan karena keluarannya didorong aktif, ia dibaca dengan INPUT polos, bukan INPUT_PULLUP). Display 7-segment menampilkan hitungan 0–9, dan relay menyalakan lampu ruangan selama hitungan di atas nol — pin D11 hanya berbicara ke pin IN relay; kontak NO-lah yang memberi makan lampu dari rel. Perhatikan penghematan pin: titik desimal (DP) sengaja tidak disambung karena penghitung 0–9 tidak membutuhkannya.',
+    goal: "Jalankan sketch — display menampilkan 0 dan lampu mati. Simulasikan orang masuk dengan penggeser Jarak halangan: turunkan FC-51 luar ke 10 cm, lalu FC-51 dalam ke 10 cm, lalu bebaskan luar (35 cm), terakhir bebaskan dalam — hitungan menjadi 1, Serial mencetak 'Masuk. Pengunjung: 1', dan lampu menyala. Sebelum menambah lagi, buktikan ketahanannya: putuskan sinar luar saja lalu bebaskan — hitungan tidak boleh berubah karena lintasan dibatalkan. Ulangi lintasan penuh sekali lagi sampai hitungan 2 dan segmen G ikut menyala. Terakhir simulasikan orang keluar dengan urutan cermin (dalam dulu) sampai Serial mencetak 'Keluar. Pengunjung: 1'. Tantangan: tambahkan alarm kapasitas — bila hitungan mencapai 9 (penuh), buat display berkedip (semua segmen nyala-mati tiap 500 ms memakai millis()) sampai ada pengunjung yang keluar.",
+    starter: {
+      placements: [
+        { type: 'seven-segment', holeId: T('L', 10, 0) },
+        { type: 'resistor', holeId: T('R', 14, 2), props: { resistance: 220 } },
+        { type: 'resistor', holeId: T('R', 19, 2), props: { resistance: 220 } },
+        { type: 'resistor', holeId: T('R', 24, 2), props: { resistance: 220 } },
+        { type: 'resistor', holeId: T('R', 29, 2), props: { resistance: 220 } },
+        { type: 'resistor', holeId: T('R', 34, 2), props: { resistance: 220 } },
+        { type: 'resistor', holeId: T('R', 39, 2), props: { resistance: 220 } },
+        { type: 'resistor', holeId: T('R', 44, 2), props: { resistance: 220 } },
+        // URUTAN FC-51 ADALAH KONTRAK DENGAN HARNESS: luar (indeks
+        // instance 0) WAJIB ditempatkan sebelum dalam — jangan diubah.
+        { type: 'fc-51', holeId: T('L', 24, 2) },
+        { type: 'fc-51', holeId: T('L', 32, 2) },
+        { type: 'relay', holeId: T('L', 48, 4) },
+        { type: 'resistor', holeId: T('R', 58, 2), props: { resistance: 220 } },
+        { type: 'led-5mm', holeId: T('R', 54, 4), props: { color: 'red' } },
+      ],
+      wires: [
+        // Rel daya
+        { a: pin('5V#3'), b: hole(RAIL('L+', 4)), color: RED },
+        { a: hole(RAIL('L-', 4)), b: pin('GND#1'), color: DARK },
+        { a: hole(RAIL('R-', 4)), b: pin('GND#2'), color: DARK },
+        // Strip segmen display -> ujung B resistor segmen (bank R)
+        { a: hole(T('L', 10, 2)), b: hole(T('R', 10, 4)), color: BLUE },
+        { a: hole(T('L', 11, 2)), b: hole(T('R', 15, 4)), color: BLUE },
+        { a: hole(T('L', 12, 2)), b: hole(T('R', 20, 4)), color: BLUE },
+        { a: hole(T('L', 13, 2)), b: hole(T('R', 25, 4)), color: BLUE },
+        { a: hole(T('L', 14, 2)), b: hole(T('R', 30, 4)), color: BLUE },
+        { a: hole(T('L', 15, 2)), b: hole(T('R', 35, 4)), color: BLUE },
+        { a: hole(T('L', 16, 2)), b: hole(T('R', 40, 4)), color: BLUE },
+        // Pin board -> ujung A resistor segmen (D4..D10 untuk A..G)
+        { a: pin('D4'), b: hole(T('R', 14, 4)), color: BLUE },
+        { a: pin('D5'), b: hole(T('R', 19, 4)), color: BLUE },
+        { a: pin('D6'), b: hole(T('R', 24, 4)), color: BLUE },
+        { a: pin('D7'), b: hole(T('R', 29, 4)), color: BLUE },
+        { a: pin('D8'), b: hole(T('R', 34, 4)), color: BLUE },
+        { a: pin('D9'), b: hole(T('R', 39, 4)), color: BLUE },
+        { a: pin('D10'), b: hole(T('R', 44, 4)), color: BLUE },
+        // COM display -> GND
+        { a: hole(T('L', 18, 2)), b: hole(RAIL('L-', 29)), color: DARK },
+        // FC-51 luar (sinar pertama dari luar pintu)
+        { a: hole(RAIL('L+', 29)), b: hole(T('L', 24, 4)), color: RED },
+        { a: hole(T('L', 25, 4)), b: hole(RAIL('L-', 20)), color: DARK },
+        { a: pin('D2'), b: hole(T('L', 26, 4)), color: BLUE },
+        // FC-51 dalam (sinar kedua)
+        { a: hole(RAIL('L+', 34)), b: hole(T('L', 32, 4)), color: RED },
+        { a: hole(T('L', 33, 4)), b: hole(RAIL('L-', 25)), color: DARK },
+        { a: pin('D3'), b: hole(T('L', 34, 4)), color: BLUE },
+        // Relay: koil dari rel, IN dari D11, COM diberi makan rel
+        { a: hole(RAIL('L+', 44)), b: hole(T('L', 48, 0)), color: RED },
+        { a: pin('D11'), b: hole(T('L', 49, 0)), color: BLUE },
+        { a: hole(T('L', 50, 0)), b: hole(RAIL('L-', 40)), color: DARK },
+        { a: hole(RAIL('L+', 10)), b: hole(T('R', 48, 4)), color: RED },
+        // Kontak NO -> resistor lampu -> LED -> rel R-
+        { a: hole(T('R', 49, 4)), b: hole(T('R', 58, 4)), color: BLUE },
+        { a: hole(T('R', 56, 4)), b: hole(RAIL('R-', 29)), color: DARK },
+      ],
+      sketch: `// Penghitung pengunjung dua arah.
+// Mesin keadaan lintasan pintu:
+//   tahap 0 = diam, 1 = sensor pertama putus, 2 = keduanya putus,
+//   tahap 3 = ekor (sensor pertama bebas, kedua masih putus).
+// Hitungan HANYA berubah saat seluruh urutan selesai — tidak pernah
+// oleh satu sensor saja, tidak pernah oleh lintasan yang dibatalkan.
+int pinSegmen[7] = {4, 5, 6, 7, 8, 9, 10};
+
+// Pola bit per angka untuk 7 segmen: bit tertinggi = A, terendah = G
+int pola[10] = {
+  0b1111110, // 0
+  0b0110000, // 1
+  0b1101101, // 2
+  0b1111001, // 3
+  0b0110011, // 4
+  0b1011011, // 5
+  0b1011111, // 6
+  0b1110000, // 7
+  0b1111111, // 8
+  0b1111011  // 9
+};
+
+int hitungan = 0;
+int tahap = 0;
+int arah = 0; // +1 masuk, -1 keluar
+
+void tampilkan(int n) {
+  for (int i = 0; i < 7; i++) {
+    int bit = (pola[n] >> (6 - i)) & 1;
+    digitalWrite(pinSegmen[i], bit);
+  }
+}
+
+void selesaiLintasan() {
+  hitungan = hitungan + arah;
+  if (hitungan > 9) hitungan = 9;
+  if (hitungan < 0) hitungan = 0;
+  tampilkan(hitungan);
+  if (arah > 0) {
+    Serial.print("Masuk. Pengunjung: ");
+  } else {
+    Serial.print("Keluar. Pengunjung: ");
+  }
+  Serial.println(hitungan);
+  arah = 0;
+}
+
+void setup() {
+  for (int i = 0; i < 7; i++) {
+    pinMode(pinSegmen[i], OUTPUT);
+  }
+  pinMode(2, INPUT);
+  pinMode(3, INPUT);
+  pinMode(11, OUTPUT);
+  Serial.begin(9600);
+  tampilkan(0);
+  Serial.println("Pengunjung: 0");
+}
+
+void loop() {
+  // OUT FC-51 aktif-LOW: sinar putus (ada orang) terbaca LOW
+  bool luarPutus = digitalRead(2) == LOW;
+  bool dalamPutus = digitalRead(3) == LOW;
+
+  if (tahap == 0) {
+    if (luarPutus && !dalamPutus) {
+      arah = 1;
+      tahap = 1;
+    } else if (dalamPutus && !luarPutus) {
+      arah = -1;
+      tahap = 1;
+    } else if (luarPutus && dalamPutus) {
+      arah = 0;
+      tahap = 2;
+    }
+  } else if (tahap == 1) {
+    if (luarPutus && dalamPutus) {
+      tahap = 2;
+    } else if (!luarPutus && !dalamPutus) {
+      // Sensor pertama bebas lagi sebelum sensor kedua putus:
+      // orangnya mundur — lintasan dibatalkan, hitungan utuh.
+      tahap = 0;
+      arah = 0;
+    }
+  } else if (tahap == 2) {
+    if (!luarPutus && !dalamPutus) {
+      // Kedua sinar bebas bersamaan (lintasan sangat cepat)
+      if (arah != 0) selesaiLintasan();
+      tahap = 0;
+    } else if (arah == 1 && !luarPutus && dalamPutus) {
+      tahap = 3; // masuk: luar bebas duluan — ekor lintasan
+    } else if (arah == -1 && luarPutus && !dalamPutus) {
+      tahap = 3; // keluar: dalam bebas duluan — ekor lintasan
+    } else if (arah == 1 && luarPutus && !dalamPutus) {
+      tahap = 1; // dalam bebas duluan: orang mundur kembali
+    } else if (arah == -1 && !luarPutus && dalamPutus) {
+      tahap = 1;
+    } else if (arah == 0 && luarPutus && !dalamPutus) {
+      arah = 1;
+      tahap = 1;
+    } else if (arah == 0 && !luarPutus && dalamPutus) {
+      arah = -1;
+      tahap = 1;
+    }
+  } else if (tahap == 3) {
+    if (!luarPutus && !dalamPutus) {
+      selesaiLintasan();
+      tahap = 0;
+    } else if (luarPutus && dalamPutus) {
+      tahap = 2; // orang melangkah mundur ke tengah pintu
+    }
+  }
+
+  // Lampu ruangan menyala selama masih ada pengunjung di dalam
+  digitalWrite(11, hitungan > 0 ? HIGH : LOW);
+  delay(20);
+}
+`,
+    },
+    assertions: [
+      { kind: 'component-present', type: 'fc-51', label: 'Sensor FC-51 terpasang di pintu' },
+      { kind: 'component-present', type: 'seven-segment', label: 'Display 7-segment terpasang' },
+      { kind: 'component-present', type: 'relay', label: 'Relay lampu ruangan terpasang' },
+      { kind: 'pin-mode', pinId: 'D2', mode: 'INPUT', label: 'Pin D2 membaca FC-51 luar (INPUT, tanpa pull-up)' },
+      {
+        kind: 'branch-current',
+        type: 'seven-segment',
+        branch: 'a',
+        minA: 0.004,
+        maxA: 0.028,
+        label: 'Segmen A menyala (angka 0 tampil sejak awal)',
+      },
+      { kind: 'serial-contains', text: 'Masuk. Pengunjung: 1', label: 'Lintasan masuk pertama terhitung' },
+      {
+        kind: 'branch-current',
+        type: 'relay',
+        branch: 'active',
+        minA: 0.9,
+        maxA: 1.1,
+        label: 'Relay AKTIF (ada pengunjung di dalam — lampu menyala)',
+      },
+      {
+        kind: 'branch-current',
+        type: 'led-5mm',
+        branch: 'led',
+        minA: 0.004,
+        maxA: 0.025,
+        label: 'Lampu ruangan menyala lewat kontak NO relay',
+      },
+      {
+        kind: 'branch-current',
+        type: 'seven-segment',
+        branch: 'g',
+        minA: 0.004,
+        maxA: 0.028,
+        label: 'Segmen G menyala (hitungan mencapai 2)',
+      },
+      { kind: 'serial-contains', text: 'Masuk. Pengunjung: 2', label: 'Lintasan masuk kedua terhitung' },
+      { kind: 'serial-contains', text: 'Keluar. Pengunjung: 1', label: 'Lintasan keluar terhitung (hitungan berkurang)' },
     ],
   },
 ];

@@ -19,6 +19,19 @@ import { BUZZER_META } from '../shared/components/catalog/buzzer/meta';
 import { SEVEN_SEGMENT_META } from '../shared/components/catalog/seven-segment/meta';
 import { FUSE_META } from '../shared/components/catalog/fuse/meta';
 import { TILT_SWITCH_META } from '../shared/components/catalog/tilt-switch/meta';
+import { NTC_THERMISTOR_META } from '../shared/components/catalog/ntc-thermistor/meta';
+import { REED_SWITCH_META } from '../shared/components/catalog/reed-switch/meta';
+import { FC51_META } from '../shared/components/catalog/fc-51/meta';
+import { KY003_META } from '../shared/components/catalog/ky-003/meta';
+import { MOSFET_META } from '../shared/components/catalog/mosfet/meta';
+import { FLAME_SENSOR_META } from '../shared/components/catalog/flame-sensor/meta';
+import { RAIN_SENSOR_META } from '../shared/components/catalog/rain-sensor/meta';
+import { MQ2_META } from '../shared/components/catalog/mq2/meta';
+import { SOUND_SENSOR_META } from '../shared/components/catalog/sound-sensor/meta';
+import { LED_BAR_GRAPH_META } from '../shared/components/catalog/led-bar-graph/meta';
+import { REGULATOR_7805_META } from '../shared/components/catalog/regulator-7805/meta';
+import { BATTERY_9V_META } from '../shared/components/catalog/battery-9v/meta';
+import { HC_SR04_META } from '../shared/components/catalog/hc-sr04/meta';
 import type { ComponentMeta } from '../shared/components/catalog/resistor/meta';
 
 export type { ComponentMeta };
@@ -43,6 +56,19 @@ export {
   SEVEN_SEGMENT_META,
   FUSE_META,
   TILT_SWITCH_META,
+  NTC_THERMISTOR_META,
+  REED_SWITCH_META,
+  FC51_META,
+  KY003_META,
+  MOSFET_META,
+  FLAME_SENSOR_META,
+  RAIN_SENSOR_META,
+  MQ2_META,
+  SOUND_SENSOR_META,
+  LED_BAR_GRAPH_META,
+  REGULATOR_7805_META,
+  BATTERY_9V_META,
+  HC_SR04_META,
 };
 
 /** Katalog Left Dock — bersumber dari meta plugin asli (single source of truth). */
@@ -67,6 +93,19 @@ export const CATALOG: ComponentMeta[] = [
   SEVEN_SEGMENT_META,
   FUSE_META,
   TILT_SWITCH_META,
+  NTC_THERMISTOR_META,
+  REED_SWITCH_META,
+  FC51_META,
+  KY003_META,
+  MOSFET_META,
+  FLAME_SENSOR_META,
+  RAIN_SENSOR_META,
+  MQ2_META,
+  SOUND_SENSOR_META,
+  LED_BAR_GRAPH_META,
+  REGULATOR_7805_META,
+  BATTERY_9V_META,
+  HC_SR04_META,
 ];
 
 export const CATEGORY_LABEL_ID: Record<ComponentCategory, string> = {

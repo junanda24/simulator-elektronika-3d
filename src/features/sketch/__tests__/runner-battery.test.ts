@@ -360,17 +360,20 @@ void loop() {
     r.session.stopSketch();
   }, 15000);
 
-  it('l3. pulseIn(): error "belum didukung" menyebut pulseIn', async () => {
+  // pulseIn LULUS dari keluarga stub pada gelombang HC-SR04
+  // (2026-10-21): ia kini builtin runtime asli. Tanpa HC-SR04 pada
+  // pin itu, semantik Arduino berlaku: tunggu timeout bawaan (1 s)
+  // lalu kembalikan 0 — BUKAN error. Kasus ini mengunci kontrak baru
+  // itu di jalur runner yang sama (dulu: error "belum didukung").
+  it('l3. pulseIn() tanpa HC-SR04: kembali 0 setelah timeout, tanpa error', async () => {
     const r = run(EMPTY_CIRCUIT, `void setup() { Serial.begin(9600); }
 void loop() {
   long durasi = pulseIn(7, HIGH);
   Serial.println(durasi);
   delay(100);
 }`);
-    expect(await waitFor(() => r.last()?.sketchError != null)).toBe(true);
-    const err = r.last()?.sketchError ?? '';
-    expect(err).toMatch(/pulseIn/);
-    expect(err).toMatch(/belum didukung/);
+    expect(await waitFor(() => r.serial().includes('0'), 8000)).toBe(true);
+    expect(r.last()?.sketchError).toBeNull();
     r.session.stopSketch();
   }, 15000);
 });

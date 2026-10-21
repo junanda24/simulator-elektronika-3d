@@ -16,6 +16,12 @@ const api = {
   startSketch: (source: string) => session.startSketch(source),
   stopSketch: () => session.stopSketch(),
   clearBoardDamage: () => session.clearBoardDamage(),
+  /**
+   * Detak jantung untuk watchdog bridge: sekadar membuktikan event
+   * loop worker masih berputar dan antrean pesan comlink masih
+   * dilayani. Mengembalikan stempel waktu worker.
+   */
+  ping: () => Date.now(),
 };
 
 export type SimWorkerApi = typeof api;

@@ -22,14 +22,18 @@ export class MnaBuilder {
   private readonly g: number[][];
   private readonly i: number[];
 
-  constructor(nets: readonly string[]) {
+  constructor(nets: readonly string[], gmin: number = GMIN) {
     this.nets = nets;
     this.index = new Map(nets.map((net, idx) => [net, idx]));
     const n = nets.length;
     this.g = Array.from({ length: n }, () => new Array<number>(n).fill(0));
     this.i = new Array<number>(n).fill(0);
     // gmin: jangkar lemah ke GND supaya matriks tidak singular.
-    for (let k = 0; k < n; k++) this.g[k][k] += GMIN;
+    // Nilainya bisa dinaikkan engine sebagai tangga pemulihan solver
+    // (self-healing): jangkar lebih kuat menenangkan matriks yang
+    // nyaris singular dengan harga akurasi yang masih jauh di bawah
+    // toleransi pelajaran.
+    for (let k = 0; k < n; k++) this.g[k][k] += gmin;
   }
 
   /** Konduktansi (Siemens) antara dua net. Net 'GND' valid sebagai salah satu ujung. */

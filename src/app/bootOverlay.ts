@@ -30,6 +30,22 @@ export function setBootStagePreparing(): void {
 }
 
 /**
+ * Tampilkan pesan error pada overlay boot — dipakai jalur penyembuhan
+ * chunk (chunkHealing.ts) saat reload otomatis sudah pernah dicoba dan
+ * pemuatan tetap gagal: user mendapat penjelasan jujur di overlay yang
+ * sama, bukan loop reload atau layar kosong. Bila overlay sudah
+ * dicabut dari DOM (error terjadi di tengah sesi), fungsi ini tidak
+ * berpengaruh — errornya tetap tercatat di log error lokal.
+ */
+export function showBootError(message: string): void {
+  const overlay = document.getElementById(OVERLAY_ID);
+  if (!overlay) return;
+  overlay.classList.add(ERROR_CLASS);
+  const stage = document.getElementById(STAGE_ID);
+  if (stage) stage.textContent = message;
+}
+
+/**
  * Selesai: pasang kelas pudar (transisi 200ms di index.html) lalu cabut
  * node dari DOM. Idempoten — panggilan berulang tidak berpengaruh.
  */

@@ -150,4 +150,11 @@ export interface CircuitSolution {
   results: Map<string, ComponentSimResult>;
   /** Laporan kerusakan baru pada tick ini. */
   damageEvents: Array<{ instanceId: string; report: DamageReport }>;
+  /**
+   * Self-healing solver: diisi bila SEMUA tangga pemulihan gagal
+   * (buang tebakan awal → gmin bertingkat). Saat terisi, voltages &
+   * results adalah solusi jujur serba-0 yang hingga — NaN/Infinity
+   * tidak pernah bocor ke UI. Tidak terisi (undefined) = solve sehat.
+   */
+  solveError?: string;
 }

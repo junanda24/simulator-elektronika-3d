@@ -11,7 +11,7 @@ import type { ComponentType, SVGProps } from 'react';
  * setiap svg `aria-hidden` (A4 I-10 — teks alternatif dobel hanya
  * menambah kebisingan screen reader).
  *
- * Kunci record = `type` pada meta katalog (catalogData.ts), persis 20 tipe.
+ * Kunci record = `type` pada meta katalog (catalogData.ts), 33 tipe.
  */
 
 export type CatalogIconProps = SVGProps<SVGSVGElement>;
@@ -335,7 +335,221 @@ function TiltSwitchIcon(props: CatalogIconProps) {
   );
 }
 
-/** Peta ikon per `type` komponen — persis 20 tipe katalog. */
+function NtcThermistorIcon(props: CatalogIconProps) {
+  return (
+    <svg viewBox="0 0 64 48" aria-hidden="true" focusable="false" {...props}>
+      {/* Kepala bead tetesan (kaca oranye MF52) + dua kaki melebar ke pitch. */}
+      <path d="M28.5 36 L26 45" stroke={PIN} strokeWidth="2" strokeLinecap="round" />
+      <path d="M35.5 36 L38 45" stroke={PIN} strokeWidth="2" strokeLinecap="round" />
+      <path
+        d="M32 6 C36.5 12 39.5 17.5 39.5 24.5 a7.5 7.5 0 0 1 -15 0 C24.5 17.5 27.5 12 32 6 Z"
+        fill="#D97706"
+        stroke={OUTLINE}
+        strokeWidth="1.5"
+      />
+      <path d="M25.8 27 a7.5 7.5 0 0 0 12.4 0 Z" fill="#B45309" />
+    </svg>
+  );
+}
+
+function ReedSwitchIcon(props: CatalogIconProps) {
+  return (
+    <svg viewBox="0 0 64 48" aria-hidden="true" focusable="false" {...props}>
+      <line x1="3" y1="24" x2="15" y2="24" stroke={PIN} strokeWidth="2.5" strokeLinecap="round" />
+      <line x1="49" y1="24" x2="61" y2="24" stroke={PIN} strokeWidth="2.5" strokeLinecap="round" />
+      {/* Kapsul kaca aksial dengan dua bilah feromagnetik bertumpuk di tengah. */}
+      <rect x="15" y="17.5" width="34" height="13" rx="6.5" fill="#C7CDD8" stroke={OUTLINE} strokeWidth="1.5" />
+      <rect x="18" y="22.6" width="17" height="2.2" fill="#5B6478" />
+      <rect x="29" y="25.4" width="17" height="2.2" fill="#5B6478" />
+    </svg>
+  );
+}
+
+function Fc51Icon(props: CatalogIconProps) {
+  return (
+    <svg viewBox="0 0 64 48" aria-hidden="true" focusable="false" {...props}>
+      <line x1="26" y1="8" x2="26" y2="3" stroke={PIN} strokeWidth="2" strokeLinecap="round" />
+      <line x1="32" y1="8" x2="32" y2="3" stroke={PIN} strokeWidth="2" strokeLinecap="round" />
+      <line x1="38" y1="8" x2="38" y2="3" stroke={PIN} strokeWidth="2" strokeLinecap="round" />
+      {/* PCB biru + pasangan LED 5mm menjorok: pemancar bening, penerima hitam. */}
+      <rect x="17" y="8" width="30" height="17" rx="2" fill="#2563EB" stroke={OUTLINE} strokeWidth="1.5" />
+      <rect x="18.5" y="20.5" width="27" height="3" rx="1" fill="#1D4ED8" />
+      <rect x="28" y="12" width="8" height="6" fill={BODY_DARK} stroke={OUTLINE} strokeWidth="1" />
+      <path d="M21.5 38.5 V29 a4.5 4.5 0 0 1 9 0 V38.5 Z" fill="#E8EBF0" stroke={OUTLINE} strokeWidth="1.5" />
+      <path d="M33.5 38.5 V29 a4.5 4.5 0 0 1 9 0 V38.5 Z" fill={BODY_DARK} stroke={OUTLINE} strokeWidth="1.5" />
+    </svg>
+  );
+}
+
+function Ky003Icon(props: CatalogIconProps) {
+  return (
+    <svg viewBox="0 0 64 48" aria-hidden="true" focusable="false" {...props}>
+      <line x1="26" y1="40" x2="26" y2="45" stroke={PIN} strokeWidth="2" strokeLinecap="round" />
+      <line x1="32" y1="40" x2="32" y2="45" stroke={PIN} strokeWidth="2" strokeLinecap="round" />
+      <line x1="38" y1="40" x2="38" y2="45" stroke={PIN} strokeWidth="2" strokeLinecap="round" />
+      {/* Papan merah Keyes kecil + IC A3144 TO-92 tegak + LED indikator. */}
+      <rect x="19" y="24" width="26" height="16" rx="2" fill="#B91C1C" stroke={OUTLINE} strokeWidth="1.5" />
+      <rect x="20.5" y="35.5" width="23" height="3" rx="1" fill="#7F1D1D" />
+      <path d="M26 8 H33 A6.5 7 0 0 1 33 22 H26 Z" fill={BODY_DARK} stroke={OUTLINE} strokeWidth="1.5" />
+      <line x1="29.5" y1="22" x2="29.5" y2="24" stroke={PIN} strokeWidth="2" />
+      <circle cx="39.5" cy="29" r="2.2" fill="#EF4444" stroke={OUTLINE} strokeWidth="1" />
+    </svg>
+  );
+}
+
+function MosfetIcon(props: CatalogIconProps) {
+  return (
+    <svg viewBox="0 0 64 48" aria-hidden="true" focusable="false" {...props}>
+      <line x1="26" y1="35" x2="26" y2="45" stroke={PIN} strokeWidth="2.2" strokeLinecap="round" />
+      <line x1="32" y1="35" x2="32" y2="45" stroke={PIN} strokeWidth="2.2" strokeLinecap="round" />
+      <line x1="38" y1="35" x2="38" y2="45" stroke={PIN} strokeWidth="2.2" strokeLinecap="round" />
+      {/* TO-220: tab logam berlubang baut di atas badan plastik hitam. */}
+      <rect x="24" y="4" width="16" height="10" fill="#8A93A5" stroke={OUTLINE} strokeWidth="1.5" />
+      <circle cx="32" cy="9" r="2.6" fill="#0B0D12" stroke={OUTLINE} strokeWidth="1" />
+      <rect x="22" y="14" width="20" height="21" rx="1.5" fill={BODY_DARK} stroke={OUTLINE} strokeWidth="1.5" />
+      <rect x="23.5" y="29.5" width="17" height="4" rx="1.5" fill={SHADE_DARK} />
+    </svg>
+  );
+}
+
+function FlameSensorIcon(props: CatalogIconProps) {
+  return (
+    <svg viewBox="0 0 64 48" aria-hidden="true" focusable="false" {...props}>
+      <line x1="23" y1="40" x2="23" y2="45" stroke={PIN} strokeWidth="2" strokeLinecap="round" />
+      <line x1="29" y1="40" x2="29" y2="45" stroke={PIN} strokeWidth="2" strokeLinecap="round" />
+      <line x1="35" y1="40" x2="35" y2="45" stroke={PIN} strokeWidth="2" strokeLinecap="round" />
+      <line x1="41" y1="40" x2="41" y2="45" stroke={PIN} strokeWidth="2" strokeLinecap="round" />
+      {/* PCB biru KY-026 + fototransistor IR hitam menjorok ke depan. */}
+      <rect x="17" y="24" width="30" height="16" rx="2" fill="#2563EB" stroke={OUTLINE} strokeWidth="1.5" />
+      <rect x="18.5" y="35.5" width="27" height="3" rx="1" fill="#1D4ED8" />
+      <path d="M26 24 V14 a6 6 0 0 1 12 0 V24 Z" fill={BODY_DARK} stroke={OUTLINE} strokeWidth="1.5" />
+      <rect x="26" y="20.5" width="12" height="3.5" fill={SHADE_DARK} />
+      <circle cx="42.5" cy="29" r="1.8" fill="#EF4444" />
+    </svg>
+  );
+}
+
+function RainSensorIcon(props: CatalogIconProps) {
+  return (
+    <svg viewBox="0 0 64 48" aria-hidden="true" focusable="false" {...props}>
+      {/* Papan deteksi jejak sisir interdigitasi + modul komparator kecil. */}
+      <rect x="8" y="10" width="30" height="28" rx="2" fill="#2563EB" stroke={OUTLINE} strokeWidth="1.5" />
+      <path
+        d="M13 15 v18 M18 15 v13 M23 20 v13 M28 15 v13 M33 20 v13"
+        stroke="#E8EBF0"
+        strokeWidth="1.6"
+        strokeLinecap="round"
+      />
+      <rect x="42" y="16" width="14" height="16" rx="2" fill="#1D4ED8" stroke={OUTLINE} strokeWidth="1.5" />
+      <circle cx="49" cy="21" r="1.8" fill="#EF4444" />
+      <line x1="45" y1="32" x2="45" y2="38" stroke={PIN} strokeWidth="2" strokeLinecap="round" />
+      <line x1="49" y1="32" x2="49" y2="38" stroke={PIN} strokeWidth="2" strokeLinecap="round" />
+      <line x1="53" y1="32" x2="53" y2="38" stroke={PIN} strokeWidth="2" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+function Mq2Icon(props: CatalogIconProps) {
+  return (
+    <svg viewBox="0 0 64 48" aria-hidden="true" focusable="false" {...props}>
+      <line x1="23" y1="40" x2="23" y2="45" stroke={PIN} strokeWidth="2" strokeLinecap="round" />
+      <line x1="29" y1="40" x2="29" y2="45" stroke={PIN} strokeWidth="2" strokeLinecap="round" />
+      <line x1="35" y1="40" x2="35" y2="45" stroke={PIN} strokeWidth="2" strokeLinecap="round" />
+      <line x1="41" y1="40" x2="41" y2="45" stroke={PIN} strokeWidth="2" strokeLinecap="round" />
+      <rect x="17" y="26" width="30" height="14" rx="2" fill="#2563EB" stroke={OUTLINE} strokeWidth="1.5" />
+      <rect x="18.5" y="35.5" width="27" height="3" rx="1" fill="#1D4ED8" />
+      {/* Tabung elemen sensor berjaring logam di atas modul. */}
+      <path d="M24 26 v-9 a8 8 0 0 1 16 0 v9 Z" fill="#B9C0CE" stroke={OUTLINE} strokeWidth="1.5" />
+      <path d="M25.5 13.5 h13 M24.8 19 h14.4" stroke="#7C8595" strokeWidth="1.3" />
+      <circle cx="42.5" cy="30.5" r="1.8" fill="#EF4444" />
+    </svg>
+  );
+}
+
+function SoundSensorIcon(props: CatalogIconProps) {
+  return (
+    <svg viewBox="0 0 64 48" aria-hidden="true" focusable="false" {...props}>
+      <line x1="23" y1="40" x2="23" y2="45" stroke={PIN} strokeWidth="2" strokeLinecap="round" />
+      <line x1="29" y1="40" x2="29" y2="45" stroke={PIN} strokeWidth="2" strokeLinecap="round" />
+      <line x1="35" y1="40" x2="35" y2="45" stroke={PIN} strokeWidth="2" strokeLinecap="round" />
+      <line x1="41" y1="40" x2="41" y2="45" stroke={PIN} strokeWidth="2" strokeLinecap="round" />
+      <rect x="17" y="24" width="30" height="16" rx="2" fill="#2563EB" stroke={OUTLINE} strokeWidth="1.5" />
+      <rect x="18.5" y="35.5" width="27" height="3" rx="1" fill="#1D4ED8" />
+      {/* Mikrofon electret: silinder perak dengan lubang suara gelap. */}
+      <circle cx="32" cy="15" r="8" fill="#B9C0CE" stroke={OUTLINE} strokeWidth="1.5" />
+      <circle cx="32" cy="15" r="3.4" fill="#0B0D12" />
+      <circle cx="42.5" cy="29" r="1.8" fill="#EF4444" />
+    </svg>
+  );
+}
+
+function LedBarGraphIcon(props: CatalogIconProps) {
+  const SEG_COLORS = ['#22C55E', '#22C55E', '#22C55E', '#22C55E', '#22C55E', '#22C55E', '#EAB308', '#EAB308', '#EF4444', '#EF4444'];
+  return (
+    <svg viewBox="0 0 64 48" aria-hidden="true" focusable="false" {...props}>
+      <line x1="14" y1="33" x2="14" y2="42" stroke={PIN} strokeWidth="1.6" strokeLinecap="round" />
+      <line x1="32" y1="33" x2="32" y2="42" stroke={PIN} strokeWidth="1.6" strokeLinecap="round" />
+      <line x1="50" y1="33" x2="50" y2="42" stroke={PIN} strokeWidth="1.6" strokeLinecap="round" />
+      {/* Badan DIP lebar abu-abu dengan 10 jendela segmen berjajar. */}
+      <rect x="7" y="13" width="50" height="20" rx="2" fill="#3A4152" stroke={OUTLINE} strokeWidth="1.5" />
+      {SEG_COLORS.map((color, i) => (
+        <rect key={i} x={10 + i * 4.5} y="17.5" width="3.4" height="11" rx="1" fill={color} />
+      ))}
+    </svg>
+  );
+}
+
+function Regulator7805Icon(props: CatalogIconProps) {
+  return (
+    <svg viewBox="0 0 64 48" aria-hidden="true" focusable="false" {...props}>
+      <line x1="26" y1="35" x2="26" y2="45" stroke={PIN} strokeWidth="2.2" strokeLinecap="round" />
+      <line x1="32" y1="35" x2="32" y2="45" stroke={PIN} strokeWidth="2.2" strokeLinecap="round" />
+      <line x1="38" y1="35" x2="38" y2="45" stroke={PIN} strokeWidth="2.2" strokeLinecap="round" />
+      {/* TO-220 dengan tab logam penuh (juga GND) + garis sirip pendingin. */}
+      <rect x="22" y="4" width="20" height="9" fill="#8A93A5" stroke={OUTLINE} strokeWidth="1.5" />
+      <circle cx="32" cy="8.5" r="2.4" fill="#0B0D12" stroke={OUTLINE} strokeWidth="1" />
+      <rect x="22" y="13" width="20" height="22" rx="1.5" fill={BODY_DARK} stroke={OUTLINE} strokeWidth="1.5" />
+      <line x1="27" y1="17" x2="27" y2="31" stroke={SHADE_DARK} strokeWidth="2.4" />
+      <line x1="32" y1="17" x2="32" y2="31" stroke={SHADE_DARK} strokeWidth="2.4" />
+      <line x1="37" y1="17" x2="37" y2="31" stroke={SHADE_DARK} strokeWidth="2.4" />
+    </svg>
+  );
+}
+
+function Battery9vIcon(props: CatalogIconProps) {
+  return (
+    <svg viewBox="0 0 64 48" aria-hidden="true" focusable="false" {...props}>
+      {/* Blok 6LR61 berdiri: tutup atas + stud (+) kecil & soket (−) besar. */}
+      <circle cx="26" cy="8" r="2.6" fill="#B9C0CE" stroke={OUTLINE} strokeWidth="1.2" />
+      <circle cx="38" cy="8" r="3.6" fill="#8A93A5" stroke={OUTLINE} strokeWidth="1.2" />
+      <rect x="18" y="10.5" width="28" height="4.5" fill="#343A4A" stroke={OUTLINE} strokeWidth="1.2" />
+      <rect x="18" y="15" width="28" height="27" rx="2.5" fill={BODY_DARK} stroke={OUTLINE} strokeWidth="1.5" />
+      <rect x="18" y="15" width="28" height="9" fill="#C89B3C" />
+      <line x1="22.5" y1="19.5" x2="30" y2="19.5" stroke="#0B0D12" strokeWidth="1.6" strokeLinecap="round" />
+      <rect x="19.5" y="36.5" width="25" height="4" rx="1.5" fill={SHADE_DARK} />
+    </svg>
+  );
+}
+
+function HcSr04Icon(props: CatalogIconProps) {
+  return (
+    <svg viewBox="0 0 64 48" aria-hidden="true" focusable="false" {...props}>
+      <line x1="23" y1="38" x2="23" y2="44" stroke={PIN} strokeWidth="2" strokeLinecap="round" />
+      <line x1="29" y1="38" x2="29" y2="44" stroke={PIN} strokeWidth="2" strokeLinecap="round" />
+      <line x1="35" y1="38" x2="35" y2="44" stroke={PIN} strokeWidth="2" strokeLinecap="round" />
+      <line x1="41" y1="38" x2="41" y2="44" stroke={PIN} strokeWidth="2" strokeLinecap="round" />
+      {/* PCB biru lebar + dua tabung transduser Ø16 perak (T & R). */}
+      <rect x="6" y="8" width="52" height="30" rx="2.5" fill="#2563EB" stroke={OUTLINE} strokeWidth="1.5" />
+      <circle cx="20" cy="22" r="9.5" fill="#B9C0CE" stroke={OUTLINE} strokeWidth="1.5" />
+      <circle cx="20" cy="22" r="5.5" fill="#8A93A5" />
+      <circle cx="44" cy="22" r="9.5" fill="#B9C0CE" stroke={OUTLINE} strokeWidth="1.5" />
+      <circle cx="44" cy="22" r="5.5" fill="#8A93A5" />
+      <rect x="28" y="31" width="8" height="5" fill="#C7CDD8" stroke={OUTLINE} strokeWidth="1" />
+    </svg>
+  );
+}
+
+/** Peta ikon per `type` komponen — 33 tipe katalog. */
 export const CATALOG_ICONS: Record<string, CatalogIcon> = {
   resistor: ResistorIcon,
   'led-5mm': LedIcon,
@@ -357,4 +571,17 @@ export const CATALOG_ICONS: Record<string, CatalogIcon> = {
   'seven-segment': SevenSegmentIcon,
   fuse: FuseIcon,
   'tilt-switch': TiltSwitchIcon,
+  'ntc-thermistor': NtcThermistorIcon,
+  'reed-switch': ReedSwitchIcon,
+  'fc-51': Fc51Icon,
+  'ky-003': Ky003Icon,
+  mosfet: MosfetIcon,
+  'flame-sensor': FlameSensorIcon,
+  'rain-sensor': RainSensorIcon,
+  mq2: Mq2Icon,
+  'sound-sensor': SoundSensorIcon,
+  'led-bar-graph': LedBarGraphIcon,
+  'regulator-7805': Regulator7805Icon,
+  'battery-9v': Battery9vIcon,
+  'hc-sr04': HcSr04Icon,
 };
