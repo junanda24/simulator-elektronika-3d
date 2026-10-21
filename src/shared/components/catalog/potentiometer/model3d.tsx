@@ -3,6 +3,7 @@ import type { ThreeEvent } from '@react-three/fiber';
 import type { ComponentRenderProps } from '../../../types';
 import { useCircuitStore } from '../../../../features/wiring/store/circuitStore';
 import { RotaryKnobGizmo } from '../../../../features/stage3d/gizmos/RotaryKnobGizmo';
+import { LiveBadge } from '../../../../features/stage3d/LiveBadge';
 
 const METAL = { color: '#cfd4dc', metalness: 0.9, roughness: 0.3 } as const;
 const BODY = { color: '#1d4ed8', roughness: 0.45 } as const;
@@ -99,6 +100,9 @@ export const PotentiometerRender3D: ComponentType<ComponentRenderProps> = ({
           ohms={alpha * totalOhms}
         />
       )}
+
+      {/* Badge ADC live dari tegangan wiper (rumus analogRead runtime) */}
+      <LiveBadge instance={instance} y={3.8} />
     </group>
   );
 };

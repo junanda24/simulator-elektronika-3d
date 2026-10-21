@@ -4,6 +4,7 @@ import type { ThreeEvent } from '@react-three/fiber';
 import type { ComponentRenderProps } from '../../../types';
 import { useCircuitStore } from '../../../../features/wiring/store/circuitStore';
 import { SensorGizmo3D } from '../../../../features/stage3d/gizmos/SensorGizmo3D';
+import { LiveBadge } from '../../../../features/stage3d/LiveBadge';
 
 const METAL = { color: '#cfd4dc', metalness: 0.9, roughness: 0.3 } as const;
 /** Badan LDR — oranye kecoklatan khas fotoresistor CdS. */
@@ -111,6 +112,9 @@ export const LdrRender3D: ComponentType<ComponentRenderProps> = ({ instance, onI
           />
         </>
       )}
+
+      {/* Badge tegangan kaki B + ADC live (titik tengah pembagi, dibaca A0) */}
+      <LiveBadge instance={instance} y={2.5} />
     </group>
   );
 };

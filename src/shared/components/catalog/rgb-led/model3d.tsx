@@ -1,5 +1,6 @@
 import type { ComponentType } from 'react';
 import type { ComponentRenderProps } from '../../../types';
+import { LiveBadge } from '../../../../features/stage3d/LiveBadge';
 
 const METAL = { color: '#cfd4dc', metalness: 0.9, roughness: 0.3 } as const;
 
@@ -94,6 +95,9 @@ export const RgbLedRender3D: ComponentType<ComponentRenderProps> = ({ instance }
       {!damaged && peak > 0.05 && (
         <pointLight position={[0, 3.2, 0]} color={mixed} intensity={peak * 30} distance={5} decay={2} />
       )}
+
+      {/* Badge arus per kanal live dari branchCurrents r/g/b */}
+      <LiveBadge instance={instance} y={5.7} />
     </group>
   );
 };

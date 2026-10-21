@@ -2,6 +2,7 @@ import { useRef, type ComponentType } from 'react';
 import { useFrame, type ThreeEvent } from '@react-three/fiber';
 import type { Group } from 'three';
 import type { ComponentRenderProps } from '../../../types';
+import { LiveBadge } from '../../../../features/stage3d/LiveBadge';
 
 const METAL = { color: '#cfd4dc', metalness: 0.9, roughness: 0.3 } as const;
 
@@ -93,6 +94,9 @@ export const DcMotorRender3D: ComponentType<ComponentRenderProps> = ({ instance,
           </mesh>
         </group>
       </group>
+
+      {/* Badge tegangan motor live dari pinVoltages PLUS − MINUS */}
+      <LiveBadge instance={instance} y={4.1} />
     </group>
   );
 };

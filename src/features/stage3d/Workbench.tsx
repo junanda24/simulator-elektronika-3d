@@ -21,6 +21,7 @@ import {
 } from '../../shared/boards/breadboard';
 
 import { computeViewOffset } from '../../app/viewportInsets';
+import { useUiSettings } from '../../app/uiSettings';
 import { useCircuitStore } from '../wiring/store/circuitStore';
 import { terminalWorldPosition } from '../wiring/terminals';
 import type { TerminalRef } from '../wiring/netlist';
@@ -64,6 +65,8 @@ function CameraRig({ resetSignal }: { resetSignal: number }) {
   const focusNonce = useCircuitStore((s) => s.focusNonce);
   const focusPosition = useCircuitStore((s) => s.focusPosition);
   const cameraView = useCircuitStore((s) => s.cameraView);
+  const turntableOn = useUiSettings((s) => s.turntable);
+  const isDragging3D = useCircuitStore((s) => s.isDragging3D);
   const firstFocus = useRef(true);
   const firstView = useRef(true);
 
@@ -86,6 +89,65 @@ function CameraRig({ resetSignal }: { resetSignal: number }) {
       el.removeEventListener('wheel', killCameraTweens);
     };
   }, [gl, camera, controls]);
+
+  // TURNTABLE IDLE (adopsi learn-arduino-red, terverifikasi di sana kamera
+  // berputar seperempat putaran saat idle): bila setelan "Putar otomatis
+  // saat idle" nyala (useUiSettings.turntable, opt-in), kamera berputar
+  // pelan sendiri setelah ±8 detik tanpa interaksi. Mekanismenya MURNI
+  // OrbitControls.autoRotate — tidak ada tween GSAP baru, dan easing /
+  // preset / setViewOffset / overwrite tidak disentuh.
+  // Gerbang, dievaluasi ulang tepat saat timer jatuh tempo: tidak sedang
+  // drag komponen 3D, prefers-reduced-motion tidak aktif, dan tidak ada
+  // tween kamera GSAP yang berjalan (gsap.isTweening pada camera.position
+  // / controls.target; bila ada, timer dipasang ulang dan dicek lagi).
+  // Interaksi apa pun mematikan putaran SEKETIKA + mereset timer:
+  // pointerdown / wheel pada gl.domElement, keydown (aktivitas user),
+  // perintah kamera baru (cameraView berubah), dan perubahan status drag
+  // 3D — dua yang terakhir bekerja lewat dependensi effect: perubahan
+  // nilainya menjalankan ulang effect dan cleanup-nya mematikan putaran.
+  useEffect(() => {
+    if (!controls) return undefined;
+    const ctl = controls;
+    ctl.autoRotate = false;
+    if (!turntableOn) return undefined;
+    const el = gl.domElement;
+    let timer: number | null = null;
+    const stop = () => {
+      ctl.autoRotate = false;
+      if (timer !== null) {
+        window.clearTimeout(timer);
+        timer = null;
+      }
+    };
+    const arm = () => {
+      if (timer !== null) window.clearTimeout(timer);
+      timer = window.setTimeout(() => {
+        timer = null;
+        if (useCircuitStore.getState().isDragging3D) return;
+        if (prefersReducedMotion()) return;
+        if (gsap.isTweening(camera.position) || gsap.isTweening(ctl.target)) {
+          arm();
+          return;
+        }
+        ctl.autoRotateSpeed = 0.6;
+        ctl.autoRotate = true;
+      }, 8000);
+    };
+    const onActivity = () => {
+      stop();
+      arm();
+    };
+    el.addEventListener('pointerdown', onActivity);
+    el.addEventListener('wheel', onActivity, { passive: true });
+    window.addEventListener('keydown', onActivity);
+    arm();
+    return () => {
+      stop();
+      el.removeEventListener('pointerdown', onActivity);
+      el.removeEventListener('wheel', onActivity);
+      window.removeEventListener('keydown', onActivity);
+    };
+  }, [controls, gl, camera, turntableOn, cameraView, isDragging3D]);
 
   // BINGKAI REKTANGEL BEBAS (Floating Studio HUD, SINTESIS-FINAL §C): panel
   // kini melayang DI ATAS kanvas full-bleed, jadi proyeksi kamera digeser

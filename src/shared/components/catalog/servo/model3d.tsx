@@ -2,6 +2,7 @@ import { useRef, type ComponentType } from 'react';
 import { useFrame } from '@react-three/fiber';
 import { MathUtils, type Group } from 'three';
 import type { ComponentRenderProps } from '../../../types';
+import { LiveBadge } from '../../../../features/stage3d/LiveBadge';
 
 const METAL = { color: '#cfd4dc', metalness: 0.9, roughness: 0.3 } as const;
 
@@ -104,6 +105,9 @@ export const ServoRender3D: ComponentType<ComponentRenderProps> = ({ instance })
           <meshStandardMaterial color="#23262d" roughness={0.6} />
         </mesh>
       </group>
+
+      {/* Badge sudut live dari branchCurrents.angle (nilai solver yang sama) */}
+      <LiveBadge instance={instance} y={4.6} />
     </group>
   );
 };

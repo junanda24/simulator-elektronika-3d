@@ -12,6 +12,7 @@ import {
 } from '../features/share/projectShare';
 import CatalogPanel from './CatalogPanel';
 import ToolbarBar from './ToolbarBar';
+import { useUiSettings } from './uiSettings';
 import { useCircuitStore } from '../features/wiring/store/circuitStore';
 import { getComponentPlugin } from '../shared/components/registry';
 import { BREADBOARD_ORIGIN, holeLabel } from '../shared/boards/breadboard';
@@ -125,6 +126,41 @@ type MenuId = 'demo' | 'proyek' | 'cam3d' | 'camAtas';
  * 0 kanvas · 10 pelampung panggung · 20 panel · 25 popover · 30 probe ·
  * 40 autopsy · 50 toast. Semua state rangkaian hidup di useCircuitStore.
  */
+/** Baris setelan on/off untuk popover bantuan: tombol role="switch". */
+function SettingsSwitch({
+  label,
+  checked,
+  onChange,
+}: {
+  label: string;
+  checked: boolean;
+  onChange: (value: boolean) => void;
+}) {
+  return (
+    <div className="flex items-center justify-between gap-3">
+      <span className="text-xs text-zinc-300">{label}</span>
+      <button
+        type="button"
+        role="switch"
+        aria-checked={checked}
+        aria-label={label}
+        onClick={() => onChange(!checked)}
+        className={`relative h-5 w-9 shrink-0 rounded-full border transition-colors ${
+          checked
+            ? 'border-accent-primary/60 bg-accent-primary/25'
+            : 'border-border-interactive bg-panel-elevated'
+        }`}
+      >
+        <span
+          className={`absolute top-1/2 size-3.5 -translate-y-1/2 rounded-full transition-all ${
+            checked ? 'left-[18px] bg-accent-primary' : 'left-[3px] bg-zinc-400'
+          }`}
+        />
+      </button>
+    </div>
+  );
+}
+
 export default function App() {
   const running = useCircuitStore((s) => s.running);
   const sketchError = useCircuitStore((s) => s.sketchError);
@@ -152,6 +188,10 @@ export default function App() {
   const importRef = useRef<HTMLInputElement>(null);
   const voltages = useCircuitStore((s) => s.voltages);
   const netNameOf = useCircuitStore((s) => s.netNameOf);
+  const turntable = useUiSettings((s) => s.turntable);
+  const setTurntable = useUiSettings((s) => s.setTurntable);
+  const showBadges = useUiSettings((s) => s.showBadges);
+  const setShowBadges = useUiSettings((s) => s.setShowBadges);
 
   // Reset Kamera lama kini = tombol [3D] kapsul kamera (preset Perspektif
   // lewat cameraView). resetSignal dipertahankan untuk prop Workbench.
@@ -972,6 +1012,25 @@ export default function App() {
                 </dl>
               </div>
             ))}
+
+            {/* Bagian Tampilan — setelan tampilan (store useUiSettings) */}
+            <div className="mt-3">
+              <h3 className="text-[11px] font-semibold uppercase tracking-[0.12em] text-zinc-400">
+                Tampilan
+              </h3>
+              <div className="mt-1.5 space-y-2">
+                <SettingsSwitch
+                  label="Putar otomatis saat idle"
+                  checked={turntable}
+                  onChange={setTurntable}
+                />
+                <SettingsSwitch
+                  label="Label nilai komponen"
+                  checked={showBadges}
+                  onChange={setShowBadges}
+                />
+              </div>
+            </div>
           </div>
         )}
 

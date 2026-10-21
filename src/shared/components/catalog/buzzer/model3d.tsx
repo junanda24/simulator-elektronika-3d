@@ -4,6 +4,7 @@ import { useFrame } from '@react-three/fiber';
 import type * as THREE from 'three';
 import type { ComponentRenderProps } from '../../../types';
 import { updateBuzzerTone } from '../../../utils/soundFx';
+import { LiveBadge } from '../../../../features/stage3d/LiveBadge';
 
 const METAL = { color: '#cfd4dc', metalness: 0.9, roughness: 0.3 } as const;
 
@@ -109,6 +110,9 @@ export const BuzzerRender3D: ComponentType<ComponentRenderProps> = ({ instance }
           </mesh>
         </>
       )}
+
+      {/* Badge arus cabang utama live saat buzzer berbunyi */}
+      <LiveBadge instance={instance} y={4.0} />
     </group>
   );
 };
