@@ -20,8 +20,36 @@ import { createTextLabelTexture } from '../../../../features/stage3d/labelTextur
 const SEGMENT_OFF = `#${new THREE.Color(COLOR_TOKENS.resistorBands[8])
   .lerp(new THREE.Color(COLOR_TOKENS.resistorBands[9]), 0.3)
   .getHexString()}`;
-/** Warna pendaran segmen saat menyala — token fungsional warna LED. */
-const SEGMENT_ON = COLOR_TOKENS.ledRed;
+/**
+ * Warna pendaran segmen saat menyala — MERAH DALAM PEKAT. Token
+ * ledRed (#ff2222) mengandung kanal G/B 0x22 yang, digabung difus abu
+ * terang segmen yang terangkat lampu adegan, tercuci tone mapping
+ * ACES menjadi merah muda pucat (terukur: tampilan akhir ≈
+ * (0.97, 0.57, 0.59), rasio kejenuhan min/max pasca-ACES 0,30).
+ * Koreksi 2026-10-21 (perintah user "merah di tulisannya lebih pekat
+ * lagi!"): kanal G/B token DITEKAN KE NOL (rona tetap merah 0° persis,
+ * bukan oranye/magenta) → #ff0000; rona murni ini tidak bisa tercuci
+ * ACES karena tidak ada kanal lain yang terangkat (rasio → 0,002).
+ */
+const SEGMENT_ON_BASE = new THREE.Color(COLOR_TOKENS.ledRed);
+SEGMENT_ON_BASE.g = 0;
+SEGMENT_ON_BASE.b = 0;
+const SEGMENT_ON = `#${SEGMENT_ON_BASE.getHexString()}`;
+/**
+ * Difus segmen dalam keadaan menyala: merah pekat yang sama
+ * digelapkan (×0,30 linear ≈ #950000) agar lampu adegan hanya
+ * menambah kanal merah — bahan menjadi emissive-dominan. Segmen mati
+ * tetap memakai SEGMENT_OFF (abu pucat netral); difus dirender
+ * sebagai lerp keduanya mengikuti pecahan arus (segmentDiffuse).
+ */
+const SEGMENT_ON_DIFFUSE = `#${SEGMENT_ON_BASE.clone().multiplyScalar(0.3).getHexString()}`;
+
+const OFF_RGB = new THREE.Color(SEGMENT_OFF);
+const ON_RGB = new THREE.Color(SEGMENT_ON_DIFFUSE);
+const scratchColor = new THREE.Color();
+/** Warna difus segmen pada pecahan nyala f (0 = mati, 1 = penuh). */
+const segmentDiffuse = (f: number): string =>
+  `#${scratchColor.lerpColors(OFF_RGB, ON_RGB, f).getHexString()}`;
 /**
  * Muka display: arang netral pekat seperti muka asli 5611BH — plastik
  * hitam token digelapkan ke hitam gelang 0, hasil ≈ #1b1b21 (dulu
@@ -109,8 +137,12 @@ const SEGMENT_GEOMETRIES: Record<string, THREE.BufferGeometry> = Object.fromEntr
  * berujung heksagonal + slant digit di balik lapisan filter, titik
  * desimal, dan cetakan tipe "5611BH" (katoda umum) di tepi bawah muka
  * seperti modul asli. Emissive tiap segmen sebanding arus cabangnya
- * dari simState (20 mA = menyala penuh, pengali 3,6× + pointLight
- * ×10/jarak 8 — ditegaskan 2026-10-21, SPEK-TEMA-GELAP.md §B).
+ * dari simState (20 mA = menyala penuh) + pointLight ×10/jarak 8.
+ * Pengali emissive 2,4× (bukan 3,6× lama): sejak koreksi kepekatan
+ * 2026-10-21 emissive adalah merah murni #ff0000 dan difus menyala
+ * merah pekat, jadi kejenuhan tak lagi bergantung intensitas dan
+ * 2,4× cukup memberi luminansi ±17× muka arang tanpa roll-off ACES
+ * yang mencuci warna (hitungan lengkap di komentar SEGMENT_ON).
  */
 export const SevenSegmentRender3D: ComponentType<ComponentRenderProps> = ({ instance }) => {
   const currents = instance.simState.branchCurrents;
@@ -156,26 +188,31 @@ export const SevenSegmentRender3D: ComponentType<ComponentRenderProps> = ({ inst
         <meshPhysicalMaterial {...MATERIAL_PROPS.plastikHitam} color={FACE_COLOR} />
       </RoundedBox>
 
-      {/* Batang segmen A–G berujung heksagonal + slant, di bawah filter */}
-      {SEGMENTS.map((seg) => (
-        <mesh key={seg.key} geometry={SEGMENT_GEOMETRIES[seg.key]} dispose={null} position={[0, 0.85, 0]}>
-          <meshStandardMaterial
-            color={SEGMENT_OFF}
-            roughness={0.4}
-            emissive={SEGMENT_ON}
-            emissiveIntensity={intensityOf(seg.key) * 3.6}
-          />
-        </mesh>
-      ))}
+      {/* Batang segmen A–G berujung heksagonal + slant, di bawah filter.
+          Difus mengikuti pecahan nyala (abu netral → merah pekat) dan
+          roughness 0,6 menahan angkatan specular lampu adegan. */}
+      {SEGMENTS.map((seg) => {
+        const f = intensityOf(seg.key);
+        return (
+          <mesh key={seg.key} geometry={SEGMENT_GEOMETRIES[seg.key]} dispose={null} position={[0, 0.85, 0]}>
+            <meshStandardMaterial
+              color={segmentDiffuse(f)}
+              roughness={0.6}
+              emissive={SEGMENT_ON}
+              emissiveIntensity={f * 2.4}
+            />
+          </mesh>
+        );
+      })}
 
       {/* Titik desimal (DP) di sudut bawah kanan tampilan, ikut slant */}
       <mesh position={[1.5 - SLANT * 3.4, 0.89, 3.4]}>
         <cylinderGeometry args={[0.24, 0.24, 0.08, 20]} />
         <meshStandardMaterial
-          color={SEGMENT_OFF}
-          roughness={0.4}
+          color={segmentDiffuse(intensityOf('dp'))}
+          roughness={0.6}
           emissive={SEGMENT_ON}
-          emissiveIntensity={intensityOf('dp') * 3.6}
+          emissiveIntensity={intensityOf('dp') * 2.4}
         />
       </mesh>
 
@@ -199,7 +236,7 @@ export const SevenSegmentRender3D: ComponentType<ComponentRenderProps> = ({ inst
       {anyLit && (
         <pointLight
           position={[0, 2.4, 0]}
-          color="#ff2a2a"
+          color={SEGMENT_ON}
           intensity={peakFrac * 10}
           distance={8}
           decay={2}

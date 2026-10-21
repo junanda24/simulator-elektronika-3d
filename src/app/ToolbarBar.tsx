@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useCircuitStore } from '../features/wiring/store/circuitStore';
+import { WIRE_COLORS } from '../features/wiring/wireColors';
 import { isSoundEnabled, setSoundEnabled } from '../shared/utils/soundFx';
 
 /**
@@ -12,21 +13,11 @@ import { isSoundEnabled, setSoundEnabled } from '../shared/utils/soundFx';
  */
 
 /**
- * Palet kabel kanonik = 7 warna semantik. Urutan + hex 1–6 sama persis
- * dengan shortcut angka lama (memori otot); Ungu #7 = PWM (STYLE_GUIDE
- * §C). Label semantik mengikuti kartu Warna Kabel di App.
- * CATATAN: pemetaan shortcut angka hidup di App.tsx (SHORTCUT_WIRE_COLORS
- * + case '1'..'6') — tombol '7' untuk Ungu perlu didaftarkan di sana.
+ * Palet kabel = WIRE_COLORS kanonik dari features/wiring/wireColors.ts
+ * (satu sumber kebenaran bersama store; perilaku radio — tepat satu
+ * warna selalu aktif, tidak bisa dimatikan). Pemetaan shortcut angka
+ * hidup di App.tsx (SHORTCUT_WIRE_COLORS) dengan hex yang sama persis.
  */
-const WIRE_SWATCHES: Array<{ hex: string; name: string; role: string }> = [
-  { hex: '#EF4444', name: 'Merah', role: '5V' },
-  { hex: '#1F2937', name: 'Hitam', role: 'GND' },
-  { hex: '#3B82F6', name: 'Biru', role: 'sinyal' },
-  { hex: '#22C55E', name: 'Hijau', role: 'sinyal' },
-  { hex: '#EAB308', name: 'Kuning', role: 'analog' },
-  { hex: '#F97316', name: 'Oranye', role: '3V3' },
-  { hex: '#A855F7', name: 'Ungu', role: 'sinyal PWM' },
-];
 
 function Separator() {
   return <div className="h-6 w-px shrink-0 bg-border-subtle" aria-hidden />;
@@ -131,7 +122,7 @@ export default function ToolbarBar() {
     <div className="pointer-events-auto mx-auto flex h-12 w-fit max-w-full items-center gap-2 overflow-x-auto rounded-full border border-border-subtle bg-panel/90 px-2.5 shadow-[0_8px_32px_rgb(0_0_0/0.45),0_2px_8px_rgb(0_0_0/0.4)] backdrop-blur-md [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
       {/* ===== Grup: warna kabel aktif (7 warna semantik) ===== */}
       <div className="flex shrink-0 items-center gap-2" role="group" aria-label="Warna kabel aktif">
-        {WIRE_SWATCHES.map((c, i) => {
+        {WIRE_COLORS.map((c, i) => {
           const active = wireColor.toLowerCase() === c.hex.toLowerCase();
           return (
             <button

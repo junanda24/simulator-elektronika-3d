@@ -8,6 +8,11 @@ import {
 } from '../../../shared/types';
 import { holeWorldPosition, terminalHoleId, railHoleId } from '../../../shared/boards/breadboard';
 import { buildNetlist, type TerminalRef, type WireConnection } from '../netlist';
+import {
+  DEFAULT_WIRE_COLOR,
+  normalizeWireColor,
+  type WireColorHex,
+} from '../wireColors';
 import { computePlacement, type PlacementRotation } from '../placement';
 import { playClick, playSnap } from '../../../shared/utils/soundFx';
 import {
@@ -151,7 +156,12 @@ interface CircuitStore {
   selectedWireId: string | null;
   placingType: string | null;
   pendingFrom: TerminalRef | null;
-  wireColor: string;
+  /**
+   * Warna kabel aktif — perilaku RADIO: selalu tepat satu hex dari palet
+   * kanonik (wireColors.ts), tidak pernah kosong. Tipe union literal +
+   * setter yang menolak nilai di luar palet menjaga invariant ini.
+   */
+  wireColor: WireColorHex;
   hover: HoverState | null;
   focusNonce: number;
   focusPosition: [number, number, number] | null;
@@ -300,7 +310,7 @@ export const useCircuitStore = create<CircuitStore>((set, get) => ({
   selectedWireId: null,
   placingType: null,
   pendingFrom: null,
-  wireColor: '#3b82f6',
+  wireColor: DEFAULT_WIRE_COLOR,
   hover: null,
   focusNonce: 0,
   focusPosition: null,
@@ -468,7 +478,14 @@ export const useCircuitStore = create<CircuitStore>((set, get) => ({
 
   cancelPending: () =>
     set({ pendingFrom: null, placingType: null, placementRotation: 0, wireCursorPos: null }),
-  setWireColor: (color) => set({ wireColor: color }),
+  setWireColor: (color) => {
+    // Radio, bukan toggle: nilai di luar palet (termasuk string kosong)
+    // ditolak diam-diam — warna aktif sekarang dipertahankan, pilihan
+    // tidak pernah bisa kosong. Mengklik warna yang sedang aktif pun
+    // menormalkan ke hex yang sama: keadaan akhir tidak berubah.
+    const canonical = normalizeWireColor(color);
+    if (canonical) set({ wireColor: canonical });
+  },
 
   removeWire: (id) => {
     pushHistory(set, get);
