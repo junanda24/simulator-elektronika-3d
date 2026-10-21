@@ -1,5 +1,4 @@
-import type { ComponentType } from 'react';
-import { Color } from 'three';
+import { useMemo, type ComponentType } from 'react';
 import type { ThreeEvent } from '@react-three/fiber';
 import type { ComponentRenderProps } from '../../../types';
 import { TEMP_MAX_C, TEMP_MIN_C, tempCOf } from './electrical';
@@ -9,47 +8,41 @@ import {
   createThrottledCaller,
   INTERACT_COMMIT_INTERVAL_MS,
 } from '../../../../features/stage3d/gizmos/throttledCommit';
-
-const METAL = { color: '#cfd4dc', metalness: 0.9, roughness: 0.3 } as const;
-
-/** Tahap warna indikator suhu: biru dingin → oranye hangat → merah panas. */
-const COLOR_COLD = new Color('#38BDF8');
-const COLOR_WARM = new Color('#F97316');
-const COLOR_HOT = new Color('#EF4444');
-
-/**
- * Warna pendaran indikator mengikuti suhu (lerp dua tahap):
- * biru penuh ≤ 15 °C, bergeser ke oranye pada 25 °C, bertahan oranye
- * sampai 40 °C, lalu bergeser ke merah penuh pada 50 °C.
- */
-function tempEmissiveColor(tempC: number): Color {
-  const out = new Color();
-  if (tempC <= 25) {
-    const t = Math.min(1, Math.max(0, (tempC - 15) / 10));
-    out.lerpColors(COLOR_COLD, COLOR_WARM, t);
-  } else {
-    const t = Math.min(1, Math.max(0, (tempC - 40) / 10));
-    out.lerpColors(COLOR_WARM, COLOR_HOT, t);
-  }
-  return out;
-}
-
-/** Posisi kaki sesuai pin elektrik: VCC (-1), OUT (0), GND (+1) pada sumbu Z. */
-const LEG_Z = [-1, 0, 1] as const;
+import {
+  getTo92FaceTexture,
+  getTo92Geometries,
+  LM35_TO92,
+  TO92_BODY_MATERIAL,
+  TO92_LEAD_MATERIAL,
+} from '../../to92';
 
 /** Jarak seret vertikal (px) untuk rentang suhu penuh 0 → 100 °C. */
 const DRAG_PIXELS_FULL_RANGE = 120;
 
 /**
- * LM35 prosedural: kemasan TO-92 seperti transistor — badan setengah
- * silinder hitam, sisi datar ditutup pelat tipis, tiga kaki metalik.
+ * LM35 prosedural (Gelombang 1 gaya 3D): kemasan TO-92 sejati seperti
+ * transistor — badan SATU geometri extrude berprofil "D" (muka datar
+ * menghadap −X dengan cetakan "LM35DZ", punggung setengah lingkaran,
+ * rok tipis di pangkal), tiga kaki pipih melebar 1,27 → 2,54 mm menuju
+ * pin VCC (−1), OUT (0), GND (+1). Proporsi sedikit lebih ramping dari
+ * transistor mengikuti kemasan LP TI (4,30 mm).
+ * Badan TIDAK PERNAH emissive/menyala — sensor asli tidak berpendar;
+ * suhu dibaca dari panel gizmo & LiveBadge, bukan dari warna badan.
  * Seret badan ke atas/bawah untuk mengubah suhu (ke atas = lebih panas).
- * Rona emissive badan bergeser ke merah mengikuti suhu sebagai petunjuk.
  */
 export const Lm35Render3D: ComponentType<ComponentRenderProps> = ({ instance, onInteract }) => {
   const tempC = tempCOf(instance);
   const selected = useCircuitStore((s) => s.selectedInstanceId === instance.id);
   const setDragging3D = useCircuitStore((s) => s.setDragging3D);
+  const geo = useMemo(() => getTo92Geometries(LM35_TO92), []);
+  const faceTexture = useMemo(
+    () =>
+      getTo92FaceTexture('to92-lm35dz', [
+        { text: 'LM35', px: 180 },
+        { text: 'DZ', px: 120 },
+      ]),
+    [],
+  );
 
   const handlePointerDown = (e: ThreeEvent<PointerEvent>) => {
     e.stopPropagation();
@@ -81,34 +74,43 @@ export const Lm35Render3D: ComponentType<ComponentRenderProps> = ({ instance, on
 
   return (
     <group position={instance.position} rotation={[0, instance.rotation, 0]}>
-      {/* Tiga kaki metalik menuju pin elektrik */}
-      {LEG_Z.map((z) => (
-        <mesh key={`leg-${z}`} position={[0, 0.05, z]} castShadow>
-          <cylinderGeometry args={[0.09, 0.09, 1.9, 8]} />
-          <meshStandardMaterial {...METAL} />
+      {/* Tiga kaki pipih menuju pin elektrik VCC-OUT-GND */}
+      {geo.leads.map((lead, i) => (
+        <mesh key={`lead-${i}`} geometry={lead} dispose={null} castShadow>
+          <meshStandardMaterial {...TO92_LEAD_MATERIAL} />
         </mesh>
       ))}
 
-      {/* Badan setengah silinder TO-92 (diameter sepanjang Z) */}
-      <mesh position={[0, 2.15, 0]} castShadow onPointerDown={handlePointerDown}>
-        <cylinderGeometry args={[1.05, 1.05, 2.5, 24, 1, false, 0, Math.PI]} />
-        <meshStandardMaterial
-          color="#1b1d22"
-          roughness={0.55}
-          emissive={tempEmissiveColor(tempC)}
-          emissiveIntensity={Math.max(0, (tempC / TEMP_MAX_C) * 0.25)}
-        />
+      {/* Rok pangkal + badan TO-92 (tanpa emissive dalam keadaan apa pun) */}
+      <mesh geometry={geo.flange} dispose={null} castShadow onPointerDown={handlePointerDown}>
+        <meshPhysicalMaterial {...TO92_BODY_MATERIAL} />
       </mesh>
-      {/* Pelat penutup sisi datar (-X) */}
-      <mesh position={[0, 2.15, 0]} castShadow onPointerDown={handlePointerDown}>
-        <boxGeometry args={[0.06, 2.5, 2.1]} />
-        <meshStandardMaterial color="#1b1d22" roughness={0.55} />
+      <mesh geometry={geo.body} dispose={null} castShadow onPointerDown={handlePointerDown}>
+        <meshPhysicalMaterial {...TO92_BODY_MATERIAL} />
+      </mesh>
+
+      {/* Cetakan tipe di muka datar (−X) */}
+      <mesh
+        position={[geo.face.x, geo.face.centerY, 0]}
+        rotation={[0, -Math.PI / 2, 0]}
+        dispose={null}
+        onPointerDown={handlePointerDown}
+      >
+        <planeGeometry args={[geo.face.width, geo.face.height]} />
+        <meshStandardMaterial
+          map={faceTexture}
+          transparent
+          roughness={0.55}
+          metalness={0}
+          polygonOffset
+          polygonOffsetFactor={-1}
+        />
       </mesh>
 
       {/* Panel gizmo suhu saat sensor terpilih */}
       {selected && (
         <SensorGizmo3D
-          position={[0, 4.6, 0]}
+          position={[0, 4.0, 0]}
           label="Suhu"
           value={Math.round(tempC)}
           min={TEMP_MIN_C}

@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type ChangeEvent } from 'react';
 import Workbench from '../features/stage3d/Workbench';
 import { getCameraPreset, type CameraPresetId } from './cameraPresets';
 import AutopsyCard from './AutopsyCard';
+import InspectorPopover from './InspectorPopover';
 import RightDock from './RightDock';
 import { initSim } from '../features/simulation/worker/bridge';
 import {
@@ -193,8 +194,6 @@ export default function App() {
   const pendingFrom = useCircuitStore((s) => s.pendingFrom);
   const selectedInstanceId = useCircuitStore((s) => s.selectedInstanceId);
   const selectedWireId = useCircuitStore((s) => s.selectedWireId);
-  const removeInstance = useCircuitStore((s) => s.removeInstance);
-  const replaceInstance = useCircuitStore((s) => s.replaceInstance);
   const removeWire = useCircuitStore((s) => s.removeWire);
   const loadDemo = useCircuitStore((s) => s.loadDemo);
   const clearAll = useCircuitStore((s) => s.clearAll);
@@ -758,47 +757,10 @@ export default function App() {
               </div>
             )}
 
-            {/* Popover inspector komponen (isi sama seperti panel seleksi lama) */}
-            {selectedInstance && (
-              <div
-                className={`hud-pop pointer-events-auto w-full rounded-2xl border border-border-subtle bg-panel/95 p-3 ${capsuleShadow}`}
-              >
-                <h3 className="text-[13px] font-semibold text-zinc-100">
-                  {getComponentPlugin(selectedInstance.type)?.name ?? selectedInstance.type}
-                </h3>
-                <p className="mt-1 text-xs text-zinc-400">
-                  Status:{' '}
-                  {selectedInstance.simState.isDamaged ? (
-                    <span className="font-semibold text-accent-danger">Rusak</span>
-                  ) : (
-                    <span className="text-accent-run">Normal</span>
-                  )}
-                </p>
-                {Object.entries(selectedInstance.simState.branchCurrents).map(([key, amps]) => (
-                  <p key={key} className="mt-0.5 font-mono text-[11px] text-zinc-400">
-                    Arus {key}: {(amps * 1000).toFixed(1)} mA
-                  </p>
-                ))}
-                <div className="mt-2.5 flex gap-2">
-                  {selectedInstance.simState.isDamaged && (
-                    <button
-                      type="button"
-                      onClick={() => replaceInstance(selectedInstance.id)}
-                      className="h-7 flex-1 rounded-lg bg-accent-run text-xs font-semibold text-[#032117] transition-transform active:scale-[0.97]"
-                    >
-                      Ganti Komponen
-                    </button>
-                  )}
-                  <button
-                    type="button"
-                    onClick={() => removeInstance(selectedInstance.id)}
-                    className="h-7 flex-1 rounded-lg border border-border-interactive text-xs font-medium text-zinc-200 transition-colors hover:border-accent-danger hover:text-red-200 active:scale-[0.97]"
-                  >
-                    Hapus Komponen
-                  </button>
-                </div>
-              </div>
-            )}
+            {/* Popover inspector komponen — komponen terpisah dengan
+                langganan store presisi tampil; render ulang App tidak
+                mengecat ulangnya (lihat InspectorPopover.tsx). */}
+            <InspectorPopover />
 
             {/* Popover inspector kabel */}
             {selectedWire && (

@@ -3,6 +3,7 @@ import * as THREE from 'three';
 import gsap from 'gsap';
 import { Canvas, useThree, type ThreeEvent } from '@react-three/fiber';
 import { ContactShadows, OrbitControls } from '@react-three/drei';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import type { OrbitControls as OrbitControlsImpl } from 'three-stdlib';
 import Breadboard from './Breadboard';
 import Smoke from './effects/Smoke';
@@ -258,6 +259,46 @@ function CameraRig({ resetSignal }: { resetSignal: number }) {
   return null;
 }
 
+/**
+ * Environment map prosedural (SPESIFIKASI-GAYA-3D §2.1 — akar masalah #1
+ * inventaris): RoomEnvironment three.js di-render SEKALI ke PMREM render
+ * target lokal, TANPA fetch file HDR/aset eksternal apa pun. Tanpanya
+ * semua material metalness tinggi & clearcoat (kaki komponen, kaleng
+ * motor, epoxy LED, PCB) tidak punya apa-apa untuk dipantulkan selain
+ * dua lampu → logam datar & plastik "render mentah".
+ * environmentIntensity 0,6 (tengah rentang riset 0,55–0,75; titik tengah
+ * konservatif agar rig lampu & ContactShadows yang ada tidak berubah
+ * karakter). Cleanup memulihkan environment sebelumnya dan me-dispose
+ * render target, PMREM generator, serta geometri/material scene ruangan.
+ */
+function SceneEnvironment() {
+  const gl = useThree((s) => s.gl);
+  const scene = useThree((s) => s.scene);
+  useEffect(() => {
+    const pmrem = new THREE.PMREMGenerator(gl);
+    const room = new RoomEnvironment();
+    const renderTarget = pmrem.fromScene(room, 0.04);
+    const previousEnvironment = scene.environment;
+    const previousIntensity = scene.environmentIntensity;
+    scene.environment = renderTarget.texture;
+    scene.environmentIntensity = 0.6;
+    return () => {
+      scene.environment = previousEnvironment;
+      scene.environmentIntensity = previousIntensity;
+      renderTarget.dispose();
+      pmrem.dispose();
+      room.traverse((obj) => {
+        const mesh = obj as THREE.Mesh;
+        if (mesh.geometry) mesh.geometry.dispose();
+        const material = mesh.material as THREE.Material | THREE.Material[] | undefined;
+        if (Array.isArray(material)) material.forEach((m) => m.dispose());
+        else if (material) material.dispose();
+      });
+    };
+  }, [gl, scene]);
+  return null;
+}
+
 /** Bidang interaksi tak terlihat di atas breadboard / board (snapping matematis). */
 function InteractionPlane({
   kind,
@@ -480,6 +521,7 @@ export default function Workbench({ resetSignal }: { resetSignal: number }) {
     >
       <color attach="background" args={['#10131a']} />
       <fog attach="fog" args={['#10131a', 190, 380]} />
+      <SceneEnvironment />
 
       <ambientLight intensity={0.55} />
       <directionalLight

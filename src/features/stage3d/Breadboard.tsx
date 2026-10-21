@@ -1,6 +1,7 @@
 import { useLayoutEffect, useMemo, useRef } from 'react';
 import * as THREE from 'three';
 import { RoundedBox } from '@react-three/drei';
+import { MATERIAL_PROPS } from './materials3d';
 
 interface BreadboardProps {
   position?: [number, number, number];
@@ -155,7 +156,8 @@ export default function Breadboard({ position = [0, 0, 0] }: BreadboardProps) {
 
   return (
     <group position={position}>
-      {/* Bodi putih gading */}
+      {/* Bodi putih gading — material disamakan ke kelas breadboardKrem
+          pustaka bersama (SPESIFIKASI §3); warna token #f2ede2 sama */}
       <RoundedBox
         args={[22, BREADBOARD_TOP_Y, 66]}
         radius={0.35}
@@ -164,13 +166,21 @@ export default function Breadboard({ position = [0, 0, 0] }: BreadboardProps) {
         receiveShadow
         castShadow
       >
-        <meshStandardMaterial color="#f2ede2" roughness={0.55} />
+        <meshPhysicalMaterial {...MATERIAL_PROPS.breadboardKrem} />
       </RoundedBox>
 
       {/* Parit tengah pemisah dua blok terminal */}
       <mesh position={[0, 2.99, 0]}>
         <boxGeometry args={[1.8, 0.06, 63]} />
         <meshStandardMaterial color="#ddd6c4" roughness={0.8} />
+      </mesh>
+
+      {/* Takik penanda di tengah parit (seperti MB-102 asli): strip
+          sedikit lebih gelap melintang di tengah kanal — mesh terpisah,
+          tidak menyentuh geometri/instancing lubang sama sekali */}
+      <mesh position={[0, 3.03, 0]}>
+        <boxGeometry args={[1.8, 0.02, 0.5]} />
+        <meshStandardMaterial color="#c9c0a8" roughness={0.85} />
       </mesh>
 
       {/* Cetakan permukaan (angka baris, huruf kolom, label rel, merek) —

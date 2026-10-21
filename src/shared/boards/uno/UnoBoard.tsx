@@ -1,6 +1,12 @@
-import { useLayoutEffect, useMemo, useRef } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef } from 'react';
 import * as THREE from 'three';
 import { RoundedBox } from '@react-three/drei';
+import {
+  COLOR_TOKENS,
+  MATERIAL_PROPS,
+  createMaterial3D,
+} from '../../../features/stage3d/materials3d';
+import { createLabelTexture } from '../../../features/stage3d/labelTexture';
 
 interface UnoBoardProps {
   position?: [number, number, number];
@@ -82,6 +88,12 @@ function createSilkscreenTexture(): THREE.CanvasTexture {
   ctx.fillText('TX', 880, 84);
   ctx.fillText('RX', 940, 84);
 
+  // Label "ON" untuk LED daya di dekat jack barrel (LED 3D di [−8.6, 8.35];
+  // teks ditaruh tepat ke arah tengah board dari LED-nya).
+  ctx.font = '600 21px "JetBrains Mono", monospace';
+  const [onX, onY] = toPx(-8.6, 7.5);
+  ctx.fillText('ON', onX, onY);
+
   // Dekorasi: lingkaran logo + garis jalur
   ctx.lineWidth = 5;
   ctx.beginPath();
@@ -104,6 +116,68 @@ function createSilkscreenTexture(): THREE.CanvasTexture {
   return texture;
 }
 
+/**
+ * Cetakan muka atas DIP ATmega328P via helper label resmi: titik pin-1
+ * di ujung takik + teks tipe seperti ukiran laser aslinya (abu terang
+ * di atas hitam #1B1B1F). Kanvas memetakan seluruh muka atas chip;
+ * sumbu x kanvas = sumbu x chip (ujung takik di kiri / −x).
+ */
+function createChipTopTexture(): THREE.CanvasTexture {
+  return createLabelTexture(
+    (ctx, width, height) => {
+      ctx.clearRect(0, 0, width, height);
+      const ink = 'rgba(216,220,226,0.92)';
+      ctx.fillStyle = ink;
+      // Titik pin-1: lingkaran kecil dekat ujung takik (−x)
+      ctx.beginPath();
+      ctx.arc(width * 0.1, height / 2, height * 0.13, 0, Math.PI * 2);
+      ctx.fill();
+      // Teks tipe, dibaca sepanjang sumbu chip
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.font = `600 ${Math.round(height * 0.2)}px Arial, sans-serif`;
+      ctx.fillText('ATMEL', width * 0.56, height * 0.26);
+      ctx.font = `700 ${Math.round(height * 0.34)}px Arial, sans-serif`;
+      ctx.fillText('ATmega328P-PU', width * 0.56, height * 0.58);
+      ctx.font = `500 ${Math.round(height * 0.16)}px Arial, sans-serif`;
+      ctx.fillText('2341', width * 0.56, height * 0.84);
+    },
+    { width: 1024, height: 256 },
+  );
+}
+
+/**
+ * Badan DIP-28 sebagai extrude dari outline tampak atas: persegi dengan
+ * TAKIK setengah lingkaran sungguhan di ujung pin-1 (−x) + bevel halus
+ * di semua tepi (SPESIFIKASI §2.3), menggantikan box polos lama.
+ */
+function createDipBodyGeometry(): THREE.ExtrudeGeometry {
+  const L = 6; // setengah panjang (total 12)
+  const W = 1.4; // setengah lebar (total 2.8)
+  const R = 0.55; // radius takik
+  const shape = new THREE.Shape();
+  shape.moveTo(-L, -W);
+  shape.lineTo(L, -W);
+  shape.lineTo(L, W);
+  shape.lineTo(-L, W);
+  shape.lineTo(-L, R);
+  // Busur menggigit ke DALAM badan (lewat titik (−L+R, 0))
+  shape.absarc(-L, 0, R, Math.PI / 2, Math.PI * 1.5, true);
+  shape.lineTo(-L, -W);
+  const geometry = new THREE.ExtrudeGeometry(shape, {
+    depth: 0.7,
+    bevelEnabled: true,
+    bevelThickness: 0.05,
+    bevelSize: 0.05,
+    bevelSegments: 2,
+    steps: 1,
+    curveSegments: 24,
+  });
+  // Shape XY (x = panjang chip, y = lebar) → alas XZ, extrude → +y
+  geometry.rotateX(-Math.PI / 2);
+  return geometry;
+}
+
 /** Posisi pin header betina: digital (atas), daya + analog (bawah). */
 function buildHeaderPositions(): Array<[number, number, number]> {
   const positions: Array<[number, number, number]> = [];
@@ -122,17 +196,24 @@ export default function UnoBoard({ position = [0, 0, 0] }: UnoBoardProps) {
   const headersRef = useRef<THREE.InstancedMesh>(null);
   const holesRef = useRef<THREE.InstancedMesh>(null);
   const silkscreen = useMemo(createSilkscreenTexture, []);
+  const chipTop = useMemo(createChipTopTexture, []);
+  const dipGeometry = useMemo(createDipBodyGeometry, []);
   const headerPositions = useMemo(buildHeaderPositions, []);
   const headerGeometry = useMemo(() => new THREE.BoxGeometry(0.9, 1.1, 0.9), []);
-  const headerMaterial = useMemo(
-    () => new THREE.MeshStandardMaterial({ color: '#101014', roughness: 0.6 }),
-    [],
-  );
+  const headerMaterial = useMemo(() => createMaterial3D('plastikHitam'), []);
   // Lubang soket: cakram gelap kecil di permukaan atas tiap header betina
   const holeGeometry = useMemo(() => new THREE.CylinderGeometry(0.3, 0.3, 0.08, 12), []);
   const holeMaterial = useMemo(
-    () => new THREE.MeshStandardMaterial({ color: '#050506', roughness: 0.85 }),
+    () => createMaterial3D('plastikHitam', { color: '#050506', roughness: 0.85 }),
     [],
+  );
+
+  useEffect(
+    () => () => {
+      chipTop.dispose();
+      dipGeometry.dispose();
+    },
+    [chipTop, dipGeometry],
   );
 
   useLayoutEffect(() => {
@@ -165,7 +246,7 @@ export default function UnoBoard({ position = [0, 0, 0] }: UnoBoardProps) {
         castShadow
         receiveShadow
       >
-        <meshPhysicalMaterial color="#008184" clearcoat={0.6} roughness={0.3} />
+        <meshPhysicalMaterial {...MATERIAL_PROPS.pcb} color={COLOR_TOKENS.unoTeal} />
       </RoundedBox>
 
       {/* Silkscreen di permukaan PCB */}
@@ -187,51 +268,136 @@ export default function UnoBoard({ position = [0, 0, 0] }: UnoBoardProps) {
         args={[holeGeometry, holeMaterial, headerPositions.length]}
       />
 
-      {/* Port USB-B (perak) di tepi kiri */}
-      <mesh position={[-12.2, 1.9, -5]} castShadow>
-        <boxGeometry args={[4.6, 3.2, 5]} />
-        <meshStandardMaterial color="#c9ccd4" metalness={0.85} roughness={0.3} />
+      {/* Port USB-B (perak) di tepi kiri: cangkang + bibir gulung di muka
+          luar, bukaan gelap dengan lidah konektor, dua lubang pengait
+          di permukaan atas — seperti konektor USB-B asli */}
+      <group position={[-12.2, 1.9, -5]}>
+        <mesh castShadow>
+          <boxGeometry args={[4.6, 3.2, 5]} />
+          <meshPhysicalMaterial {...MATERIAL_PROPS.metalPin} />
+        </mesh>
+        {/* Bibir/flensa gulung di muka luar (−x) */}
+        <mesh position={[-2.42, 0, 0]} castShadow>
+          <boxGeometry args={[0.4, 3.5, 5.3]} />
+          <meshPhysicalMaterial {...MATERIAL_PROPS.metalPin} />
+        </mesh>
+        {/* Bukaan konektor: pelat gelap + lidah plastik di tengahnya */}
+        <mesh position={[-2.64, 0, 0]}>
+          <boxGeometry args={[0.06, 2, 3.8]} />
+          <meshPhysicalMaterial
+            {...MATERIAL_PROPS.plastikHitam}
+            color="#0a0a0c"
+            roughness={0.9}
+          />
+        </mesh>
+        <mesh position={[-2.68, 0, 0]}>
+          <boxGeometry args={[0.06, 0.6, 3]} />
+          <meshPhysicalMaterial {...MATERIAL_PROPS.plastikHitam} color="#3a3d45" />
+        </mesh>
+        {/* Dua lubang pengait pegas di atas cangkang */}
+        {[-1.3, 1.3].map((dz) => (
+          <mesh key={dz} position={[0, 1.62, dz]}>
+            <boxGeometry args={[1, 0.1, 1]} />
+            <meshPhysicalMaterial
+              {...MATERIAL_PROPS.plastikHitam}
+              color="#26282e"
+              roughness={0.8}
+            />
+          </mesh>
+        ))}
+      </group>
+
+      {/* Jack barrel DC: housing kotak hitam di tepi board dengan lubang
+          menghadap SAMPING (keluar board, −x) seperti aslinya — bukan
+          silinder berdiri berlubang di atas seperti versi lama */}
+      <group position={[-11.9, 0, 7]}>
+        <RoundedBox
+          args={[3, 2.8, 3.8]}
+          radius={0.25}
+          smoothness={4}
+          position={[0, PCB_TOP_Y + 1.4, 0]}
+          castShadow
+        >
+          <meshPhysicalMaterial {...MATERIAL_PROPS.plastikHitam} />
+        </RoundedBox>
+        {/* Bezel cincin di muka luar */}
+        <mesh position={[-1.56, PCB_TOP_Y + 1.4, 0]} rotation={[0, 0, Math.PI / 2]}>
+          <cylinderGeometry args={[1, 1, 0.3, 24]} />
+          <meshPhysicalMaterial {...MATERIAL_PROPS.plastikHitam} color="#26282e" />
+        </mesh>
+        {/* Lubang jack gelap */}
+        <mesh position={[-1.6, PCB_TOP_Y + 1.4, 0]} rotation={[0, 0, Math.PI / 2]}>
+          <cylinderGeometry args={[0.78, 0.78, 0.34, 24]} />
+          <meshPhysicalMaterial
+            {...MATERIAL_PROPS.plastikHitam}
+            color="#060607"
+            roughness={0.95}
+          />
+        </mesh>
+        {/* Pin tengah konduktor di dalam lubang */}
+        <mesh position={[-1.62, PCB_TOP_Y + 1.4, 0]} rotation={[0, 0, Math.PI / 2]}>
+          <cylinderGeometry args={[0.16, 0.16, 0.5, 12]} />
+          <meshPhysicalMaterial {...MATERIAL_PROPS.metalPin} />
+        </mesh>
+      </group>
+
+      {/* LED daya hijau kecil di dekat jack, berlabel "ON" di silkscreen */}
+      <mesh position={[-8.6, PCB_TOP_Y + 0.13, 8.35]}>
+        <boxGeometry args={[0.55, 0.26, 0.55]} />
+        <meshStandardMaterial
+          color="#0d3a1c"
+          emissive={COLOR_TOKENS.ledGreen}
+          emissiveIntensity={1.6}
+          roughness={0.4}
+        />
       </mesh>
 
-      {/* Jack barrel DC (silinder hitam) */}
-      <mesh position={[-11.4, 1.6, 6.8]} castShadow>
-        <cylinderGeometry args={[2.1, 2.1, 3.2, 24]} />
-        <meshStandardMaterial color="#17181c" roughness={0.5} />
+      {/* Soket DIP di bawah chip ATmega */}
+      <mesh position={[3.5, PCB_TOP_Y + 0.13, 0]} castShadow>
+        <boxGeometry args={[12.5, 0.26, 3.3]} />
+        <meshPhysicalMaterial {...MATERIAL_PROPS.plastikHitam} color="#101014" />
       </mesh>
 
-      {/* Lubang tengah jack: silinder gelap kecil sedikit masuk ke mulut
-          jack (puncak jack y=3.2) agar terlihat berlubang, bukan solid */}
-      <mesh position={[-11.4, 3.05, 6.8]}>
-        <cylinderGeometry args={[0.55, 0.55, 0.5, 20]} />
-        <meshStandardMaterial color="#0a0a0c" roughness={0.9} />
+      {/* Chip ATmega328P: badan extrude bertakik + cetakan muka atas */}
+      <mesh geometry={dipGeometry} position={[3.5, PCB_TOP_Y + 0.26, 0]} castShadow>
+        <meshPhysicalMaterial {...MATERIAL_PROPS.plastikHitam} />
       </mesh>
-
-      {/* Chip ATmega328P */}
-      <mesh position={[3.5, 1, 0]} castShadow>
-        <boxGeometry args={[12, 0.8, 2.8]} />
-        <meshStandardMaterial color="#1b1b1f" roughness={0.45} />
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[3.5, PCB_TOP_Y + 1.02, 0]}>
+        <planeGeometry args={[11.6, 2.5]} />
+        <meshBasicMaterial map={chipTop} transparent depthWrite={false} />
       </mesh>
 
       {/* Kristal osilator (perak kecil) */}
       <mesh position={[-3.4, 0.95, 3.4]} castShadow>
         <boxGeometry args={[2, 0.7, 1.4]} />
-        <meshStandardMaterial color="#c9ccd4" metalness={0.85} roughness={0.3} />
+        <meshPhysicalMaterial {...MATERIAL_PROPS.metalPin} />
       </mesh>
 
-      {/* Dua kapasitor elektrolit */}
-      <mesh position={[-9.4, 1.5, 1.6]} castShadow>
-        <cylinderGeometry args={[1.1, 1.1, 2.4, 20]} />
-        <meshStandardMaterial color="#23252b" roughness={0.4} />
-      </mesh>
-      <mesh position={[-9.4, 1.5, 4.6]} castShadow>
-        <cylinderGeometry args={[1.1, 1.1, 2.4, 20]} />
-        <meshStandardMaterial color="#23252b" roughness={0.4} />
-      </mesh>
+      {/* Dua kapasitor elektrolit + tutup aluminium berskor */}
+      {[
+        [-9.4, 1.6],
+        [-9.4, 4.6],
+      ].map(([cx, cz]) => (
+        <group key={cz} position={[cx, 0, cz]}>
+          <mesh position={[0, 1.5, 0]} castShadow>
+            <cylinderGeometry args={[1.1, 1.1, 2.4, 24]} />
+            <meshPhysicalMaterial {...MATERIAL_PROPS.plastikHitam} color="#23252b" />
+          </mesh>
+          <mesh position={[0, 2.72, 0]}>
+            <cylinderGeometry args={[1.02, 1.02, 0.08, 24]} />
+            <meshPhysicalMaterial {...MATERIAL_PROPS.canAluminium} />
+          </mesh>
+        </group>
+      ))}
 
-      {/* Tombol reset */}
+      {/* Tombol reset: frame + plunger bundar merah di tengahnya */}
       <mesh position={[-11.8, 1.1, -9]} castShadow>
         <boxGeometry args={[2, 1, 2]} />
-        <meshStandardMaterial color="#3a3d45" roughness={0.5} />
+        <meshPhysicalMaterial {...MATERIAL_PROPS.plastikHitam} />
+      </mesh>
+      <mesh position={[-11.8, 1.8, -9]} castShadow>
+        <cylinderGeometry args={[0.48, 0.48, 0.4, 20]} />
+        <meshPhysicalMaterial {...MATERIAL_PROPS.absWarna} color={COLOR_TOKENS.cableRed} />
       </mesh>
     </group>
   );
