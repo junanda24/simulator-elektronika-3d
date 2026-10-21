@@ -10,23 +10,30 @@ import {
 import { createTextLabelTexture } from '../../../../features/stage3d/labelTexture';
 
 /**
- * Warna segmen saat mati: abu pucat kemerahan seperti segmen LED asli di
- * balik filter merah gelap (moodboard B12: "segmen terlihat samar saat
- * mati"). Diturunkan dari token abu gelang resistor + token merah LED —
- * bukan hex liar (§4: warna diturunkan, bukan dikarang).
+ * Warna segmen saat mati: abu pucat NETRAL seperti segmen LED asli yang
+ * tak menyala di muka display gelap 5611BH (moodboard B12: "segmen
+ * terlihat samar saat mati") — diturunkan dari token abu gelang
+ * resistor ditarik ke putih gelang 9, TANPA rona merah (perintah user
+ * 2026-10-21: badan jangan merah agar angka menyala terbaca; bukan hex
+ * liar — §4: warna diturunkan, bukan dikarang). Hasil ≈ #b2b4b9.
  */
 const SEGMENT_OFF = `#${new THREE.Color(COLOR_TOKENS.resistorBands[8])
-  .lerp(new THREE.Color(COLOR_TOKENS.ledRed), 0.3)
+  .lerp(new THREE.Color(COLOR_TOKENS.resistorBands[9]), 0.3)
   .getHexString()}`;
 /** Warna pendaran segmen saat menyala — token fungsional warna LED. */
 const SEGMENT_ON = COLOR_TOKENS.ledRed;
-/** Muka display: hitam plastik token yang ditarik ke merah LED (filter gelap). */
+/**
+ * Muka display: arang netral pekat seperti muka asli 5611BH — plastik
+ * hitam token digelapkan ke hitam gelang 0, hasil ≈ #1b1b21 (dulu
+ * ditarik ke merah LED → #972227, membuat seluruh modul terbaca
+ * gumpalan merah dan angka menyala tenggelam; dikoreksi 2026-10-21).
+ */
 const FACE_COLOR = `#${new THREE.Color(COLOR_TOKENS.plastikHitam)
-  .lerp(new THREE.Color(COLOR_TOKENS.ledRed), 0.3)
+  .lerp(new THREE.Color(COLOR_TOKENS.resistorBands[0]), 0.3)
   .getHexString()}`;
-/** Tinta filter kaca di atas segmen: merah LED digelapkan. */
-const FILTER_TINT = `#${new THREE.Color(COLOR_TOKENS.ledRed)
-  .lerp(new THREE.Color(COLOR_TOKENS.plastikHitam), 0.55)
+/** Tinta filter kaca di atas segmen: asap arang netral, hasil ≈ #1f1f25. */
+const FILTER_TINT = `#${new THREE.Color(COLOR_TOKENS.plastikHitam)
+  .lerp(new THREE.Color(COLOR_TOKENS.resistorBands[0]), 0.15)
   .getHexString()}`;
 
 /** Kemiringan italic khas digit display LED (geser x per satuan z). */
@@ -98,7 +105,7 @@ const SEGMENT_GEOMETRIES: Record<string, THREE.BufferGeometry> = Object.fromEntr
 
 /**
  * Display 7-segment 0,56" prosedural (Gelombang 2 gaya 3D): lempeng
- * epoxy berbevel dengan muka filter merah gelap mengilap, 7 segmen
+ * epoxy berbevel dengan muka arang netral pekat + filter asap gelap, 7 segmen
  * berujung heksagonal + slant digit di balik lapisan filter, titik
  * desimal, dan cetakan tipe "5611BH" (katoda umum) di tepi bawah muka
  * seperti modul asli. Emissive tiap segmen sebanding arus cabangnya
@@ -113,8 +120,8 @@ export const SevenSegmentRender3D: ComponentType<ComponentRenderProps> = ({ inst
   // Pecahan arus segmen terkuat (20 mA = 1) — menggerakkan cahaya titik.
   const peakFrac = Math.max(0, ...SEGMENTS.map((s) => intensityOf(s.key)), intensityOf('dp'));
 
-  // Lapisan filter kaca merah gelap di atas segmen (per instance karena
-  // material fisik sendiri; dibuang saat unmount).
+  // Lapisan filter kaca asap arang netral di atas segmen (per instance
+  // karena material fisik sendiri; dibuang saat unmount).
   const filterMaterial = useMemo(
     () => createMaterial3D('kaca', { color: FILTER_TINT, opacity: 0.35, roughness: 0.25 }),
     [],
@@ -128,7 +135,7 @@ export const SevenSegmentRender3D: ComponentType<ComponentRenderProps> = ({ inst
         width: 512,
         height: 160,
         lines: [{ text: '5611BH', fontSize: 96 }],
-        color: '#d9cfcf',
+        color: '#e3e4e8',
       }),
     [],
   );
@@ -144,7 +151,7 @@ export const SevenSegmentRender3D: ComponentType<ComponentRenderProps> = ({ inst
         </mesh>
       ))}
 
-      {/* Lempeng display epoxy membulat, muka filter merah gelap */}
+      {/* Lempeng display epoxy membulat, muka arang netral pekat */}
       <RoundedBox args={[3.2, 0.8, 8.8]} radius={0.1} smoothness={4} position={[0, 0.45, 0]} castShadow>
         <meshPhysicalMaterial {...MATERIAL_PROPS.plastikHitam} color={FACE_COLOR} />
       </RoundedBox>
@@ -172,7 +179,7 @@ export const SevenSegmentRender3D: ComponentType<ComponentRenderProps> = ({ inst
         />
       </mesh>
 
-      {/* Lapisan filter kaca merah gelap mengilap menutup muka digit */}
+      {/* Lapisan filter kaca asap arang netral menutup muka digit */}
       <RoundedBox args={[3.2, 0.04, 8.8]} radius={0.02} smoothness={2} position={[0, 0.99, 0]}>
         <primitive object={filterMaterial} attach="material" />
       </RoundedBox>

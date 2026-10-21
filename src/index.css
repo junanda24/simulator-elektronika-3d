@@ -286,6 +286,150 @@ body,
   }
 }
 
+/* Bagian lipat inspektor (Detail pengukuran): tinggi dianimasikan lewat
+   grid-template-rows 0fr->1fr + opacity, 200ms kurva tanda tangan proyek
+   — satu keluarga dengan hud-pop. visibility dialihkan di ujung transisi
+   tutup agar isi terlipat tidak terbaca pembaca layar / tidak tertab.
+   Di bawah prefers-reduced-motion, aturan global transition-duration
+   0.01ms di blok reduce membuat lipatan ini nyaris instan. */
+.hud-collapse {
+  display: grid;
+  grid-template-rows: 0fr;
+  opacity: 0;
+  visibility: hidden;
+  transition:
+    grid-template-rows 200ms cubic-bezier(0.22, 1, 0.36, 1),
+    opacity 200ms cubic-bezier(0.22, 1, 0.36, 1),
+    visibility 0s 200ms;
+}
+.hud-collapse[data-open='true'] {
+  grid-template-rows: 1fr;
+  opacity: 1;
+  visibility: visible;
+  transition:
+    grid-template-rows 200ms cubic-bezier(0.22, 1, 0.36, 1),
+    opacity 200ms cubic-bezier(0.22, 1, 0.36, 1),
+    visibility 0s 0s;
+}
+.hud-collapse > div {
+  overflow: hidden;
+  min-height: 0;
+}
+.hud-collapse-toggle svg {
+  transition: transform 200ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+.hud-collapse-toggle[aria-expanded='true'] svg {
+  transform: rotate(180deg);
+}
+
+/* ===== Panel samping sembunyi/tampil (permintaan user 2026-10-21) =====
+   Panel katalog (kiri) & dock editor (kanan) meluncur ke tepi layar
+   320ms kurva tanda tangan proyek; opacity memudar lebih dulu saat
+   menyembunyikan (180ms) dan menyusul masuk saat menampilkan (jeda
+   50ms) agar geraknya berjenjang, bukan blok kaku. visibility
+   dialihkan di ujung transisi tutup — panel yang sembunyi mati total:
+   tanpa klik hantu, tanpa fokus keyboard, tanpa terbaca AT.
+   Inset kamera (setViewOffset) di-tween CameraRig dengan angka &
+   kurva yang sama persis, jadi subjek 3D meluncur serentak. */
+.hud-panel-slide-left,
+.hud-panel-slide-right {
+  will-change: transform;
+  transition:
+    transform 320ms cubic-bezier(0.22, 1, 0.36, 1),
+    opacity 300ms cubic-bezier(0.22, 1, 0.36, 1) 50ms,
+    visibility 0s 0s;
+}
+.hud-panel-slide-left[data-hidden='true'],
+.hud-panel-slide-right[data-hidden='true'] {
+  opacity: 0;
+  pointer-events: none;
+  visibility: hidden;
+  transition:
+    transform 320ms cubic-bezier(0.22, 1, 0.36, 1),
+    opacity 180ms cubic-bezier(0.22, 1, 0.36, 1),
+    visibility 0s 320ms;
+}
+.hud-panel-slide-left[data-hidden='true'] {
+  transform: translateX(calc(-100% - 16px));
+}
+.hud-panel-slide-right[data-hidden='true'] {
+  transform: translateX(calc(100% + 16px));
+}
+
+/* Tab sembunyi/tampil: satu tombol per sisi yang bermetamorfosis —
+   menempel di tepi panel (tengah tombol = tepi panel) saat tampil,
+   merapat jadi tab flush di tepi layar saat panel sembunyi. Posisi,
+   radius, dan putaran chevron semuanya bertransisi 320ms kurva yang
+   sama. Tombol selebar 28px (w-7) — lebar yang sama dengan sisa inset
+   kamera saat panel sembunyi (PANEL_TAB_WIDTH di viewportInsets). */
+.hud-panel-toggle {
+  transition:
+    left 320ms cubic-bezier(0.22, 1, 0.36, 1),
+    right 320ms cubic-bezier(0.22, 1, 0.36, 1),
+    border-radius 320ms cubic-bezier(0.22, 1, 0.36, 1),
+    color 150ms ease,
+    border-color 150ms ease,
+    background-color 150ms ease;
+}
+.hud-panel-toggle-left {
+  /* Panel: left-3 (12px) + w-[264px] → tepi kanan 276px; tombol 28px
+     berpusat di tepi → left 262px. */
+  left: 262px;
+  border-radius: 9999px;
+}
+.hud-panel-toggle-left[data-open='false'] {
+  left: 0;
+  border-radius: 0 9999px 9999px 0;
+}
+@media (max-width: 1279px) {
+  /* Katalog sempit w-[224px] → tepi kanan 236px → left 222px. */
+  .hud-panel-toggle-left {
+    left: 222px;
+  }
+  .hud-panel-toggle-left[data-open='false'] {
+    left: 0;
+  }
+}
+.hud-panel-toggle-right {
+  /* Dock: right-3 (12px) + w-[380px] → tepi kiri 392px dari kanan;
+     tombol berpusat di tepi → right 378px. */
+  right: 378px;
+  border-radius: 9999px;
+}
+.hud-panel-toggle-right[data-open='false'] {
+  right: 0;
+  border-radius: 9999px 0 0 9999px;
+}
+/* Chevron ShellIcon menunjuk ke bawah; putar menuju arah gerak panel:
+   kiri tampil → tunjuk kiri (arah sembunyi), kiri sembunyi → tunjuk
+   kanan (arah tampil); kanan cerminannya. */
+.hud-toggle-chevron {
+  display: block;
+  transition: transform 320ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+.hud-panel-toggle-left[data-open='true'] .hud-toggle-chevron {
+  transform: rotate(90deg);
+}
+.hud-panel-toggle-left[data-open='false'] .hud-toggle-chevron {
+  transform: rotate(-90deg);
+}
+.hud-panel-toggle-right[data-open='true'] .hud-toggle-chevron {
+  transform: rotate(-90deg);
+}
+.hud-panel-toggle-right[data-open='false'] .hud-toggle-chevron {
+  transform: rotate(90deg);
+}
+
+/* Reduced motion: aturan global di bawah sudah memangkas semua durasi
+   transisi jadi 0,01ms; yang tersisa hanya jeda visibility 320ms pada
+   panel sembunyi — nolkan juga agar panel hilang seketika. */
+@media (prefers-reduced-motion: reduce) {
+  .hud-panel-slide-left[data-hidden='true'],
+  .hud-panel-slide-right[data-hidden='true'] {
+    transition-delay: 0s !important;
+  }
+}
+
 /* Kelas keluar — PALING AKHIR blok gerak agar selalu menang atas
    kelas entrada (specificity sama, urutan menentukan). Durasi keluar
    (150ms, kurva akselerasi) selalu lebih singkat dari entrada. */

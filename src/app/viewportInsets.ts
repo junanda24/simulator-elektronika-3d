@@ -39,23 +39,120 @@ export const VIEW_OFFSET_LEFT_NARROW = 248;
 export const VIEW_OFFSET_WIDE_BREAKPOINT = 1280;
 
 /**
- * Hitung sub-bingkai `setViewOffset` untuk ukuran kanvas tertentu:
- * rektangel bebas di antara katalog (kiri), dock kanan, kapsul atas,
- * dan dock bawah.
+ * Lebar tab tepi layar (tombol tampilkan-panel, w-7) yang tersisa saat
+ * panel disembunyikan. Inset sisi yang sembunyi = lebar tab + margin
+ * tepi 12px yang sama dengan panel melayang — dihitung dari geometri
+ * nyata, bukan angka bebas.
  */
-export function computeViewOffset(fullWidth: number, fullHeight: number): ViewOffsetRect {
-  const x = fullWidth >= VIEW_OFFSET_WIDE_BREAKPOINT
+export const PANEL_TAB_WIDTH = 28;
+/** Panel kiri sembunyi: hanya tab 28px di tepi kiri + margin 12px. */
+export const VIEW_OFFSET_LEFT_HIDDEN = PANEL_TAB_WIDTH + 12;
+/** Dock kanan sembunyi: hanya tab 28px di tepi kanan + margin 12px. */
+export const VIEW_OFFSET_RIGHT_HIDDEN = PANEL_TAB_WIDTH + 12;
+
+/** Keadaan tampil/sembunyi kedua panel samping. */
+export interface PanelVisibility {
+  left: boolean;
+  right: boolean;
+}
+
+/** Inset kiri (px) untuk lebar kanvas & keadaan panel katalog. */
+export function leftInsetFor(fullWidth: number, visible: boolean): number {
+  if (!visible) return VIEW_OFFSET_LEFT_HIDDEN;
+  return fullWidth >= VIEW_OFFSET_WIDE_BREAKPOINT
     ? VIEW_OFFSET_LEFT_WIDE
     : VIEW_OFFSET_LEFT_NARROW;
+}
+
+/** Inset kanan (px) untuk keadaan dock kanan. */
+export function rightInsetFor(visible: boolean): number {
+  return visible ? VIEW_OFFSET_RIGHT : VIEW_OFFSET_RIGHT_HIDDEN;
+}
+
+/** Rektangel bebas dari inset kiri/kanan eksplisit (dipakai tween kamera). */
+export function viewOffsetFromInsets(
+  fullWidth: number,
+  fullHeight: number,
+  left: number,
+  right: number,
+): ViewOffsetRect {
   return {
     fullWidth,
     fullHeight,
-    x,
+    x: left,
     y: VIEW_OFFSET_TOP,
-    width: fullWidth - x - VIEW_OFFSET_RIGHT,
+    width: fullWidth - left - right,
     height: fullHeight - VIEW_OFFSET_TOP - VIEW_OFFSET_BOTTOM,
   };
 }
+
+/**
+ * Hitung sub-bingkai `setViewOffset` untuk ukuran kanvas tertentu:
+ * rektangel bebas di antara katalog (kiri), dock kanan, kapsul atas,
+ * dan dock bawah. Tanpa argumen panel, kedua panel dianggap tampil
+ * (perilaku bawaan sejak layout Floating Studio).
+ */
+export function computeViewOffset(
+  fullWidth: number,
+  fullHeight: number,
+  panels: PanelVisibility = { left: true, right: true },
+): ViewOffsetRect {
+  return viewOffsetFromInsets(
+    fullWidth,
+    fullHeight,
+    leftInsetFor(fullWidth, panels.left),
+    rightInsetFor(panels.right),
+  );
+}
+
+/**
+ * Penilai kurva cubic-bezier CSS (solver Newton–Raphson + cadangan
+ * biseksi) — dipakai men-tween inset kamera dengan kurva yang PERSIS
+ * sama dengan transisi CSS panel: easeOutQuint proyek
+ * cubic-bezier(0.22, 1, 0.36, 1). Murni & dites unit.
+ */
+export function cubicBezierEasing(
+  x1: number,
+  y1: number,
+  x2: number,
+  y2: number,
+): (t: number) => number {
+  // Koefisien polinom kubik Bezier dengan titik ujung (0,0) & (1,1).
+  const cx = 3 * x1;
+  const bx = 3 * (x2 - x1) - cx;
+  const ax = 1 - cx - bx;
+  const cy = 3 * y1;
+  const by = 3 * (y2 - y1) - cy;
+  const ay = 1 - cy - by;
+  const sampleX = (t: number) => ((ax * t + bx) * t + cx) * t;
+  const sampleY = (t: number) => ((ay * t + by) * t + cy) * t;
+  const sampleDX = (t: number) => (3 * ax * t + 2 * bx) * t + cx;
+  return (x: number) => {
+    if (x <= 0) return 0;
+    if (x >= 1) return 1;
+    let t = x;
+    for (let i = 0; i < 8; i += 1) {
+      const err = sampleX(t) - x;
+      if (Math.abs(err) < 1e-6) return sampleY(t);
+      const d = sampleDX(t);
+      if (Math.abs(d) < 1e-6) break;
+      t -= err / d;
+    }
+    // Cadangan biseksi bila Newton keluar jalur.
+    let lo = 0;
+    let hi = 1;
+    t = x;
+    while (hi - lo > 1e-6) {
+      if (sampleX(t) < x) lo = t;
+      else hi = t;
+      t = (lo + hi) / 2;
+    }
+    return sampleY(t);
+  };
+}
+
+/** Easing tanda tangan proyek: cubic-bezier(0.22, 1, 0.36, 1). */
+export const easeOutQuint = cubicBezierEasing(0.22, 1, 0.36, 1);
 
 
 /**

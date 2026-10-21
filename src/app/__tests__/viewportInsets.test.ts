@@ -1,8 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import {
   computeViewOffset,
+  easeOutQuint,
   freeCenterNdc,
+  leftInsetFor,
+  PANEL_TAB_WIDTH,
+  rightInsetFor,
   shiftViewForInsets,
+  viewOffsetFromInsets,
   type ViewOffsetRect,
 } from '../viewportInsets';
 
@@ -57,6 +62,86 @@ describe('computeViewOffset', () => {
       expect(o.height).toBeGreaterThan(0);
       expect(o.x + o.width).toBe(w - 392);
     }
+  });
+});
+
+/**
+ * Sembunyi/tampil panel: inset sisi yang sembunyi menyusut ke sisa tab
+ * tepi layar (PANEL_TAB_WIDTH 28px + margin 12px = 40) — dihitung dari
+ * lebar panel nyata; sisi yang tampil tidak berubah sedikit pun.
+ */
+describe('computeViewOffset — panel disembunyikan', () => {
+  it('katalog sembunyi (1440×900): x=40, sisi kanan tetap 392', () => {
+    const o = computeViewOffset(1440, 900, { left: false, right: true });
+    expect(o.x).toBe(40);
+    expect(o.width).toBe(1440 - 40 - 392);
+    expect(o.x + o.width).toBe(1440 - 392);
+  });
+
+  it('dock sembunyi (1440×900): x tetap 276, tepi kanan menyusut ke 40', () => {
+    const o = computeViewOffset(1440, 900, { left: true, right: false });
+    expect(o.x).toBe(276);
+    expect(o.x + o.width).toBe(1440 - 40);
+  });
+
+  it('keduanya sembunyi: rektangel bebas selebar kanvas minus dua tab', () => {
+    const o = computeViewOffset(1440, 900, { left: false, right: false });
+    expect(o.x).toBe(40);
+    expect(o.width).toBe(1440 - 40 - 40);
+  });
+
+  it('katalog sempit + sembunyi: ambang lebar tidak lagi relevan', () => {
+    const o = computeViewOffset(1152, 768, { left: false, right: false });
+    expect(o.x).toBe(40);
+    expect(o.width).toBe(1152 - 80);
+  });
+
+  it('leftInsetFor/rightInsetFor: tabel nilai per keadaan', () => {
+    expect(PANEL_TAB_WIDTH).toBe(28);
+    expect(leftInsetFor(1440, true)).toBe(276);
+    expect(leftInsetFor(1152, true)).toBe(248);
+    expect(leftInsetFor(1440, false)).toBe(40);
+    expect(leftInsetFor(1152, false)).toBe(40);
+    expect(rightInsetFor(true)).toBe(392);
+    expect(rightInsetFor(false)).toBe(40);
+  });
+
+  it('viewOffsetFromInsets == computeViewOffset untuk inset final yang sama', () => {
+    expect(viewOffsetFromInsets(1440, 900, 276, 392)).toEqual(computeViewOffset(1440, 900));
+    expect(viewOffsetFromInsets(1440, 900, 40, 40)).toEqual(
+      computeViewOffset(1440, 900, { left: false, right: false }),
+    );
+  });
+});
+
+/**
+ * easeOutQuint menilai cubic-bezier(0.22,1,0.36,1) yang sama dengan
+ * transisi CSS panel — tween inset kamera & luncuran panel harus
+ * berbagi kurva ini persis agar geraknya serentak.
+ */
+describe('easeOutQuint', () => {
+  it('ujung-ujungnya tepat 0 dan 1', () => {
+    expect(easeOutQuint(0)).toBe(0);
+    expect(easeOutQuint(1)).toBe(1);
+  });
+
+  it('monoton naik dan selalu di atas diagonal (ease-out kuat)', () => {
+    let prev = 0;
+    for (let i = 1; i <= 20; i += 1) {
+      const t = i / 20;
+      const v = easeOutQuint(t);
+      expect(v).toBeGreaterThan(prev);
+      expect(v).toBeGreaterThanOrEqual(t);
+      prev = v;
+    }
+    expect(prev).toBe(1);
+  });
+
+  it('nilai tengah cocok dengan kurva CSS (x=0,5 → y≈0,962; x=0,25 → y≈0,764)', () => {
+    expect(easeOutQuint(0.5)).toBeGreaterThan(0.93);
+    expect(easeOutQuint(0.5)).toBeLessThan(0.99);
+    expect(easeOutQuint(0.25)).toBeGreaterThan(0.7);
+    expect(easeOutQuint(0.25)).toBeLessThan(0.85);
   });
 });
 

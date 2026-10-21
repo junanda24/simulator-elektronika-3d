@@ -25,13 +25,21 @@ interface UiSettings {
   turntable: boolean;
   /** Badge nilai live di atas komponen bintang (default nyala). */
   showBadges: boolean;
+  /** Panel katalog kiri tampil (default tampil; bisa disembunyikan user). */
+  catalogVisible: boolean;
+  /** Dock kanan (editor/serial/panduan) tampil (default tampil). */
+  dockVisible: boolean;
   setTurntable: (value: boolean) => void;
   setShowBadges: (value: boolean) => void;
+  setCatalogVisible: (value: boolean) => void;
+  setDockVisible: (value: boolean) => void;
 }
 
 export const useUiSettings = create<UiSettings>((set) => ({
   turntable: readBool("sim3d:turntable", false),
   showBadges: readBool("sim3d:badges", true),
+  catalogVisible: readBool("sim3d:panel-catalog", true),
+  dockVisible: readBool("sim3d:panel-dock", true),
   setTurntable: (value) => {
     writeBool("sim3d:turntable", value);
     set({ turntable: value });
@@ -39,5 +47,13 @@ export const useUiSettings = create<UiSettings>((set) => ({
   setShowBadges: (value) => {
     writeBool("sim3d:badges", value);
     set({ showBadges: value });
+  },
+  setCatalogVisible: (value) => {
+    writeBool("sim3d:panel-catalog", value);
+    set({ catalogVisible: value });
+  },
+  setDockVisible: (value) => {
+    writeBool("sim3d:panel-dock", value);
+    set({ dockVisible: value });
   },
 }));

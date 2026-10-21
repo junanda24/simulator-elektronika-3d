@@ -20,7 +20,14 @@ import {
   parseHole,
 } from '../../shared/boards/breadboard';
 
-import { computeViewOffset, shiftViewForInsets } from '../../app/viewportInsets';
+import {
+  computeViewOffset,
+  easeOutQuint,
+  leftInsetFor,
+  rightInsetFor,
+  shiftViewForInsets,
+  viewOffsetFromInsets,
+} from '../../app/viewportInsets';
 import { CAMERA_HOME_POS, TARGET_HOME_POS } from '../../app/cameraPresets';
 import { useUiSettings } from '../../app/uiSettings';
 import { useCircuitStore } from '../wiring/store/circuitStore';
@@ -179,17 +186,71 @@ function CameraRig({ resetSignal }: { resetSignal: number }) {
   // panel (katalog kiri, dock kanan, kapsul atas, dock bawah). Ini murni
   // proyeksi — posisi kamera, OrbitControls, dan tween GSAP tidak berubah
   // perilaku. Diperbarui pada setiap resize; dibersihkan saat unmount.
+  //
+  // SEMBUNYI/TAMPIL PANEL: inset kini ikut keadaan panel (useUiSettings).
+  // Saat user menyembunyikan/menampilkan panel, inset TIDAK melompat —
+  // angka kiri/kanan di-tween GSAP 320ms dengan kurva easeOutQuint yang
+  // persis sama dengan transisi CSS panel (cubic-bezier(0.22,1,0.36,1)
+  // dinilai easeOutQuint dari viewportInsets), jadi subjek 3D meluncur
+  // mulus mengisi ruang yang terbebas dan kembali mulus saat panel
+  // muncul. prefers-reduced-motion → instan (durasi 0), sejalan tier
+  // gerak proyek. Pemasangan pertama langsung final (tanpa tween).
+  const catalogVisible = useUiSettings((s) => s.catalogVisible);
+  const dockVisible = useUiSettings((s) => s.dockVisible);
+  const insetAnim = useRef<{ left: number; right: number } | null>(null);
+  const insetTween = useRef<gsap.core.Tween | null>(null);
+
   useEffect(() => {
     const cam = camera as THREE.PerspectiveCamera;
     if (typeof cam.setViewOffset !== 'function') return undefined;
-    const o = computeViewOffset(size.width, size.height);
-    cam.setViewOffset(o.fullWidth, o.fullHeight, o.x, o.y, o.width, o.height);
-    cam.updateProjectionMatrix();
+    const targetLeft = leftInsetFor(size.width, catalogVisible);
+    const targetRight = rightInsetFor(dockVisible);
+    const apply = (left: number, right: number) => {
+      const o = viewOffsetFromInsets(size.width, size.height, left, right);
+      cam.setViewOffset(o.fullWidth, o.fullHeight, o.x, o.y, o.width, o.height);
+      cam.updateProjectionMatrix();
+    };
+    if (insetAnim.current === null) {
+      insetAnim.current = { left: targetLeft, right: targetRight };
+      apply(targetLeft, targetRight);
+      return undefined;
+    }
+    const cur = insetAnim.current;
+    insetTween.current?.kill();
+    insetTween.current = null;
+    if (
+      prefersReducedMotion() ||
+      (cur.left === targetLeft && cur.right === targetRight)
+    ) {
+      cur.left = targetLeft;
+      cur.right = targetRight;
+      apply(targetLeft, targetRight);
+      return undefined;
+    }
+    insetTween.current = gsap.to(cur, {
+      left: targetLeft,
+      right: targetRight,
+      duration: 0.32,
+      ease: (t: number) => easeOutQuint(t),
+      overwrite: 'auto',
+      onUpdate: () => apply(cur.left, cur.right),
+    });
+    return () => {
+      insetTween.current?.kill();
+      insetTween.current = null;
+    };
+  }, [camera, size, catalogVisible, dockVisible]);
+
+  // Pembersihan proyeksi hanya saat unmount sungguhan (bukan tiap
+  // perubahan dependensi — effect di atas selalu memasang ulang).
+  useEffect(() => {
+    const cam = camera as THREE.PerspectiveCamera;
+    if (typeof cam.setViewOffset !== 'function') return undefined;
     return () => {
       cam.clearViewOffset();
       cam.updateProjectionMatrix();
     };
-  }, [camera, size]);
+  }, [camera]);
 
   useEffect(() => {
     if (resetSignal === 0 || !controls) return;
@@ -197,10 +258,14 @@ function CameraRig({ resetSignal }: { resetSignal: number }) {
     // bila prefers-reduced-motion aktif. Sasaran digeser kompensasi inset
     // (shiftViewForInsets) agar meja tampil di pusat rektangel bebas.
     const duration = prefersReducedMotion() ? 0 : 0.6;
+    // Keadaan panel dibaca sesaat (getState) agar effect ini tidak ikut
+    // berjalan ulang saat panel disembunyikan/ditampilkan — kompensasi
+    // selalu memakai inset FINAL sesuai panel yang tampil saat itu.
+    const { catalogVisible: cv, dockVisible: dv } = useUiSettings.getState();
     const view = shiftViewForInsets(
       CAMERA_HOME_POS,
       TARGET_HOME_POS,
-      computeViewOffset(size.width, size.height),
+      computeViewOffset(size.width, size.height, { left: cv, right: dv }),
       45,
       size.width / size.height,
     );
@@ -254,10 +319,11 @@ function CameraRig({ resetSignal }: { resetSignal: number }) {
       return;
     }
     if (!controls || !cameraView) return;
+    const { catalogVisible: cv, dockVisible: dv } = useUiSettings.getState();
     const view = shiftViewForInsets(
       cameraView.position,
       cameraView.target,
-      computeViewOffset(size.width, size.height),
+      computeViewOffset(size.width, size.height, { left: cv, right: dv }),
       45,
       size.width / size.height,
     );

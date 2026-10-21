@@ -213,6 +213,10 @@ export default function App() {
   const setTurntable = useUiSettings((s) => s.setTurntable);
   const showBadges = useUiSettings((s) => s.showBadges);
   const setShowBadges = useUiSettings((s) => s.setShowBadges);
+  const catalogVisible = useUiSettings((s) => s.catalogVisible);
+  const setCatalogVisible = useUiSettings((s) => s.setCatalogVisible);
+  const dockVisible = useUiSettings((s) => s.dockVisible);
+  const setDockVisible = useUiSettings((s) => s.setDockVisible);
 
   // Reset Kamera lama kini = tombol [3D] kapsul kamera (preset Perspektif
   // lewat cameraView). resetSignal dipertahankan untuk prop Workbench.
@@ -740,21 +744,65 @@ export default function App() {
           </button>
         </div>
 
-        {/* Panel katalog (konten: CatalogPanel) */}
+        {/* Panel katalog (konten: CatalogPanel) — bisa disembunyikan:
+            luncuran diatur kelas .hud-panel-slide-left (index.css);
+            kamera mengikuti lewat inset beranimasi di CameraRig.
+            hud-enter pindah ke pembungkus dalam agar animasi entrada
+            (transform keyframe) tidak menimpa transform luncur. */}
         <div
-          className="hud-enter pointer-events-auto absolute bottom-[76px] left-3 top-[68px] z-20 flex w-[264px] max-[1279px]:w-[224px]"
-          style={{ animationDelay: '120ms' }}
+          className="hud-panel-slide-left pointer-events-auto absolute bottom-[76px] left-3 top-[68px] z-20 flex w-[264px] max-[1279px]:w-[224px]"
+          data-hidden={!catalogVisible}
+          aria-hidden={!catalogVisible}
         >
-          <CatalogPanel />
+          <div className="hud-enter flex h-full w-full" style={{ animationDelay: '120ms' }}>
+            <CatalogPanel />
+          </div>
         </div>
 
-        {/* Dock kanan: editor/serial/panduan (konten: RightDock) */}
+        {/* Dock kanan: editor/serial/panduan (konten: RightDock) — sama,
+            bisa disembunyikan lewat .hud-panel-slide-right. */}
         <div
-          className="hud-enter pointer-events-auto absolute bottom-[76px] right-3 top-[68px] z-20 flex w-[380px]"
-          style={{ animationDelay: '160ms' }}
+          className="hud-panel-slide-right pointer-events-auto absolute bottom-[76px] right-3 top-[68px] z-20 flex w-[380px]"
+          data-hidden={!dockVisible}
+          aria-hidden={!dockVisible}
         >
-          <RightDock />
+          <div className="hud-enter flex h-full w-full" style={{ animationDelay: '160ms' }}>
+            <RightDock />
+          </div>
         </div>
+
+        {/* Tab sembunyi/tampil panel katalog: SATU tombol yang selalu
+            terjangkau — menempel di tepi panel saat tampil, bermetamorfosis
+            jadi tab tepi layar saat panel sembunyi. Posisi, radius, dan
+            arah chevron dianimasikan .hud-panel-toggle-left (index.css). */}
+        <button
+          type="button"
+          onClick={() => setCatalogVisible(!catalogVisible)}
+          aria-expanded={catalogVisible}
+          aria-label={catalogVisible ? 'Sembunyikan panel katalog' : 'Tampilkan panel katalog'}
+          title={catalogVisible ? 'Sembunyikan panel katalog' : 'Tampilkan panel katalog'}
+          data-open={catalogVisible}
+          className="hud-panel-toggle hud-panel-toggle-left pointer-events-auto absolute top-1/2 z-30 grid h-14 w-7 -translate-y-1/2 place-items-center border border-border-interactive bg-panel-elevated text-zinc-300 shadow-[0_4px_16px_rgb(0_0_0/0.45)] transition-colors hover:border-accent-primary hover:text-accent-primary"
+        >
+          <span className="hud-toggle-chevron">
+            <ShellIcon name="chevron" className="size-4" />
+          </span>
+        </button>
+
+        {/* Tab sembunyi/tampil dock kanan — cerminan tab katalog. */}
+        <button
+          type="button"
+          onClick={() => setDockVisible(!dockVisible)}
+          aria-expanded={dockVisible}
+          aria-label={dockVisible ? 'Sembunyikan panel editor' : 'Tampilkan panel editor'}
+          title={dockVisible ? 'Sembunyikan panel editor' : 'Tampilkan panel editor'}
+          data-open={dockVisible}
+          className="hud-panel-toggle hud-panel-toggle-right pointer-events-auto absolute top-1/2 z-30 grid h-14 w-7 -translate-y-1/2 place-items-center border border-border-interactive bg-panel-elevated text-zinc-300 shadow-[0_4px_16px_rgb(0_0_0/0.45)] transition-colors hover:border-accent-primary hover:text-accent-primary"
+        >
+          <span className="hud-toggle-chevron">
+            <ShellIcon name="chevron" className="size-4" />
+          </span>
+        </button>
 
         {/* Dock bawah (konten: ToolbarBar) */}
         <div className="absolute bottom-3 left-[288px] right-[404px] z-20 flex justify-center max-[1279px]:left-[248px]">
