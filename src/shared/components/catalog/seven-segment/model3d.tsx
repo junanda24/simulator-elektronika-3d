@@ -102,7 +102,8 @@ const SEGMENT_GEOMETRIES: Record<string, THREE.BufferGeometry> = Object.fromEntr
  * berujung heksagonal + slant digit di balik lapisan filter, titik
  * desimal, dan cetakan tipe "5611BH" (katoda umum) di tepi bawah muka
  * seperti modul asli. Emissive tiap segmen sebanding arus cabangnya
- * dari simState (20 mA = menyala penuh).
+ * dari simState (20 mA = menyala penuh, pengali 3,6× + pointLight
+ * ×10/jarak 8 — ditegaskan 2026-10-21, SPEK-TEMA-GELAP.md §B).
  */
 export const SevenSegmentRender3D: ComponentType<ComponentRenderProps> = ({ instance }) => {
   const currents = instance.simState.branchCurrents;
@@ -155,7 +156,7 @@ export const SevenSegmentRender3D: ComponentType<ComponentRenderProps> = ({ inst
             color={SEGMENT_OFF}
             roughness={0.4}
             emissive={SEGMENT_ON}
-            emissiveIntensity={intensityOf(seg.key) * 2.4}
+            emissiveIntensity={intensityOf(seg.key) * 3.6}
           />
         </mesh>
       ))}
@@ -167,7 +168,7 @@ export const SevenSegmentRender3D: ComponentType<ComponentRenderProps> = ({ inst
           color={SEGMENT_OFF}
           roughness={0.4}
           emissive={SEGMENT_ON}
-          emissiveIntensity={intensityOf('dp') * 2.4}
+          emissiveIntensity={intensityOf('dp') * 3.6}
         />
       </mesh>
 
@@ -192,8 +193,8 @@ export const SevenSegmentRender3D: ComponentType<ComponentRenderProps> = ({ inst
         <pointLight
           position={[0, 2.4, 0]}
           color="#ff2a2a"
-          intensity={peakFrac * 5}
-          distance={5}
+          intensity={peakFrac * 10}
+          distance={8}
           decay={2}
         />
       )}

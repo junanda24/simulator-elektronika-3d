@@ -100,8 +100,12 @@ const BOND_WIRE_GEOMETRY = createBondWireGeometry();
  * atas perintah user — override setempat di bawah, BUKAN bawaan kelas
  * epoxyLed 0,65, agar warna badan pekat dan kelas bersama tidak ikut
  * berubah untuk pemakai lain seperti LDR).
- * Perilaku menyala TIDAK berubah: emissive mengikuti arus cabang 'led'
- * (flange 0,7×, badan 1,4×) + pointLight; rusak = epoxy gosong gelap.
+ * Perilaku menyala: emissive mengikuti arus cabang 'led' (flange
+ * 1,2×, badan 3,2×) + pointLight ×50/jarak 9 — ditegaskan atas
+ * perintah user 2026-10-21 (SPEK-TEMA-GELAP.md §B): di atas adegan
+ * gelap nyala harus TEGAS terbaca dari badan komponennya sendiri,
+ * TANPA bloom/halo (cahaya menempel di badan + pancaran lampu fisik
+ * saja). Rusak = epoxy gosong gelap.
  */
 export const LedRender3D: ComponentType<ComponentRenderProps> = ({ instance }) => {
   const colorName = typeof instance.props.color === 'string' ? instance.props.color : 'red';
@@ -154,7 +158,7 @@ export const LedRender3D: ComponentType<ComponentRenderProps> = ({ instance }) =
         <meshStandardMaterial color={COLOR_TOKENS.plastikHitam} metalness={0.6} roughness={0.4} />
       </mesh>
       <mesh geometry={BOND_WIRE_GEOMETRY}>
-        <meshStandardMaterial color={COLOR_TOKENS.resistorGold} metalness={1} roughness={0.35} />
+        <meshStandardMaterial color={COLOR_TOKENS.resistorGold} metalness={0.75} roughness={0.35} />
       </mesh>
 
       {/* Flange alas — extrude bersisi datar katoda, epoxy berwarna pekat */}
@@ -164,7 +168,7 @@ export const LedRender3D: ComponentType<ComponentRenderProps> = ({ instance }) =
           opacity={0.92}
           color={domeColor}
           emissive={damaged ? '#000000' : baseColor}
-          emissiveIntensity={damaged ? 0 : intensity * 0.7}
+          emissiveIntensity={damaged ? 0 : intensity * 1.2}
         />
       </mesh>
 
@@ -175,17 +179,18 @@ export const LedRender3D: ComponentType<ComponentRenderProps> = ({ instance }) =
           opacity={0.92}
           color={domeColor}
           emissive={damaged ? '#000000' : baseColor}
-          emissiveIntensity={damaged ? 0 : intensity * 1.4}
+          emissiveIntensity={damaged ? 0 : intensity * 3.2}
         />
       </mesh>
 
-      {/* Cahaya titik saat LED menyala */}
+      {/* Cahaya titik saat LED menyala — pancaran fisik ke breadboard
+          di sekitarnya, diperkuat bersama ketegasan badan (×50, jarak 9) */}
       {!damaged && intensity > 0.05 && (
         <pointLight
           position={[0, 3.2, 0]}
           color={baseColor}
-          intensity={intensity * 30}
-          distance={5}
+          intensity={intensity * 50}
+          distance={9}
           decay={2}
         />
       )}

@@ -45,8 +45,12 @@ describe('materials3d — tabel parameter §3', () => {
       expect(roughness, kelas).toBeGreaterThanOrEqual(min);
       expect(roughness, kelas).toBeLessThanOrEqual(max);
     }
-    expect(MATERIAL_PARAMS.metalPin.metalness).toBe(1);
-    expect(MATERIAL_PARAMS.canAluminium.metalness).toBe(1);
+    // Metalness logam 0,75 (bukan 1,0 lagi): environment map dibuang
+    // total atas perintah user 2026-10-21, dan logam murni tanpa env
+    // map terbaca hitam pekat — 0,75 menyisakan difus warna dasar agar
+    // kaki/kaleng terbaca abu-perak di bawah lampu langsung.
+    expect(MATERIAL_PARAMS.metalPin.metalness).toBe(0.75);
+    expect(MATERIAL_PARAMS.canAluminium.metalness).toBe(0.75);
     expect(MATERIAL_PARAMS.karet.clearcoat).toBe(0);
     expect(MATERIAL_PARAMS.epoxyLed.clearcoat).toBe(1);
   });
@@ -64,7 +68,7 @@ describe('materials3d — factory', () => {
   it('createMaterial3D menghasilkan MeshPhysicalMaterial dengan parameter kelas', () => {
     const mat = createMaterial3D('metalPin');
     expect(mat).toBeInstanceOf(THREE.MeshPhysicalMaterial);
-    expect(mat.metalness).toBe(1);
+    expect(mat.metalness).toBe(0.75);
     expect(mat.roughness).toBe(MATERIAL_PARAMS.metalPin.roughness);
     expect(`#${mat.color.getHexString()}`).toBe(COLOR_TOKENS.metalPin);
   });

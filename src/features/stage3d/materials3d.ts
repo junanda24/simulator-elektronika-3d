@@ -52,6 +52,16 @@ export interface Material3DParams {
  * Yang SENGAJA tidak diubah: epoxyLed & kaca (kelas optik/transparan —
  * kilapnya adalah identitas bahan), karet (sudah matte penuh 0,82),
  * dan semua logam (metalPin, canAluminium — memang harus memantul).
+ * DIPERBARUI lagi di hari yang sama (perintah user: "efek refleksi
+ * dibuang total"): environment map TIDAK dipakai lagi di mana pun di
+ * adegan. Konsekuensi PBR-nya diatur di sini — logam murni
+ * (metalness 1,0) tanpa environment map tidak punya apa-apa untuk
+ * dipantulkan selain lampu dan terbaca hitam pekat dari sebagian
+ * besar sudut, jadi metalPin & canAluminium turun ke metalness 0,75:
+ * sisa difus dari warna dasar membuat kaki/kaleng terbaca abu-perak
+ * di bawah lampu langsung dengan highlight tegas dari lampu kunci —
+ * BUKAN pantulan lingkungan. Kaca tetap terbaca lewat transparansi +
+ * highlight lampu (opacity bawaan 0,28).
  */
 export const MATERIAL_PARAMS = {
   /** Plastik ABS mainan (badan warna): r .30–.38 +0,15 SOLID, cc .7/.30 */
@@ -66,10 +76,10 @@ export const MATERIAL_PARAMS = {
   karet: { roughness: 0.82, metalness: 0, clearcoat: 0, clearcoatRoughness: 0 },
   /** Kaca (fuse, diode DO-35): r .05–.12, cc 1.0/.05, opacity rendah */
   kaca: { roughness: 0.08, metalness: 0, clearcoat: 1, clearcoatRoughness: 0.05 },
-  /** Metal pin/kaki: r .30–.45, m 1.0 — wajib kena environment map */
-  metalPin: { roughness: 0.38, metalness: 1, clearcoat: 0, clearcoatRoughness: 0 },
-  /** Can aluminium (elco, motor): r .35–.50, m 1.0 */
-  canAluminium: { roughness: 0.42, metalness: 1, clearcoat: 0, clearcoatRoughness: 0 },
+  /** Metal pin/kaki: r .30–.45, m 0,75 (dari 1,0 — tanpa env map logam murni terbaca hitam) */
+  metalPin: { roughness: 0.38, metalness: 0.75, clearcoat: 0, clearcoatRoughness: 0 },
+  /** Can aluminium (elco, motor): r .35–.50, m 0,75 (dari 1,0 — alasan sama) */
+  canAluminium: { roughness: 0.42, metalness: 0.75, clearcoat: 0, clearcoatRoughness: 0 },
   /** Keramik (kapasitor keramik): r .45–.55 +0,15 SOLID, cc .3/.40 */
   keramik: { roughness: 0.65, metalness: 0, clearcoat: 0.3, clearcoatRoughness: 0.4 },
   /** Breadboard krem: r .40–.50 +0,15 SOLID, cc .3/.40 */
@@ -150,7 +160,7 @@ export const MATERIAL_DEFAULTS: Record<
   epoxyLed: { color: '#ffffff', opacity: 0.65 }, // tengah rentang .55–.75 (§3)
   pcb: { color: '#ffffff', opacity: 1 },
   karet: { color: COLOR_TOKENS.karetGelap, opacity: 1 },
-  kaca: { color: '#ffffff', opacity: 0.3 },
+  kaca: { color: '#ffffff', opacity: 0.28 },
   metalPin: { color: COLOR_TOKENS.metalPin, opacity: 1 },
   canAluminium: { color: COLOR_TOKENS.canAluminium, opacity: 1 },
   keramik: { color: COLOR_TOKENS.keramikKrem, opacity: 1 },

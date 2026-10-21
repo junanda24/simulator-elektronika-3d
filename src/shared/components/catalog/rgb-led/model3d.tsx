@@ -143,9 +143,10 @@ function clamp01(value: number): number {
  * lebar di kaki COM memegang tiga die R/G/B, tiga post kanal, dan
  * kawat bond emas ke tiap die. Opacity badan 0,92 (arah SOLID
  * 2026-10-21 — override setempat, sama seperti LED tunggal, agar
- * warna campuran tampil pekat). Perilaku menyala TIDAK berubah:
- * emissive = campuran kanal r/g/b dari simState (flange 0,7×, badan
- * 1,4×) + pointLight.
+ * warna campuran tampil pekat). Perilaku menyala: emissive =
+ * campuran kanal r/g/b dari simState (flange 1,2×, badan 3,0×) +
+ * pointLight ×50/jarak 9 — ditegaskan bersama keluarga LED atas
+ * perintah user 2026-10-21 (SPEK-TEMA-GELAP.md §B; tanpa bloom/halo).
  */
 export const RgbLedRender3D: ComponentType<ComponentRenderProps> = ({ instance }) => {
   const currents = instance.simState.branchCurrents;
@@ -206,7 +207,7 @@ export const RgbLedRender3D: ComponentType<ComponentRenderProps> = ({ instance }
             <meshPhysicalMaterial {...MATERIAL_PROPS.metalPin} />
           </mesh>
           <mesh geometry={post.wire}>
-            <meshStandardMaterial color={COLOR_TOKENS.resistorGold} metalness={1} roughness={0.35} />
+            <meshStandardMaterial color={COLOR_TOKENS.resistorGold} metalness={0.75} roughness={0.35} />
           </mesh>
         </group>
       ))}
@@ -218,7 +219,7 @@ export const RgbLedRender3D: ComponentType<ComponentRenderProps> = ({ instance }
           opacity={0.92}
           color={domeColor}
           emissive={emissive}
-          emissiveIntensity={damaged ? 0 : 0.7}
+          emissiveIntensity={damaged ? 0 : 1.2}
         />
       </mesh>
 
@@ -229,13 +230,13 @@ export const RgbLedRender3D: ComponentType<ComponentRenderProps> = ({ instance }
           opacity={0.92}
           color={domeColor}
           emissive={emissive}
-          emissiveIntensity={damaged ? 0 : 1.4}
+          emissiveIntensity={damaged ? 0 : 3.0}
         />
       </mesh>
 
       {/* Cahaya titik berwarna campuran saat ada kanal menyala */}
       {!damaged && peak > 0.05 && (
-        <pointLight position={[0, 3.2, 0]} color={mixed} intensity={peak * 30} distance={5} decay={2} />
+        <pointLight position={[0, 3.2, 0]} color={mixed} intensity={peak * 50} distance={9} decay={2} />
       )}
 
       {/* Badge arus per kanal live dari branchCurrents r/g/b */}

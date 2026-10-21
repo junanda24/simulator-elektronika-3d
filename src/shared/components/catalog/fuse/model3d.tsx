@@ -45,8 +45,9 @@ const COIL_STUB_RIGHT = createCoilGeometry(0.45, 1.3, 3);
 
 /**
  * Sekering kaca 5×20 prosedural (SPESIFIKASI-GAYA-3D §5 Gelombang 2 +
- * Part A riset A10): tabung kaca kelas `kaca` pustaka — kini memantul
- * environment map — berisi filamen KOIL heliks tipis yang menyambung
+ * Part A riset A10): tabung kaca kelas `kaca` pustaka — terbaca lewat
+ * transparansi + highlight lampu langsung (environment map dibuang
+ * total atas perintah user 2026-10-21) — berisi filamen KOIL heliks tipis yang menyambung
  * dua cap logam berlapis nikel; tiap cap punya detail cincin bibir.
  * Saat instance rusak (putus), koil menjadi gelap gosong dan menyisakan
  * celah di tengah tabung, sama seperti perilaku model lama.
@@ -67,7 +68,7 @@ export const FuseRender3D: ComponentType<ComponentRenderProps> = ({ instance }) 
       {/* Tabung kaca bening — kelas kaca dari pustaka material */}
       <mesh position={[0, TUBE_Y, 0]} rotation={[Math.PI / 2, 0, 0]} castShadow>
         <cylinderGeometry args={[0.55, 0.55, 3, 24]} />
-        <meshPhysicalMaterial {...MATERIAL_PROPS.kaca} color="#dfe9ee" opacity={0.35} />
+        <meshPhysicalMaterial {...MATERIAL_PROPS.kaca} color="#dfe9ee" opacity={0.3} />
       </mesh>
 
       {/* Tutup logam kedua ujung + cincin bibir detail di tiap cap */}

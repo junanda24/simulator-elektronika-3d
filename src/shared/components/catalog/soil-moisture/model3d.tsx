@@ -270,7 +270,10 @@ export const SoilMoistureRender3D: ComponentType<ComponentRenderProps> = ({
         </mesh>
       ))}
 
-      {/* LED PWR merah (selalu menyala) & LED OUT amber (menyala saat basah) */}
+      {/* LED PWR merah (selalu menyala) & LED OUT amber (menyala saat
+          basah; emissive ON dinaikkan sekelas indikator relay/PIR
+          2026-10-21 — pola ternary nyala/mati yang sama,
+          SPEK-TEMA-GELAP.md §B) */}
       <group position={[1.08, 0, -1.25]}>
         <mesh position={[0, 1.36, 0]} castShadow>
           <cylinderGeometry args={[0.15, 0.17, 0.26, 16]} />
@@ -283,7 +286,7 @@ export const SoilMoistureRender3D: ComponentType<ComponentRenderProps> = ({
           <meshStandardMaterial
             color="#f59e0b"
             emissive="#f59e0b"
-            emissiveIntensity={moisture > 0.5 ? 0.9 : 0.12}
+            emissiveIntensity={moisture > 0.5 ? 2.8 : 0.12}
           />
         </mesh>
       </group>

@@ -15,7 +15,9 @@ import { MATERIAL_PROPS } from '../../../../features/stage3d/materials3d';
  * Material dari pustaka bersama `stage3d/materials3d.ts`
  * (SPESIFIKASI-GAYA-3D §2.2/§3): kapsul = kelas kaca (r 0,08, cc 1,0 —
  * transparansi tipis TANPA transmission, sama seperti fuse), bola &
- * kawat & tiang kontak = kelas metalPin (wajib kena environment map).
+ * kawat & tiang kontak = kelas metalPin (metalness 0,75 di pustaka —
+ * terbaca abu-perak di bawah lampu langsung, tanpa environment map
+ * yang sudah dibuang atas perintah user 2026-10-21).
  */
 
 /** Kemiringan tabung (rad, ±25°) mengikuti state tilted. */
@@ -137,7 +139,7 @@ export const TiltSwitchRender3D: ComponentType<ComponentRenderProps> = ({
           <capsuleGeometry args={[1.05, 3.15, 8, 28]} />
           <meshPhysicalMaterial
             {...MATERIAL_PROPS.kaca}
-            opacity={0.38}
+            opacity={0.32}
             side={DoubleSide}
             depthWrite={false}
           />

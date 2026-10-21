@@ -3,7 +3,6 @@ import * as THREE from 'three';
 import gsap from 'gsap';
 import { Canvas, useThree, type ThreeEvent } from '@react-three/fiber';
 import { ContactShadows, OrbitControls } from '@react-three/drei';
-import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import type { OrbitControls as OrbitControlsImpl } from 'three-stdlib';
 import Breadboard from './Breadboard';
 import Smoke from './effects/Smoke';
@@ -259,51 +258,6 @@ function CameraRig({ resetSignal }: { resetSignal: number }) {
   return null;
 }
 
-/**
- * Environment map prosedural (SPESIFIKASI-GAYA-3D §2.1 — akar masalah #1
- * inventaris): RoomEnvironment three.js di-render SEKALI ke PMREM render
- * target lokal, TANPA fetch file HDR/aset eksternal apa pun. Tanpanya
- * semua material metalness tinggi & clearcoat (kaki komponen, kaleng
- * motor, epoxy LED, PCB) tidak punya apa-apa untuk dipantulkan selain
- * dua lampu → logam datar & plastik "render mentah".
- * environmentIntensity 0,45 (arah SOLID 2026-10-21 atas perintah user:
- * diturunkan dari 0,85 SPEK-WARNA-SEGAR §4 — pantulan studio yang kuat
- * mengencerkan warna badan menjadi pucat berkilau; 0,45 menjaga logam
- * tetap punya pantulan tanpa membasuh warna plastik. Lampu ambient/
- * kunci TIDAK dinaikkan sebagai kompensasi: ambient 0,80 + kunci 1,5
- * dari gelombang segar sudah cukup menerangi panggung terang, jadi
- * adegan tidak digelapkan. Mekanisme PMREM tetap). Cleanup memulihkan
- * environment sebelumnya dan me-dispose render target, PMREM
- * generator, serta geometri/material scene ruangan.
- */
-function SceneEnvironment() {
-  const gl = useThree((s) => s.gl);
-  const scene = useThree((s) => s.scene);
-  useEffect(() => {
-    const pmrem = new THREE.PMREMGenerator(gl);
-    const room = new RoomEnvironment();
-    const renderTarget = pmrem.fromScene(room, 0.04);
-    const previousEnvironment = scene.environment;
-    const previousIntensity = scene.environmentIntensity;
-    scene.environment = renderTarget.texture;
-    scene.environmentIntensity = 0.45;
-    return () => {
-      scene.environment = previousEnvironment;
-      scene.environmentIntensity = previousIntensity;
-      renderTarget.dispose();
-      pmrem.dispose();
-      room.traverse((obj) => {
-        const mesh = obj as THREE.Mesh;
-        if (mesh.geometry) mesh.geometry.dispose();
-        const material = mesh.material as THREE.Material | THREE.Material[] | undefined;
-        if (Array.isArray(material)) material.forEach((m) => m.dispose());
-        else if (material) material.dispose();
-      });
-    };
-  }, [gl, scene]);
-  return null;
-}
-
 /** Bidang interaksi tak terlihat di atas breadboard / board (snapping matematis). */
 function InteractionPlane({
   kind,
@@ -524,16 +478,29 @@ export default function Workbench({ resetSignal }: { resetSignal: number }) {
       camera={{ position: CAMERA_HOME.toArray(), fov: 45, near: 0.5, far: 600 }}
       style={{ position: 'absolute', inset: 0 }}
     >
-      {/* Palet adegan SPEK-WARNA-SEGAR §4: panggung kertas hangat terang
-          ala A0 (bukan lagi dunia basement #10131a) */}
-      <color attach="background" args={['#f0ebdf']} />
-      <fog attach="fog" args={['#f0ebdf', 230, 430]} />
-      <SceneEnvironment />
+      {/* Tema GELAP FOKUS (SPEK-TEMA-GELAP.md, perintah user
+          2026-10-21: "aku ga mau putih … putih gini bikin kita ga
+          fokus"): kehampaan arang nyaris hitam bernafas hijau ESD
+          #0b0f0d (lightness HSL ±0,05) — satu keluarga gelap dengan
+          panel HUD #12151c, beda rona tipis saja (hijau vs biru-abu,
+          keduanya nyaris netral). Fog sewarna, rentang didekatkan
+          (160–340) agar tepi meja 420 satuan larut ke gelap, bukan
+          berhenti sebagai persegi terang. Breadboard krem tetap —
+          ia panggung terangnya. */}
+      <color attach="background" args={['#0b0f0d']} />
+      <fog attach="fog" args={['#0b0f0d', 160, 340]} />
 
-      <ambientLight intensity={0.8} />
+      {/* TANPA environment map (perintah user 2026-10-21: efek refleksi
+          dibuang total — "lebih suka komponen detail"). Pencahayaan
+          hanya dari lampu adegan. Intensitas diturunkan dari zaman
+          terang (ambient 1,05→0,55, kunci 1,8→1,6, isi 0,7→0,45):
+          ambient adalah sumber "cuci" utama — menurunkannya
+          mengembalikan kedalaman & bayangan di adegan gelap, sementara
+          lampu kunci menjaga breadboard + komponen terang terbaca. */}
+      <ambientLight intensity={0.55} />
       <directionalLight
         position={[34, 55, 24]}
-        intensity={1.5}
+        intensity={1.6}
         castShadow
         shadow-mapSize-width={1024}
         shadow-mapSize-height={1024}
@@ -542,13 +509,17 @@ export default function Workbench({ resetSignal }: { resetSignal: number }) {
         shadow-camera-top={80}
         shadow-camera-bottom={-80}
       />
-      <directionalLight position={[-30, 28, -36]} intensity={0.55} />
+      <directionalLight position={[-30, 28, -36]} intensity={0.45} />
 
+      {/* Alas meja ESD: hijau pekat jauh lebih gelap & sedikit
+          desaturasi (#146356 → #0d2b21, SPEK-TEMA-GELAP.md); grid
+          #17402f hanya ±1,3:1 di atas alas — terbaca dari dekat,
+          nyaris hilang dari jauh. */}
       <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0, 0]} receiveShadow>
         <planeGeometry args={[420, 420]} />
-        <meshStandardMaterial color="#146356" roughness={1} />
+        <meshStandardMaterial color="#0d2b21" roughness={1} />
       </mesh>
-      <gridHelper args={[420, 210, '#2e8b74', '#2e8b74']} position={[0, 0.02, 0]} />
+      <gridHelper args={[420, 210, '#17402f', '#17402f']} position={[0, 0.02, 0]} />
       {/* Bayangan kontak lembut tepat di bawah board & breadboard (tanpa HDR eksternal).
           frames={1}: bayangan kontak dibakar SEKALI (board & breadboard statis);
           default drei me-render pass kedalaman seluruh scene TIAP frame — pajak

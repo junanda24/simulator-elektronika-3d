@@ -229,7 +229,7 @@ export const PirRender3D: ComponentType<ComponentRenderProps> = ({ instance, onI
           <meshStandardMaterial
             color="#ef4444"
             emissive="#ef4444"
-            emissiveIntensity={motion ? 1.6 : 0.05}
+            emissiveIntensity={motion ? 2.8 : 0.05}
             roughness={0.3}
           />
         </mesh>
