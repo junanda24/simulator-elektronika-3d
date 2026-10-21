@@ -1,0 +1,29 @@
+@import "tailwindcss";
+
+@theme {
+  /* STYLE_GUIDE.md — Tactile ESD Workbench */
+  --color-workbench-mat: #0f241d;
+  --color-workbench-grid: #18382d;
+  --color-panel: #12151c;
+  --color-panel-elevated: #1a1e28;
+  --color-border-subtle: #282e3d;
+  --color-accent-primary: #00e5ff;
+  --color-accent-run: #10b981;
+  --color-accent-warning: #f59e0b;
+  --color-accent-danger: #ff2a54;
+  --color-wire-5v: #ef4444;
+  --color-wire-33v: #f97316;
+  --color-wire-gnd: #1f2937;
+  --font-sans: "Plus Jakarta Sans", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, monospace;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+  background: var(--color-panel);
+  color: #e8ecf3;
+  font-family: var(--font-sans);
+}
