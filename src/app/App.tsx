@@ -23,7 +23,10 @@ import {
 } from '../shared/boards/definitions';
 import { terminalLabel, type TerminalRef } from '../features/wiring/netlist';
 
-/** Palet warna kabel untuk shortcut angka 1–6 & swatch bar peralatan. */
+/**
+ * Palet warna kabel untuk shortcut angka 1–7 & swatch dock bawah.
+ * Urutan + hex 1–6 dipertahankan persis (memori otot); Ungu #7 = PWM (§G).
+ */
 const SHORTCUT_WIRE_COLORS: Array<{ hex: string; label: string }> = [
   { hex: '#EF4444', label: 'Merah' },
   { hex: '#1F2937', label: 'Hitam' },
@@ -31,16 +34,7 @@ const SHORTCUT_WIRE_COLORS: Array<{ hex: string; label: string }> = [
   { hex: '#22C55E', label: 'Hijau' },
   { hex: '#EAB308', label: 'Kuning' },
   { hex: '#F97316', label: 'Oranye' },
-];
-
-const WIRE_COLORS: Array<{ hex: string; label: string }> = [
-  { hex: '#ef4444', label: 'Merah (5V)' },
-  { hex: '#f97316', label: 'Oranye (3V3)' },
-  { hex: '#2a2e37', label: 'Hitam (GND)' },
-  { hex: '#3b82f6', label: 'Biru (sinyal)' },
-  { hex: '#22c55e', label: 'Hijau (sinyal)' },
-  { hex: '#eab308', label: 'Kuning (analog)' },
-  { hex: '#a855f7', label: 'Ungu (PWM)' },
+  { hex: '#A855F7', label: 'Ungu' },
 ];
 
 function terminalDisplay(ref: TerminalRef, boardId: string): string {
@@ -49,10 +43,87 @@ function terminalDisplay(ref: TerminalRef, boardId: string): string {
   return `${board.name} ${boardPinById(board, ref.pinId)?.label ?? ref.pinId}`;
 }
 
+/** Ikon SVG stroke kecil untuk shell HUD (grid 24, stroke 2, round caps). */
+function ShellIcon({
+  name,
+  className = 'size-4',
+}: {
+  name: 'play' | 'stop' | 'share' | 'chevron' | 'chip';
+  className?: string;
+}) {
+  if (name === 'play') {
+    return (
+      <svg viewBox="0 0 24 24" className={className} fill="currentColor" aria-hidden="true">
+        <path d="M8 5.5v13l11-6.5z" />
+      </svg>
+    );
+  }
+  if (name === 'stop') {
+    return (
+      <svg viewBox="0 0 24 24" className={className} fill="currentColor" aria-hidden="true">
+        <rect x="6" y="6" width="12" height="12" rx="1.5" />
+      </svg>
+    );
+  }
+  if (name === 'share') {
+    return (
+      <svg
+        viewBox="0 0 24 24"
+        className={className}
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        aria-hidden="true"
+      >
+        <path d="M12 15V3" />
+        <path d="m7 8 5-5 5 5" />
+        <path d="M5 15v4a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-4" />
+      </svg>
+    );
+  }
+  if (name === 'chevron') {
+    return (
+      <svg
+        viewBox="0 0 24 24"
+        className={className}
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        aria-hidden="true"
+      >
+        <path d="m6 9 6 6 6-6" />
+      </svg>
+    );
+  }
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      className={className}
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <rect x="7" y="7" width="10" height="10" rx="2" />
+      <path d="M10 7V4M14 7V4M10 20v-3M14 20v-3M7 10H4M7 14H4M20 10h-3M20 14h-3" />
+    </svg>
+  );
+}
+
+type MenuId = 'demo' | 'proyek' | 'cam3d' | 'camAtas';
+
 /**
- * Shell aplikasi — tata letak STYLE_GUIDE.md §5:
- * Top Toolbar 48px, Left Dock 260px (katalog + panel seleksi), viewport 3D.
- * Semua state rangkaian hidup di useCircuitStore (Zustand).
+ * Shell aplikasi — Floating Studio HUD (SINTESIS-FINAL):
+ * kanvas 3D full-bleed z-0; semua panel melayang di lapisan overlay
+ * (pointer-events-none, tiap panel pointer-events-auto). Skala z:
+ * 0 kanvas · 10 pelampung panggung · 20 panel · 25 popover · 30 probe ·
+ * 40 autopsy · 50 toast. Semua state rangkaian hidup di useCircuitStore.
  */
 export default function App() {
   const running = useCircuitStore((s) => s.running);
@@ -64,8 +135,6 @@ export default function App() {
   const wires = useCircuitStore((s) => s.wires);
   const placingType = useCircuitStore((s) => s.placingType);
   const pendingFrom = useCircuitStore((s) => s.pendingFrom);
-  const wireColor = useCircuitStore((s) => s.wireColor);
-  const setWireColor = useCircuitStore((s) => s.setWireColor);
   const selectedInstanceId = useCircuitStore((s) => s.selectedInstanceId);
   const selectedWireId = useCircuitStore((s) => s.selectedWireId);
   const removeInstance = useCircuitStore((s) => s.removeInstance);
@@ -78,13 +147,46 @@ export default function App() {
   const pinHoles = useCircuitStore((s) => s.pinHoles);
   const deleteMode = useCircuitStore((s) => s.deleteMode);
   const setCameraView = useCircuitStore((s) => s.setCameraView);
+  const autopsy = useCircuitStore((s) => s.autopsy);
   const [shareNote, setShareNote] = useState<string | null>(null);
   const importRef = useRef<HTMLInputElement>(null);
   const voltages = useCircuitStore((s) => s.voltages);
   const netNameOf = useCircuitStore((s) => s.netNameOf);
 
-  const [resetSignal, setResetSignal] = useState(0);
+  // Reset Kamera lama kini = tombol [3D] kapsul kamera (preset Perspektif
+  // lewat cameraView). resetSignal dipertahankan untuk prop Workbench.
+  const [resetSignal] = useState(0);
   const mounted = useRef(false);
+
+  // --- Popover shell (menu Demo/Proyek/kamera + panel "?") ---
+  const [helpOpen, setHelpOpen] = useState(false);
+  const [openMenu, setOpenMenu] = useState<MenuId | null>(null);
+  const [activePreset, setActivePreset] = useState<string | null>(null);
+  const helpOpenRef = useRef(false);
+  const openMenuRef = useRef<MenuId | null>(null);
+  const helpBtnRef = useRef<HTMLButtonElement>(null);
+  const setHelp = (v: boolean) => {
+    helpOpenRef.current = v;
+    setHelpOpen(v);
+    if (v) {
+      openMenuRef.current = null;
+      setOpenMenu(null);
+    }
+  };
+  const setMenu = (v: MenuId | null) => {
+    openMenuRef.current = v;
+    setOpenMenu(v);
+    if (v) {
+      helpOpenRef.current = false;
+      setHelpOpen(false);
+    }
+  };
+  const closePopovers = () => {
+    helpOpenRef.current = false;
+    setHelpOpen(false);
+    openMenuRef.current = null;
+    setOpenMenu(null);
+  };
 
   useEffect(() => {
     if (mounted.current) return;
@@ -98,6 +200,13 @@ export default function App() {
       loadDemo();
     }
   }, [loadDemo, loadShared]);
+
+  // Toast shareNote hilang sendiri setelah 6 detik.
+  useEffect(() => {
+    if (!shareNote) return;
+    const t = setTimeout(() => setShareNote(null), 6000);
+    return () => clearTimeout(t);
+  }, [shareNote]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -136,6 +245,19 @@ export default function App() {
       }
       if (e.altKey || e.repeat) return;
 
+      // Esc menutup popover shell lebih dulu sebelum membatalkan mode.
+      if (e.key === 'Escape') {
+        if (helpOpenRef.current) {
+          setHelp(false);
+          helpBtnRef.current?.focus();
+          return;
+        }
+        if (openMenuRef.current) {
+          setMenu(null);
+          return;
+        }
+      }
+
       switch (e.key) {
         case 'Escape':
           state.cancelPending();
@@ -151,6 +273,10 @@ export default function App() {
           if (state.placingType) state.rotatePlacement();
           break;
         case ' ': {
+          // I-3: bila Space ditekan saat fokus di elemen interaktif
+          // (tombol/tautan), itu aktivasi bawaan elemen tersebut —
+          // jangan dirampas untuk men-toggle Run.
+          if (target?.closest('button, a, [role="button"]')) break;
           e.preventDefault();
           // Tombol yang baru diklik (mis. "Jalankan") masih memegang fokus,
           // dan Space akan memicu klik tombol itu pada keyup → Run menyala
@@ -167,6 +293,7 @@ export default function App() {
         case '4':
         case '5':
         case '6':
+        case '7':
           state.setWireColor(SHORTCUT_WIRE_COLORS[Number(e.key) - 1].hex);
           break;
         default:
@@ -290,6 +417,7 @@ export default function App() {
       | 'bb-miring'
       | 'bb-atas',
   ) => {
+    setActivePreset(preset);
     if (preset === 'perspektif') {
       setCameraView(
         [TARGET_HOME.x, TARGET_HOME.y, TARGET_HOME.z],
@@ -321,164 +449,285 @@ export default function App() {
     }
   };
 
+  const statusText = anyDamaged
+    ? 'Ada komponen rusak'
+    : sketchError
+      ? 'Sketch berhenti — ada error'
+      : running
+        ? 'Simulasi berjalan'
+        : 'Simulasi berhenti';
+
+  const capsuleShadow =
+    'shadow-[0_8px_32px_rgb(0_0_0/0.45),0_2px_8px_rgb(0_0_0/0.4)]';
+  const menuItemClass =
+    'flex h-9 w-full items-center rounded-lg px-3 text-left text-[13px] font-medium text-zinc-200 transition-colors hover:bg-panel-elevated active:scale-[0.98]';
+  const popoverClass = `hud-pop pointer-events-auto absolute z-[25] rounded-2xl border border-border-subtle bg-panel ${capsuleShadow}`;
+
   return (
-    <div className="flex h-full flex-col bg-panel">
-      {/* ===== Top Toolbar (48px) ===== */}
-      <header className="flex h-12 shrink-0 items-center gap-4 border-b border-border-subtle bg-panel px-4">
-        <div className="flex items-baseline gap-3">
-          <h1 className="text-[15px] font-bold tracking-tight text-zinc-100">
-            Simulator Elektronika 3D
-          </h1>
-          <span className="hidden text-xs text-zinc-500 lg:inline">Meja Kerja ESD Virtual</span>
-        </div>
+    <div className="relative h-[100dvh] overflow-hidden bg-panel">
+      {/* ===== Kanvas 3D full-bleed (z-0, stacking context mengurung drei Html) ===== */}
+      <div className={`absolute inset-0 z-0 ${deleteMode ? 'cursor-trash' : ''}`}>
+        <Workbench resetSignal={resetSignal} />
+      </div>
 
-        <div className="mx-2 h-6 w-px bg-border-subtle" />
-
-        <label className="flex items-center gap-2 text-xs text-zinc-400">
-          Board
-          <select
-            className="h-8 rounded-md border border-border-subtle bg-panel-elevated px-2 text-[13px] font-medium text-zinc-100 outline-none focus:border-accent-primary"
-            value={boardId}
-            onChange={(e) => setBoard(e.target.value)}
-          >
-            {Object.values(BOARD_DEFINITIONS).map((board) => (
-              <option key={board.id} value={board.id}>
-                {board.name}
-              </option>
-            ))}
-          </select>
-        </label>
-
-        <div className="flex items-center gap-2">
-          <button
-            type="button"
-            onClick={() => setRunning(!running)}
-            className={`h-8 rounded-md px-4 text-[13px] font-semibold transition-colors ${
-              running
-                ? 'bg-accent-warning text-[#2a1a00] hover:bg-amber-400'
-                : 'bg-accent-run text-[#032117] hover:bg-emerald-400'
-            }`}
-          >
-            {running ? 'Jeda' : 'Jalankan'}
-          </button>
-          <button
-            type="button"
-            onClick={() => setResetSignal((n) => n + 1)}
-            className="h-8 rounded-md border border-border-subtle bg-panel-elevated px-3 text-[13px] font-medium text-zinc-200 transition-colors hover:border-zinc-500"
-          >
-            Reset Kamera
-          </button>
-          <button
-            type="button"
-            onClick={loadDemo}
-            className="h-8 rounded-md border border-border-subtle bg-panel-elevated px-3 text-[13px] font-medium text-zinc-200 transition-colors hover:border-zinc-500"
-          >
-            Muat Demo
-          </button>
-          <button
-            type="button"
-            onClick={clearAll}
-            className="h-8 rounded-md border border-border-subtle bg-panel-elevated px-3 text-[13px] font-medium text-zinc-200 transition-colors hover:border-zinc-500"
-          >
-            Bersihkan
-          </button>
-        </div>
-
-        <div className="ml-auto flex items-center gap-2 text-xs text-zinc-400">
+      {/* ===== Lapisan overlay: semua panel melayang ===== */}
+      <div className="pointer-events-none absolute inset-0">
+        {/* Kapsul kiri: identitas + board + menu Demo */}
+        <div
+          className={`hud-enter hud-glass pointer-events-auto absolute left-3 top-3 z-20 flex h-11 items-center gap-3 rounded-full border border-border-subtle px-3 ${capsuleShadow}`}
+        >
           <span
-            className={`inline-block size-2 rounded-full ${
-              anyDamaged || sketchError
-                ? 'bg-accent-danger'
-                : running
-                  ? 'bg-accent-run'
-                  : 'bg-zinc-500'
-            }`}
-          />
-          {anyDamaged
-            ? 'Ada komponen rusak'
-            : sketchError
-              ? 'Sketch berhenti — ada error'
-              : running
-                ? 'Simulasi berjalan'
-                : 'Simulasi berhenti'}
+            className="flex items-center gap-2.5"
+            title="Simulator Elektronika 3D — Meja Praktikum Virtual"
+          >
+            <span className="grid size-7 shrink-0 place-items-center rounded-full bg-workbench-mat text-accent-primary">
+              <ShellIcon name="chip" className="size-4" />
+            </span>
+            <span className="hidden whitespace-nowrap text-[15px] font-bold tracking-tight text-zinc-100 min-[1440px]:inline">
+              Simulator Elektronika 3D
+            </span>
+            <span className="whitespace-nowrap text-[15px] font-bold tracking-tight text-zinc-100 min-[1440px]:hidden">
+              Sim3D
+            </span>
+          </span>
+
+          <span className="h-6 w-px shrink-0 bg-border-subtle" aria-hidden="true" />
+
+          <label className="flex shrink-0 items-center gap-2 text-xs text-zinc-400">
+            Board
+            <select
+              aria-label="Pilih board"
+              className="h-8 rounded-lg border border-border-interactive bg-panel-elevated px-2 text-[13px] font-medium text-zinc-100 outline-none focus:border-accent-primary"
+              value={boardId}
+              onChange={(e) => setBoard(e.target.value)}
+            >
+              {Object.values(BOARD_DEFINITIONS).map((board) => (
+                <option key={board.id} value={board.id}>
+                  {board.name}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          <button
+            type="button"
+            aria-haspopup="menu"
+            aria-expanded={openMenu === 'demo'}
+            onClick={() => setMenu(openMenu === 'demo' ? null : 'demo')}
+            className="flex h-8 shrink-0 items-center gap-1 rounded-lg border border-border-interactive px-2.5 text-[13px] font-medium text-zinc-200 transition-colors hover:border-accent-primary hover:text-accent-primary active:scale-[0.97]"
+          >
+            Demo
+            <ShellIcon name="chevron" className="size-3.5" />
+          </button>
         </div>
-      </header>
 
-      {/* ===== Bar Peralatan: warna kabel, undo/redo, mode hapus, suara ===== */}
-      <ToolbarBar />
+        {/* Kapsul tengah: kontrol Run tunggal + status (terpusat pada rektangel bebas) */}
+        <div className="absolute left-[276px] right-[392px] top-3 z-20 flex justify-center max-[1279px]:left-[248px]">
+          <div
+            className={`hud-enter hud-glass pointer-events-auto flex h-11 items-center gap-3 rounded-full border border-border-subtle py-1.5 pl-1.5 pr-4 ${capsuleShadow}`}
+            style={{ animationDelay: '40ms' }}
+          >
+            <button
+              type="button"
+              onClick={() => setRunning(!running)}
+              aria-label={running ? 'Berhenti' : 'Jalankan'}
+              className={`flex h-8 shrink-0 items-center gap-2 rounded-full px-4 text-[13px] font-semibold transition-colors duration-200 active:scale-[0.97] ${
+                running
+                  ? 'bg-accent-warning text-[#2a1a00] hover:bg-amber-400'
+                  : 'bg-accent-run text-[#032117] hover:bg-emerald-400'
+              }`}
+            >
+              <span className="relative inline-block size-3.5 shrink-0" aria-hidden="true">
+                <span
+                  className={`absolute inset-0 transition-opacity duration-150 ${running ? 'opacity-0' : 'opacity-100'}`}
+                >
+                  <ShellIcon name="play" className="size-3.5" />
+                </span>
+                <span
+                  className={`absolute inset-0 transition-opacity duration-150 ${running ? 'opacity-100' : 'opacity-0'}`}
+                >
+                  <ShellIcon name="stop" className="size-3.5" />
+                </span>
+              </span>
+              {running ? 'Berhenti' : 'Jalankan'}
+            </button>
+            <div
+              role="status"
+              aria-live="polite"
+              className="flex min-w-0 items-center gap-2 text-xs text-zinc-300"
+            >
+              <span
+                className={`inline-block size-2 shrink-0 rounded-full ${
+                  anyDamaged || sketchError
+                    ? 'bg-accent-danger'
+                    : running
+                      ? 'hud-pulse bg-accent-run'
+                      : 'bg-zinc-500'
+                }`}
+              />
+              <span className="truncate whitespace-nowrap">{statusText}</span>
+            </div>
+          </div>
+        </div>
 
-      {/* ===== Badan: Left Dock + Viewport ===== */}
-      <div className="flex min-h-0 flex-1">
-        <aside className="flex w-[260px] shrink-0 flex-col border-r border-border-subtle bg-panel">
+        {/* Kapsul kanan: Bagikan + menu Proyek + bantuan */}
+        <div
+          className={`hud-enter hud-glass pointer-events-auto absolute right-3 top-3 z-20 flex h-11 items-center gap-2 rounded-full border border-border-subtle px-2 ${capsuleShadow}`}
+          style={{ animationDelay: '80ms' }}
+        >
+          <button
+            type="button"
+            onClick={handleShare}
+            className="flex h-8 shrink-0 items-center gap-1.5 rounded-full px-3 text-[13px] font-semibold text-accent-primary transition-colors hover:bg-accent-primary/15 active:scale-[0.97]"
+          >
+            <ShellIcon name="share" className="size-4" />
+            Bagikan
+          </button>
+          <button
+            type="button"
+            aria-haspopup="menu"
+            aria-expanded={openMenu === 'proyek'}
+            onClick={() => setMenu(openMenu === 'proyek' ? null : 'proyek')}
+            className="flex h-8 shrink-0 items-center gap-1 rounded-lg border border-border-interactive px-2.5 text-[13px] font-medium text-zinc-200 transition-colors hover:border-accent-primary hover:text-accent-primary active:scale-[0.97]"
+          >
+            Proyek
+            <ShellIcon name="chevron" className="size-3.5" />
+          </button>
+          <button
+            ref={helpBtnRef}
+            type="button"
+            aria-label="Bantuan dan pintasan keyboard"
+            aria-haspopup="dialog"
+            aria-expanded={helpOpen}
+            title="Bantuan dan pintasan keyboard"
+            onClick={() => setHelp(!helpOpen)}
+            className={`grid size-8 shrink-0 place-items-center rounded-full border text-[15px] font-bold transition-colors active:scale-[0.97] ${
+              helpOpen
+                ? 'border-accent-primary text-accent-primary'
+                : 'border-border-interactive text-zinc-200 hover:border-accent-primary hover:text-accent-primary'
+            }`}
+          >
+            ?
+          </button>
+        </div>
+
+        {/* Panel katalog (konten: CatalogPanel) */}
+        <div
+          className="hud-enter pointer-events-auto absolute bottom-[76px] left-3 top-[68px] z-20 flex w-[264px] max-[1279px]:w-[224px]"
+          style={{ animationDelay: '120ms' }}
+        >
           <CatalogPanel />
-          <div className="max-h-[44%] shrink-0 space-y-3 overflow-y-auto border-t border-border-subtle p-3">
+        </div>
 
-            {/* Warna kabel aktif */}
-            <div className="rounded-lg border border-border-subtle bg-panel-elevated p-3">
-              <h3 className="text-[13px] font-semibold text-zinc-100">Warna Kabel</h3>
-              <div className="mt-2 flex flex-wrap gap-1.5">
-                {WIRE_COLORS.map((c) => (
-                  <button
-                    key={c.hex}
-                    type="button"
-                    title={c.label}
-                    aria-label={c.label}
-                    onClick={() => setWireColor(c.hex)}
-                    className={`size-6 rounded-full border-2 transition-transform ${
-                      wireColor === c.hex ? 'scale-110 border-white' : 'border-transparent'
-                    }`}
-                    style={{ backgroundColor: c.hex }}
-                  />
-                ))}
+        {/* Dock kanan: editor/serial/panduan (konten: RightDock) */}
+        <div
+          className="hud-enter pointer-events-auto absolute bottom-[76px] right-3 top-[68px] z-20 flex w-[380px]"
+          style={{ animationDelay: '160ms' }}
+        >
+          <RightDock />
+        </div>
+
+        {/* Dock bawah (konten: ToolbarBar) */}
+        <div className="absolute bottom-3 left-[288px] right-[404px] z-20 flex justify-center max-[1279px]:left-[248px]">
+          <div className="hud-enter-up pointer-events-auto max-w-full" style={{ animationDelay: '200ms' }}>
+            <ToolbarBar />
+          </div>
+        </div>
+
+        {/* Kapsul kamera (kanan bawah) */}
+        <div
+          className={`hud-enter-up hud-glass pointer-events-auto absolute bottom-3 right-3 z-10 flex h-11 items-center gap-1 rounded-full border border-border-subtle px-1.5 ${capsuleShadow}`}
+          style={{ animationDelay: '240ms' }}
+          role="group"
+          aria-label="Preset kamera"
+        >
+          <button
+            type="button"
+            aria-pressed={activePreset === 'perspektif'}
+            title="Tampilan perspektif (seperti Reset Kamera)"
+            onClick={() => applyCameraPreset('perspektif')}
+            className={`h-8 rounded-full border px-3 text-xs font-semibold transition-colors active:scale-[0.97] ${
+              activePreset === 'perspektif'
+                ? 'border-accent-primary text-accent-primary'
+                : 'border-border-interactive text-zinc-200 hover:border-accent-primary hover:text-accent-primary'
+            }`}
+          >
+            3D
+          </button>
+          <button
+            type="button"
+            aria-label="Preset 3D lainnya"
+            aria-haspopup="menu"
+            aria-expanded={openMenu === 'cam3d'}
+            title="Preset 3D lainnya"
+            onClick={() => setMenu(openMenu === 'cam3d' ? null : 'cam3d')}
+            className="grid size-8 place-items-center rounded-full text-zinc-300 transition-colors hover:text-accent-primary active:scale-[0.97]"
+          >
+            <ShellIcon name="chevron" className="size-4" />
+          </button>
+          <span className="h-5 w-px bg-border-subtle" aria-hidden="true" />
+          <button
+            type="button"
+            aria-pressed={activePreset === 'bb-atas'}
+            title="Lihat breadboard dari atas"
+            onClick={() => applyCameraPreset('bb-atas')}
+            className={`h-8 rounded-full border px-3 text-xs font-semibold transition-colors active:scale-[0.97] ${
+              activePreset === 'bb-atas'
+                ? 'border-accent-primary text-accent-primary'
+                : 'border-border-interactive text-zinc-200 hover:border-accent-primary hover:text-accent-primary'
+            }`}
+          >
+            Atas
+          </button>
+          <button
+            type="button"
+            aria-label="Preset atas lainnya"
+            aria-haspopup="menu"
+            aria-expanded={openMenu === 'camAtas'}
+            title="Preset atas lainnya"
+            onClick={() => setMenu(openMenu === 'camAtas' ? null : 'camAtas')}
+            className="grid size-8 place-items-center rounded-full text-zinc-300 transition-colors hover:text-accent-primary active:scale-[0.97]"
+          >
+            <ShellIcon name="chevron" className="size-4" />
+          </button>
+          <span className="h-5 w-px bg-border-subtle" aria-hidden="true" />
+          <button
+            type="button"
+            aria-pressed={activePreset === 'dekat'}
+            title="Fokus dekat ke komponen terpilih (atau tampil depan bila tidak ada pilihan)"
+            onClick={() =>
+              applyCameraPreset(selectedInstance ? 'dekat' : 'depan')
+            }
+            className={`h-8 rounded-full border px-3 text-xs font-semibold transition-colors active:scale-[0.97] ${
+              activePreset === 'dekat'
+                ? 'border-accent-primary text-accent-primary'
+                : 'border-border-interactive text-zinc-200 hover:border-accent-primary hover:text-accent-primary'
+            }`}
+          >
+            Fokus
+          </button>
+        </div>
+
+        {/* Tumpukan tengah-atas: pill mode → inspector → autopsy */}
+        <div className="absolute left-[276px] right-[392px] top-[68px] z-10 flex justify-center max-[1279px]:left-[248px]">
+          <div className="flex w-full max-w-[400px] flex-col items-center gap-2">
+            {placingType && (
+              <div className="hud-pop pointer-events-none rounded-full border border-accent-primary/50 bg-panel/90 px-3.5 py-2 text-xs font-medium text-accent-primary backdrop-blur-md">
+                Mode pasang: klik lubang breadboard untuk menaruh{' '}
+                {getComponentPlugin(placingType)?.name ?? placingType} (Esc untuk batal)
               </div>
-              <p className="mt-2 text-[11px] leading-relaxed text-zinc-500">
-                {pendingFrom
-                  ? `Kabel dari ${terminalDisplay(pendingFrom, boardId)} — klik terminal tujuan.`
-                  : 'Klik pin board atau lubang breadboard untuk mulai menarik kabel.'}
-              </p>
-            </div>
-
-            {/* Proyek: bagikan / ekspor / impor */}
-            <div className="rounded-lg border border-border-subtle bg-panel-elevated p-3">
-              <h3 className="text-[13px] font-semibold text-zinc-100">Proyek</h3>
-              <div className="mt-2 flex gap-1.5">
-                <button
-                  type="button"
-                  onClick={handleShare}
-                  className="h-7 flex-1 rounded-md bg-accent-primary/15 text-[11px] font-semibold text-accent-primary transition-colors hover:bg-accent-primary/25"
-                >
-                  Bagikan
-                </button>
-                <button
-                  type="button"
-                  onClick={handleExport}
-                  className="h-7 flex-1 rounded-md border border-border-subtle text-[11px] font-medium text-zinc-200 transition-colors hover:border-zinc-500"
-                >
-                  Ekspor
-                </button>
-                <button
-                  type="button"
-                  onClick={() => importRef.current?.click()}
-                  className="h-7 flex-1 rounded-md border border-border-subtle text-[11px] font-medium text-zinc-200 transition-colors hover:border-zinc-500"
-                >
-                  Impor
-                </button>
-                <input
-                  ref={importRef}
-                  type="file"
-                  accept=".rangkai,application/json"
-                  className="hidden"
-                  onChange={handleImport}
-                />
+            )}
+            {deleteMode && (
+              <div className="hud-pop pointer-events-none rounded-full border border-accent-danger/60 bg-panel/90 px-3.5 py-2 text-xs font-semibold text-red-200 backdrop-blur-md">
+                Mode Hapus aktif — klik komponen atau kabel untuk menghapus (Esc keluar)
               </div>
-              {shareNote && (
-                <p className="mt-2 text-[11px] leading-relaxed text-zinc-500">{shareNote}</p>
-              )}
-            </div>
+            )}
 
-            {/* Panel seleksi komponen */}
+            {/* Popover inspector komponen (isi sama seperti panel seleksi lama) */}
             {selectedInstance && (
-              <div className="rounded-lg border border-border-subtle bg-panel-elevated p-3">
+              <div
+                className={`hud-pop pointer-events-auto w-full rounded-2xl border border-border-subtle bg-panel/95 p-3 ${capsuleShadow}`}
+              >
                 <h3 className="text-[13px] font-semibold text-zinc-100">
                   {getComponentPlugin(selectedInstance.type)?.name ?? selectedInstance.type}
                 </h3>
@@ -491,7 +740,7 @@ export default function App() {
                   )}
                 </p>
                 {Object.entries(selectedInstance.simState.branchCurrents).map(([key, amps]) => (
-                  <p key={key} className="mt-0.5 font-mono text-[11px] text-zinc-500">
+                  <p key={key} className="mt-0.5 font-mono text-[11px] text-zinc-400">
                     Arus {key}: {(amps * 1000).toFixed(1)} mA
                   </p>
                 ))}
@@ -500,7 +749,7 @@ export default function App() {
                     <button
                       type="button"
                       onClick={() => replaceInstance(selectedInstance.id)}
-                      className="h-7 flex-1 rounded-md bg-accent-run text-xs font-semibold text-[#032117]"
+                      className="h-7 flex-1 rounded-lg bg-accent-run text-xs font-semibold text-[#032117] transition-transform active:scale-[0.97]"
                     >
                       Ganti Komponen
                     </button>
@@ -508,17 +757,19 @@ export default function App() {
                   <button
                     type="button"
                     onClick={() => removeInstance(selectedInstance.id)}
-                    className="h-7 flex-1 rounded-md border border-border-subtle text-xs font-medium text-zinc-200"
+                    className="h-7 flex-1 rounded-lg border border-border-interactive text-xs font-medium text-zinc-200 transition-colors hover:border-accent-danger hover:text-red-200 active:scale-[0.97]"
                   >
-                    Hapus
+                    Hapus Komponen
                   </button>
                 </div>
               </div>
             )}
 
-            {/* Panel seleksi kabel */}
+            {/* Popover inspector kabel */}
             {selectedWire && (
-              <div className="rounded-lg border border-border-subtle bg-panel-elevated p-3">
+              <div
+                className={`hud-pop pointer-events-auto w-full rounded-2xl border border-border-subtle bg-panel/95 p-3 ${capsuleShadow}`}
+              >
                 <h3 className="text-[13px] font-semibold text-zinc-100">Kabel Terpilih</h3>
                 <p className="mt-1 text-xs leading-relaxed text-zinc-400">
                   {terminalLabel(selectedWire.a, getBoardDefinition(boardId))} →{' '}
@@ -527,95 +778,231 @@ export default function App() {
                 <button
                   type="button"
                   onClick={() => removeWire(selectedWire.id)}
-                  className="mt-2.5 h-7 w-full rounded-md border border-border-subtle text-xs font-medium text-zinc-200"
+                  className="mt-2.5 h-7 w-full rounded-lg border border-border-interactive text-xs font-medium text-zinc-200 transition-colors hover:border-accent-danger hover:text-red-200 active:scale-[0.97]"
                 >
                   Hapus Kabel
                 </button>
               </div>
             )}
-          </div>
-          <p className="border-t border-border-subtle px-4 py-3 text-[11px] leading-relaxed text-zinc-600">
-            Pasang komponen dari katalog, tarik kabel antar terminal, lalu tekan
-            Jalankan. Coba cabut kabel resistor dari jalur LED, sambungkan anoda
-            langsung ke rail 5V, dan jalankan lagi untuk melihat akibatnya. Delete
-            menghapus pilihan, Esc membatalkan.
-          </p>
-        </aside>
 
-        <main className={`relative min-w-0 flex-1 ${deleteMode ? 'cursor-trash' : ''}`}>
-          <Workbench resetSignal={resetSignal} />
-          {/* Preset sudut kamera — dibedakan per area: Umum, Board, Breadboard */}
-          <div className="absolute left-3 top-3 z-10 flex w-[172px] flex-col gap-2.5 rounded-md border border-border-subtle bg-panel/70 p-2 backdrop-blur-md">
+            {/* AutopsyCard memposisikan dirinya absolute — slot menetralkannya
+                via CSS (.hud-autopsy-slot > section) agar mengalir dalam stack. */}
+            {autopsy && (
+              <div className="hud-autopsy-slot pointer-events-auto relative z-40 w-full">
+                <AutopsyCard />
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Backdrop penutup popover (klik di mana saja menutup menu/bantuan) */}
+        {(openMenu || helpOpen) && (
+          <div
+            className="pointer-events-auto absolute inset-0 z-[24]"
+            aria-hidden="true"
+            onClick={closePopovers}
+          />
+        )}
+
+        {/* Menu Demo */}
+        {openMenu === 'demo' && (
+          <div className={`${popoverClass} hud-pop-origin-tl left-3 top-[60px] w-52 p-1.5`} role="menu">
+            <button
+              type="button"
+              role="menuitem"
+              className={menuItemClass}
+              onClick={() => {
+                loadDemo();
+                setMenu(null);
+              }}
+            >
+              Muat Contoh
+            </button>
+            <button
+              type="button"
+              role="menuitem"
+              className={`${menuItemClass} text-red-200 hover:bg-accent-danger/10`}
+              onClick={() => {
+                clearAll();
+                setMenu(null);
+              }}
+            >
+              Bersihkan Meja
+            </button>
+          </div>
+        )}
+
+        {/* Menu Proyek */}
+        {openMenu === 'proyek' && (
+          <div className={`${popoverClass} hud-pop-origin-tr right-3 top-[60px] w-44 p-1.5`} role="menu">
+            <button
+              type="button"
+              role="menuitem"
+              className={menuItemClass}
+              onClick={() => {
+                handleExport();
+                setMenu(null);
+              }}
+            >
+              Ekspor
+            </button>
+            <button
+              type="button"
+              role="menuitem"
+              className={menuItemClass}
+              onClick={() => {
+                setMenu(null);
+                importRef.current?.click();
+              }}
+            >
+              Impor
+            </button>
+          </div>
+        )}
+
+        {/* Menu preset 3D lainnya */}
+        {openMenu === 'cam3d' && (
+          <div className={`${popoverClass} hud-pop-origin-br bottom-[60px] right-3 w-56 p-1.5`} role="menu">
+            {(
+              [
+                { id: 'depan', label: 'Depan' },
+                { id: 'board-miring', label: 'Board Miring' },
+                { id: 'bb-miring', label: 'Breadboard Miring' },
+              ] as const
+            ).map((p) => (
+              <button
+                key={p.id}
+                type="button"
+                role="menuitem"
+                aria-current={activePreset === p.id || undefined}
+                className={`${menuItemClass} ${activePreset === p.id ? 'text-accent-primary' : ''}`}
+                onClick={() => {
+                  applyCameraPreset(p.id);
+                  setMenu(null);
+                }}
+              >
+                {p.label}
+              </button>
+            ))}
+          </div>
+        )}
+
+        {/* Menu preset atas lainnya */}
+        {openMenu === 'camAtas' && (
+          <div className={`${popoverClass} hud-pop-origin-br bottom-[60px] right-3 w-56 p-1.5`} role="menu">
+            <button
+              type="button"
+              role="menuitem"
+              aria-current={activePreset === 'board-atas' || undefined}
+              className={`${menuItemClass} ${activePreset === 'board-atas' ? 'text-accent-primary' : ''}`}
+              onClick={() => {
+                applyCameraPreset('board-atas');
+                setMenu(null);
+              }}
+            >
+              Board Atas
+            </button>
+          </div>
+        )}
+
+        {/* Popover bantuan "?" — satu rumah untuk semua referensi (§E) */}
+        {helpOpen && (
+          <div
+            className={`${popoverClass} hud-pop-origin-tr right-3 top-[60px] w-[350px] max-w-[calc(100vw-24px)] p-4`}
+            role="dialog"
+            aria-label="Bantuan dan pintasan keyboard"
+          >
+            <h2 className="text-sm font-bold text-zinc-100">Bantuan &amp; Pintasan</h2>
+            <p className="mt-1 text-xs leading-relaxed text-zinc-300">
+              Meja Praktikum Virtual — pasang komponen dari katalog, tarik kabel
+              antar terminal, lalu tekan Jalankan.
+            </p>
             {(
               [
                 {
-                  title: 'Umum',
-                  items: [
-                    { id: 'perspektif', label: 'Perspektif' },
-                    { id: 'depan', label: 'Depan' },
-                    { id: 'dekat', label: 'Dekat' },
+                  title: 'Menjalankan simulasi',
+                  rows: [
+                    ['Spasi', 'Jalankan / Berhenti'],
+                    ['Titik status', 'Hijau berjalan · abu berhenti · merah error/rusak'],
                   ],
                 },
                 {
-                  title: 'Board',
-                  items: [
-                    { id: 'board-miring', label: 'Miring' },
-                    { id: 'board-atas', label: 'Atas' },
+                  title: 'Merakit rangkaian',
+                  rows: [
+                    ['R', 'Putar komponen saat memasang'],
+                    ['1–7', 'Pilih warna kabel'],
+                    ['Delete', 'Hapus pilihan'],
+                    ['Esc', 'Batalkan / keluar mode'],
                   ],
                 },
                 {
-                  title: 'Breadboard',
-                  items: [
-                    { id: 'bb-miring', label: 'Miring' },
-                    { id: 'bb-atas', label: 'Atas' },
+                  title: 'Mengedit',
+                  rows: [
+                    ['Ctrl+Z', 'Urungkan'],
+                    ['Ctrl+Shift+Z', 'Ulangi'],
+                    ['Ctrl+Y', 'Ulangi'],
+                  ],
+                },
+                {
+                  title: 'Kamera',
+                  rows: [
+                    ['Seret', 'Memutar'],
+                    ['Roda tetikus', 'Memperbesar'],
+                    ['Seret kanan', 'Menggeser'],
+                    ['Preset', '3D · Atas · Fokus, menu ▾ untuk varian per area'],
                   ],
                 },
               ] as const
             ).map((group) => (
-              <div key={group.title} className="flex flex-col gap-1">
-                <span className="px-0.5 text-[9px] font-semibold uppercase tracking-[0.14em] text-zinc-500">
+              <div key={group.title} className="mt-3">
+                <h3 className="text-[11px] font-semibold uppercase tracking-[0.12em] text-zinc-400">
                   {group.title}
-                </span>
-                <div className="flex gap-1.5">
-                  {group.items.map((p) => (
-                    <button
-                      key={p.id}
-                      type="button"
-                      onClick={() => applyCameraPreset(p.id)}
-                      className="h-7 flex-1 rounded-md border border-border-subtle bg-panel/85 px-2 text-[11px] font-medium text-zinc-200 transition-colors hover:border-accent-primary hover:text-accent-primary"
-                    >
-                      {p.label}
-                    </button>
+                </h3>
+                <dl className="mt-1.5 space-y-1">
+                  {group.rows.map(([key, desc]) => (
+                    <div key={key} className="flex items-baseline justify-between gap-3">
+                      <dt className="shrink-0">
+                        <kbd className="rounded-md border border-border-interactive bg-panel-elevated px-1.5 py-0.5 font-mono text-[11px] text-zinc-100">
+                          {key}
+                        </kbd>
+                      </dt>
+                      <dd className="text-right text-xs text-zinc-300">{desc}</dd>
+                    </div>
                   ))}
-                </div>
+                </dl>
               </div>
             ))}
           </div>
-          <div className="pointer-events-none absolute bottom-3 left-3 rounded-md border border-border-subtle bg-panel/85 px-3 py-2 text-[11px] text-zinc-400 backdrop-blur-md">
-            Kontrol kamera: seret untuk memutar, roda tetikus untuk memperbesar,
-            seret kanan untuk menggeser.
-          </div>
-          {(placingType || deleteMode) && (
-            <div className="pointer-events-none absolute left-1/2 top-3 z-10 flex -translate-x-1/2 flex-col items-center gap-2">
-              {placingType && (
-                <div className="rounded-md border border-accent-primary/50 bg-panel/90 px-3 py-2 text-xs font-medium text-accent-primary backdrop-blur-md">
-                  Mode pasang: klik lubang breadboard untuk menaruh{' '}
-                  {getComponentPlugin(placingType)?.name ?? placingType} (Esc untuk batal)
-                </div>
-              )}
-              {deleteMode && (
-                <div className="rounded-md border border-accent-danger/60 bg-panel/90 px-3 py-2 text-xs font-semibold text-accent-danger backdrop-blur-md">
-                  Mode Hapus aktif — klik komponen atau kabel untuk menghapus (Esc keluar)
-                </div>
-              )}
+        )}
+
+        {/* Toast shareNote + pill petunjuk kabel, terpusat di atas dock bawah */}
+        <div className="absolute bottom-[68px] left-[288px] right-[404px] z-50 flex flex-col items-center gap-2 max-[1279px]:left-[248px]">
+          {shareNote && (
+            <div
+              role="status"
+              className={`hud-pop rounded-full border border-border-subtle bg-panel px-4 py-2 text-center text-xs text-zinc-200 ${capsuleShadow}`}
+            >
+              {shareNote}
             </div>
           )}
-          <AutopsyCard />
-        </main>
-        <RightDock />
+          {pendingFrom && (
+            <div className="hud-pop rounded-full border border-accent-warning/50 bg-panel/90 px-3.5 py-2 text-xs font-medium text-accent-warning backdrop-blur-md">
+              Kabel dari {terminalDisplay(pendingFrom, boardId)} — klik terminal tujuan.
+            </div>
+          )}
+        </div>
       </div>
 
-      {/* Probe multimeter mengikuti kursor */}
+      {/* Input impor tersembunyi (tetap di App; dipicu dari menu Proyek) */}
+      <input
+        ref={importRef}
+        type="file"
+        accept=".rangkai,application/json"
+        className="hidden"
+        onChange={handleImport}
+      />
+
+      {/* Probe multimeter mengikuti kursor — TETAP anak langsung root */}
       {hover && (
         <div
           className="pointer-events-none fixed z-30 rounded-md border border-border-subtle bg-panel-elevated/95 px-2.5 py-1.5 font-mono text-[11px] text-zinc-200 shadow-lg"

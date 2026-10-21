@@ -71,7 +71,7 @@ export const SensorGizmo3D: ComponentType<SensorGizmo3DProps> = ({
   unit,
   onChange,
 }) => (
-  <Html center distanceFactor={12} position={position ?? [0, 4.2, 0]}>
+  <Html center distanceFactor={12} zIndexRange={[100, 0]} position={position ?? [0, 4.2, 0]}>
     <div style={PANEL_STYLE} onPointerDown={(e) => e.stopPropagation()}>
       <div style={HEADER_STYLE}>
         <span>{label}</span>

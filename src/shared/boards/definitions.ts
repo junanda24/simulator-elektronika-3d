@@ -33,7 +33,11 @@ export interface BoardDefinition {
   pcbColor: string;
 }
 
-const ORIGIN: [number, number, number] = [-42, 0, 0];
+// Origin bersama semua board non-Uno. -21 (bukan -42): board didekatkan ke
+// breadboard (origin x=12) agar celah tepi board→breadboard ±8,5 unit
+// (±21,6mm), bukan ±29,5 unit seperti layout lama. UNO_ORIGIN di uno/pins.ts
+// memakai nilai yang sama — keduanya WAJIB digeser bersamaan.
+const ORIGIN: [number, number, number] = [-21, 0, 0];
 const TOP_Y = 1.7;
 const PIN_Y = 1.15;
 

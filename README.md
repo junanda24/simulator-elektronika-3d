@@ -45,7 +45,7 @@ Detail lengkap: [SIMULATION_RULES.md](SIMULATION_RULES.md).
 npm install
 npm run dev      # mode pengembangan
 npm run build    # build produksi
-npm test         # 281 tes (vitest)
+npm test         # 286 tes (vitest)
 ```
 
 ## Teknologi
@@ -63,6 +63,6 @@ Dokumen desain: [ARCHITECTURE.md](ARCHITECTURE.md) · [TECH_STACK.md](TECH_STACK
 
 ## Status
 
-Roadmap awal 5 batch selesai, dilanjutkan Batch 6–10 (overhaul interaktivitas): audio mekanis Web Audio, undo/redo, rotasi penempatan, kabel elastis + aliran arus + thermal glow, ghost penempatan, gizmo sensor 3D, gerak servo/joystick yang halus, efek ledakan berlapis, preset kamera, shortcut penuh, mode hapus, dan realisme visual (label tercetak breadboard, jejak PCB, material epoxy). Terverifikasi: 281/281 tes lulus, TypeScript bersih, build produksi hijau. Riwayat per batch di `openspec/changes/`.
+Roadmap awal 5 batch selesai, dilanjutkan Batch 6–10 (overhaul interaktivitas): audio mekanis Web Audio, undo/redo, rotasi penempatan, kabel elastis + aliran arus + thermal glow, ghost penempatan, gizmo sensor 3D, gerak servo/joystick yang halus, efek ledakan berlapis, preset kamera, shortcut penuh, mode hapus, dan realisme visual (label tercetak breadboard, jejak PCB, material epoxy). Terverifikasi: 286/286 tes lulus, TypeScript bersih, build produksi hijau. Riwayat per batch di `openspec/changes/`. Gelombang redesign HUD (audit design 6 lensa): shell dashboard diganti Floating Studio HUD — tiga kapsul melayang (Run tunggal Jalankan/Berhenti, menu Demo dan Proyek, bantuan "?"), katalog full-height dengan ikon SVG per komponen, dock bawah 7 warna kabel, kamera [3D] [Atas] [Fokus] dengan setViewOffset, board digeser lebih dekat ke breadboard, plus perbaikan aksesibilitas (indikator fokus keyboard, reduced-motion, kontras AA).
 
 Audit menyeluruh 2026-10-21 (gelombang perbaikan pasca-rilis): model transistor diperbaiki (lonjakan Ic fiktif belasan ampere saat transisi OFF→ON dan osilasi saturasi yang membuat solver tidak konvergen — diganti ingatan rezim B–E + konduktansi saturasi); jalur Run dibuat anti-mati-diam (bridge membuktikan worker hidup dan jatuh ke sesi lokal bila worker gagal, status UI jujur saat sketch mati, banner error tampil di semua tab, baris yang salah ditandai di editor); transpiler diperkuat (stub library bernama untuk Servo/DHT, builtin Arduino tambahan, pesan "belum didukung" yang eksplisit, nomor baris error titik-koma akurat, `map()` dipotong ala `long` Arduino); performa dipangkas (ContactShadows dibakar sekali, DPR maksimal 1,5, bayangan 1024, memo per instance 3D, netlist kabel terisolasi dari badai snapshot); katalog didesain ulang (pencarian + tab kategori + tile ringkas), toolbar bergrup, kursor tong sampah pada mode hapus; Panduan diperluas dari 8 menjadi 14 modul.

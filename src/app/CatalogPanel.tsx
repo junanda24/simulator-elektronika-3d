@@ -1,16 +1,20 @@
 import { useMemo, useState } from 'react';
 import { CATALOG, CATEGORY_LABEL_ID, type ComponentMeta } from './catalogData';
+import { CATALOG_ICONS } from './catalogIcons';
 import { useCircuitStore } from '../features/wiring/store/circuitStore';
 import type { ComponentCategory } from '../shared/types';
 
 /**
- * Panel katalog Left Dock — pola palet aset padat (Refero: Tinkercad/Figma
- * assets panel; mode Operate: scanability di atas ekspresi).
+ * Panel katalog — palet komponen Floating Studio HUD (SINTESIS-FINAL §F).
  *
- * Header tetap di atas panel: judul, pencarian instan, tab kategori.
- * Badan: grup per kategori dengan grid 2 kolom tile ringkas. Seluruh tile
- * adalah tombol Pasang (klik lagi membatalkan mode pasang). Deskripsi
- * panjang hanya hidup di tooltip `title` — bukan paragraf di kartu.
+ * Panel 100% katalog: header tetap (judul, pencarian instan, pill
+ * kategori flex-wrap), badan berupa grup per kategori dengan grid
+ * 2 kolom tile ikon h-[88px] (glyph SVG dari catalogIcons.tsx, nama
+ * pendek 1 baris, baris mono spesifikasi kunci + jumlah pin). Seluruh
+ * tile adalah tombol Pasang (klik lagi membatalkan mode pasang);
+ * nama penuh + deskripsi panjang hidup di tooltip `title`, deskripsi
+ * tetap masuk indeks pencarian. Root h-full w-full — posisi dan
+ * permukaan panel diatur kontainer pembungkus di App.
  */
 
 type TabId = ComponentCategory | 'semua';
@@ -19,6 +23,34 @@ type TabId = ComponentCategory | 'semua';
 const USED_CATEGORIES = (Object.keys(CATEGORY_LABEL_ID) as ComponentCategory[]).filter(
   (category) => CATALOG.some((meta) => meta.category === category),
 );
+
+/**
+ * Nama pendek 1 baris + spesifikasi kunci per tipe untuk tile ikon.
+ * Nilai diambil dari meta katalog (nilai bawaan, rating, varian) —
+ * nama penuh tetap tampil di tooltip dan hasil pencarian.
+ */
+const TILE_INFO: Record<string, { shortName: string; spec: string }> = {
+  resistor: { shortName: 'Resistor', spec: '220 Ω' },
+  'led-5mm': { shortName: 'LED 5mm', spec: 'Merah' },
+  'push-button': { shortName: 'Push Button', spec: 'Sesaat' },
+  potentiometer: { shortName: 'Potensiometer', spec: '10 kΩ' },
+  capacitor: { shortName: 'Kapasitor', spec: '100 µF' },
+  diode: { shortName: 'Dioda 1N4007', spec: '0,7 V' },
+  transistor: { shortName: 'Transistor NPN', spec: 'β 100' },
+  relay: { shortName: 'Relay 5V', spec: 'Koil 5 V' },
+  'rgb-led': { shortName: 'LED RGB', spec: '3 kanal' },
+  ldr: { shortName: 'LDR', spec: 'Cahaya' },
+  pir: { shortName: 'Sensor PIR', spec: 'Gerak' },
+  lm35: { shortName: 'LM35', spec: '10 mV/°C' },
+  joystick: { shortName: 'Joystick', spec: '2 sumbu' },
+  'soil-moisture': { shortName: 'Sensor Tanah', spec: 'Analog' },
+  servo: { shortName: 'Servo SG90', spec: '0–180°' },
+  'dc-motor': { shortName: 'Motor DC', spec: 'DC' },
+  buzzer: { shortName: 'Buzzer', spec: 'Aktif 5 V' },
+  'seven-segment': { shortName: '7-Segment', spec: '1 digit' },
+  fuse: { shortName: 'Sekering', spec: '500 mA' },
+  'tilt-switch': { shortName: 'Tilt Switch', spec: 'Bola logam' },
+};
 
 function matchesQuery(meta: ComponentMeta, query: string): boolean {
   const haystack = `${meta.name} ${meta.descriptionId}`.toLowerCase();
@@ -54,14 +86,14 @@ export default function CatalogPanel() {
   };
 
   return (
-    <section className="flex min-h-0 flex-1 flex-col">
-      {/* ===== Header tetap: judul + pencarian + tab kategori ===== */}
+    <section className="flex h-full min-h-0 w-full flex-col">
+      {/* ===== Header tetap: judul + pencarian + pill kategori ===== */}
       <div className="shrink-0 border-b border-border-subtle px-3 pb-3 pt-3">
         <div className="flex items-baseline justify-between gap-2 px-1">
           <h2 className="text-[13px] font-semibold text-zinc-100">Katalog Komponen</h2>
-          <span className="text-[11px] text-zinc-500">{CATALOG.length} komponen</span>
+          <span className="text-[11px] text-zinc-400">{CATALOG.length} komponen</span>
         </div>
-        <p className="mt-0.5 px-1 text-[11px] leading-snug text-zinc-500">
+        <p className="mt-0.5 px-1 text-[11px] leading-snug text-zinc-400">
           Klik komponen, lalu klik lubang breadboard.
         </p>
 
@@ -73,7 +105,7 @@ export default function CatalogPanel() {
             stroke="currentColor"
             strokeWidth={2}
             strokeLinecap="round"
-            className="pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-zinc-500"
+            className="pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-zinc-400"
           >
             <circle cx="11" cy="11" r="7" />
             <path d="m20 20-3.8-3.8" />
@@ -84,19 +116,16 @@ export default function CatalogPanel() {
             onChange={(e) => setQuery(e.target.value)}
             placeholder="Cari komponen…"
             aria-label="Cari komponen"
-            className="h-8 w-full rounded-md border border-border-subtle bg-panel-elevated pl-8 pr-2.5 text-[13px] text-zinc-100 outline-none transition-colors placeholder:text-zinc-500 focus:border-accent-primary"
+            className="h-8 w-full rounded-md border border-[#5B6478] bg-panel-elevated pl-8 pr-2.5 text-[13px] text-zinc-100 outline-none transition-colors placeholder:text-zinc-500 focus:border-accent-primary"
           />
         </div>
 
-        <div
-          className="mt-2.5 flex gap-1.5 overflow-x-auto pb-0.5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
-          role="tablist"
-          aria-label="Filter kategori komponen"
-        >
+        {/* Kategori = tombol toggle aria-pressed, flex-wrap agar semua
+            kategori selalu terlihat (bukan pola tablist — A4 I-2). */}
+        <div className="mt-2.5 flex flex-wrap gap-1.5" aria-label="Filter kategori komponen">
           <button
             type="button"
-            role="tab"
-            aria-selected={tab === 'semua' && !normalizedQuery}
+            aria-pressed={tab === 'semua' && !normalizedQuery}
             onClick={() => pickTab('semua')}
             className={`h-7 shrink-0 rounded-full border px-2.5 text-[11px] font-medium transition-colors ${
               tab === 'semua' && !normalizedQuery
@@ -110,8 +139,7 @@ export default function CatalogPanel() {
             <button
               key={category}
               type="button"
-              role="tab"
-              aria-selected={tab === category && !normalizedQuery}
+              aria-pressed={tab === category && !normalizedQuery}
               onClick={() => pickTab(category)}
               className={`h-7 shrink-0 rounded-full border px-2.5 text-[11px] font-medium transition-colors ${
                 tab === category && !normalizedQuery
@@ -125,10 +153,10 @@ export default function CatalogPanel() {
         </div>
       </div>
 
-      {/* ===== Badan: grup kategori + grid tile (scroll sendiri) ===== */}
+      {/* ===== Badan: grup kategori + grid tile ikon (scroll sendiri) ===== */}
       <div className="min-h-0 flex-1 overflow-y-auto p-3">
         {isEmpty ? (
-          <p className="px-1 py-6 text-center text-xs leading-relaxed text-zinc-500">
+          <p className="px-1 py-6 text-center text-xs leading-relaxed text-zinc-400">
             Tidak ada komponen cocok.
             {normalizedQuery && (
               <>
@@ -141,34 +169,41 @@ export default function CatalogPanel() {
           <div className="space-y-4">
             {groups.map((group) => (
               <div key={group.category}>
-                <h3 className="px-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-zinc-500">
+                <h3 className="px-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-zinc-400">
                   {CATEGORY_LABEL_ID[group.category]}
                 </h3>
                 <div className="mt-1.5 grid grid-cols-2 gap-1.5">
                   {group.items.map((meta) => {
                     const active = placingType === meta.type;
+                    const Icon = CATALOG_ICONS[meta.type];
+                    const info = TILE_INFO[meta.type];
+                    const shortName = info?.shortName ?? meta.name;
+                    const specLine = info?.spec
+                      ? `${info.spec} · ${meta.pins.length} pin`
+                      : `${meta.pins.length} pin`;
                     return (
                       <button
                         key={meta.type}
                         type="button"
-                        title={meta.descriptionId}
+                        title={`${meta.name} — ${meta.descriptionId}`}
                         aria-pressed={active}
                         onClick={() => setPlacing(active ? null : meta.type)}
-                        className={`flex min-h-[52px] flex-col justify-center gap-0.5 rounded-md border px-2.5 py-2 text-left transition-colors ${
+                        className={`flex h-[88px] flex-col items-center justify-center rounded-lg border px-1.5 py-1.5 text-center transition-[transform,border-color,background-color] duration-200 ease-[cubic-bezier(0.22,1,0.36,1)] active:scale-[0.97] active:duration-[120ms] ${
                           active
                             ? 'border-accent-primary bg-accent-primary/10'
-                            : 'border-border-subtle bg-panel-elevated hover:border-zinc-500'
+                            : 'border-[#5B6478] bg-panel-elevated hover:border-zinc-400'
                         }`}
                       >
+                        {Icon ? <Icon className="h-[38px] w-[50px] shrink-0" /> : null}
                         <span
-                          className={`text-[13px] font-medium leading-tight ${
+                          className={`mt-0.5 w-full truncate text-[13px] font-medium leading-tight ${
                             active ? 'text-accent-primary' : 'text-zinc-100'
                           }`}
                         >
-                          {meta.name}
+                          {shortName}
                         </span>
-                        <span className="font-mono text-[10px] text-zinc-500">
-                          {meta.pins.length} pin
+                        <span className="w-full truncate font-mono text-[10px] leading-tight text-zinc-400">
+                          {specLine}
                         </span>
                       </button>
                     );

@@ -3,32 +3,33 @@ import { useCircuitStore } from '../features/wiring/store/circuitStore';
 import { isSoundEnabled, setSoundEnabled } from '../shared/utils/soundFx';
 
 /**
- * Bar peralatan di bawah Top Toolbar — grup berlabel dengan pemisah
- * vertikal (pola toolbar pro, mode Operate): [Kabel] | [Undo/Redo] |
- * [Mode Hapus] | [Suara] | petunjuk pintasan. Semua tombol h-8 (32px),
- * radius & border konsisten STYLE_GUIDE.md.
+ * Dock Bawah melayang (redesign Floating Studio HUD, SINTESIS §B/§G):
+ * kapsul full-round h-12 yang terpusat pada rektangel bebas di bawah
+ * kanvas — [7 swatch warna kabel] | [Undo/Redo] | [Putar] |
+ * [Mode Hapus] | [Suara]. Glass ringan panel/90 + blur; semua kontrol
+ * area sentuh ≥40px dengan ikon SVG stroke bersama (grid 24).
+ * Diimpor App dengan nama & komponen yang sama seperti bar lama.
  */
 
-/** Palet warna kabel — sama dengan shortcut angka 1–6 di App. */
-const WIRE_SWATCHES: Array<{ hex: string; label: string }> = [
-  { hex: '#EF4444', label: 'Merah' },
-  { hex: '#1F2937', label: 'Hitam' },
-  { hex: '#3B82F6', label: 'Biru' },
-  { hex: '#22C55E', label: 'Hijau' },
-  { hex: '#EAB308', label: 'Kuning' },
-  { hex: '#F97316', label: 'Oranye' },
+/**
+ * Palet kabel kanonik = 7 warna semantik. Urutan + hex 1–6 sama persis
+ * dengan shortcut angka lama (memori otot); Ungu #7 = PWM (STYLE_GUIDE
+ * §C). Label semantik mengikuti kartu Warna Kabel di App.
+ * CATATAN: pemetaan shortcut angka hidup di App.tsx (SHORTCUT_WIRE_COLORS
+ * + case '1'..'6') — tombol '7' untuk Ungu perlu didaftarkan di sana.
+ */
+const WIRE_SWATCHES: Array<{ hex: string; name: string; role: string }> = [
+  { hex: '#EF4444', name: 'Merah', role: '5V' },
+  { hex: '#1F2937', name: 'Hitam', role: 'GND' },
+  { hex: '#3B82F6', name: 'Biru', role: 'sinyal' },
+  { hex: '#22C55E', name: 'Hijau', role: 'sinyal' },
+  { hex: '#EAB308', name: 'Kuning', role: 'analog' },
+  { hex: '#F97316', name: 'Oranye', role: '3V3' },
+  { hex: '#A855F7', name: 'Ungu', role: 'sinyal PWM' },
 ];
 
-function GroupLabel({ children }: { children: string }) {
-  return (
-    <span className="shrink-0 text-[10px] font-semibold uppercase tracking-[0.14em] text-zinc-500">
-      {children}
-    </span>
-  );
-}
-
 function Separator() {
-  return <div className="h-5 w-px shrink-0 bg-border-subtle" aria-hidden />;
+  return <div className="h-6 w-px shrink-0 bg-border-subtle" aria-hidden />;
 }
 
 const iconProps = {
@@ -38,9 +39,60 @@ const iconProps = {
   strokeWidth: 2,
   strokeLinecap: 'round',
   strokeLinejoin: 'round',
-  className: 'size-3.5',
+  className: 'size-4',
   'aria-hidden': true,
 } as const;
+
+/** Satu set ikon SVG stroke bersama untuk seluruh dock (SINTESIS §A). */
+function Icon({ name }: { name: 'undo' | 'redo' | 'rotate' | 'trash' | 'soundOn' | 'soundOff' }) {
+  switch (name) {
+    case 'undo':
+      return (
+        <svg {...iconProps}>
+          <path d="M9 14 4 9l5-5" />
+          <path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11" />
+        </svg>
+      );
+    case 'redo':
+      return (
+        <svg {...iconProps}>
+          <path d="m15 14 5-5-5-5" />
+          <path d="M20 9H9.5a5.5 5.5 0 0 0 0 11H13" />
+        </svg>
+      );
+    case 'rotate':
+      return (
+        <svg {...iconProps}>
+          <path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8" />
+          <path d="M21 3v5h-5" />
+        </svg>
+      );
+    case 'trash':
+      return (
+        <svg {...iconProps}>
+          <path d="M3 6h18" />
+          <path d="M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2" />
+          <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6" />
+        </svg>
+      );
+    case 'soundOn':
+      return (
+        <svg {...iconProps}>
+          <path d="M11 5 6 9H2v6h4l5 4V5Z" />
+          <path d="M15.5 8.5a5 5 0 0 1 0 7" />
+          <path d="M18.5 5.5a9.5 9.5 0 0 1 0 13" />
+        </svg>
+      );
+    case 'soundOff':
+      return (
+        <svg {...iconProps}>
+          <path d="M11 5 6 9H2v6h4l5 4V5Z" />
+          <path d="m16 9 5 6" />
+          <path d="m21 9-5 6" />
+        </svg>
+      );
+  }
+}
 
 export default function ToolbarBar() {
   const wireColor = useCircuitStore((s) => s.wireColor);
@@ -49,6 +101,8 @@ export default function ToolbarBar() {
   const canRedo = useCircuitStore((s) => s.canRedo);
   const undo = useCircuitStore((s) => s.undo);
   const redo = useCircuitStore((s) => s.redo);
+  const placingType = useCircuitStore((s) => s.placingType);
+  const rotatePlacement = useCircuitStore((s) => s.rotatePlacement);
   const deleteMode = useCircuitStore((s) => s.deleteMode);
   const setDeleteMode = useCircuitStore((s) => s.setDeleteMode);
   const [soundOn, setSoundOn] = useState<boolean>(() => isSoundEnabled());
@@ -59,125 +113,115 @@ export default function ToolbarBar() {
     setSoundOn(next);
   };
 
-  const toolButton =
-    'flex h-8 shrink-0 items-center gap-1.5 rounded-md border px-2.5 text-xs font-medium transition-colors';
+  const iconButton =
+    'flex size-10 shrink-0 items-center justify-center rounded-full border border-[#5B6478]/60 text-zinc-200 transition-all hover:border-[#5B6478] hover:text-zinc-50 active:scale-95 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:border-[#5B6478]/60 disabled:active:scale-100';
 
   return (
-    <div className="flex h-11 shrink-0 items-center gap-3 overflow-x-auto border-b border-border-subtle bg-panel px-4 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-      {/* ===== Grup: warna kabel aktif ===== */}
+    <div className="pointer-events-auto mx-auto flex h-12 w-fit max-w-full items-center gap-2 overflow-x-auto rounded-full border border-border-subtle bg-panel/90 px-2.5 shadow-[0_8px_32px_rgb(0_0_0/0.45),0_2px_8px_rgb(0_0_0/0.4)] backdrop-blur-md [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+      {/* ===== Grup: warna kabel aktif (7 warna semantik) ===== */}
       <div className="flex shrink-0 items-center gap-2" role="group" aria-label="Warna kabel aktif">
-        <GroupLabel>Kabel</GroupLabel>
-        <div className="flex items-center gap-1.5">
-          {WIRE_SWATCHES.map((c, i) => {
-            const active = wireColor.toLowerCase() === c.hex.toLowerCase();
-            return (
-              <button
-                key={c.hex}
-                type="button"
-                title={`${c.label} (tombol ${i + 1})`}
-                aria-label={`Warna kabel ${c.label}`}
-                aria-pressed={active}
-                onClick={() => setWireColor(c.hex)}
-                className={`flex size-[22px] items-center justify-center rounded-full border-2 text-[9px] font-bold text-white/90 transition-transform ${
-                  active ? 'scale-110 border-accent-primary' : 'border-transparent'
+        {WIRE_SWATCHES.map((c, i) => {
+          const active = wireColor.toLowerCase() === c.hex.toLowerCase();
+          return (
+            <button
+              key={c.hex}
+              type="button"
+              title={`Warna kabel ${c.name}, ${c.role} (tombol ${i + 1})`}
+              aria-label={`Warna kabel ${c.name}, ${c.role}`}
+              aria-pressed={active}
+              onClick={() => setWireColor(c.hex)}
+              className={`flex size-10 shrink-0 items-center justify-center rounded-full transition-colors ${
+                active ? 'bg-white/10' : 'hover:bg-white/5'
+              }`}
+            >
+              <span
+                className={`flex size-6 items-center justify-center rounded-full border-2 text-[10px] font-bold text-white/90 transition-transform [text-shadow:0_1px_2px_rgb(0_0_0/0.45)] ${
+                  active ? 'scale-110 border-accent-primary' : 'border-white/15'
                 }`}
                 style={{ backgroundColor: c.hex }}
               >
                 {i + 1}
-              </button>
-            );
-          })}
-        </div>
+              </span>
+            </button>
+          );
+        })}
       </div>
 
       <Separator />
 
       {/* ===== Grup: undo / redo ===== */}
-      <div className="flex shrink-0 items-center gap-1.5" role="group" aria-label="Urungkan dan ulangi">
+      <div className="flex shrink-0 items-center gap-2" role="group" aria-label="Urungkan dan ulangi">
         <button
           type="button"
           onClick={undo}
           disabled={!canUndo}
           title="Urungkan (Ctrl+Z)"
-          className={`${toolButton} border-border-subtle text-zinc-200 hover:border-zinc-500 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:border-border-subtle`}
+          aria-label="Urungkan"
+          className={iconButton}
         >
-          <svg {...iconProps}>
-            <path d="M9 14 4 9l5-5" />
-            <path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11" />
-          </svg>
-          Undo
+          <Icon name="undo" />
         </button>
         <button
           type="button"
           onClick={redo}
           disabled={!canRedo}
           title="Ulangi (Ctrl+Shift+Z)"
-          className={`${toolButton} border-border-subtle text-zinc-200 hover:border-zinc-500 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:border-border-subtle`}
+          aria-label="Ulangi"
+          className={iconButton}
         >
-          <svg {...iconProps}>
-            <path d="m15 14 5-5-5-5" />
-            <path d="M20 9H9.5a5.5 5.5 0 0 0 0 11H13" />
-          </svg>
-          Redo
+          <Icon name="redo" />
         </button>
       </div>
 
       <Separator />
 
-      {/* ===== Grup: mode hapus ===== */}
+      {/* ===== Putar komponen yang sedang dipasang ===== */}
+      <button
+        type="button"
+        onClick={rotatePlacement}
+        disabled={placingType === null}
+        title="Putar komponen yang sedang dipasang (R)"
+        aria-label="Putar komponen (R)"
+        className={iconButton}
+      >
+        <Icon name="rotate" />
+      </button>
+
+      <Separator />
+
+      {/* ===== Mode hapus ===== */}
       <button
         type="button"
         onClick={() => setDeleteMode(!deleteMode)}
         aria-pressed={deleteMode}
         title="Mode hapus: klik komponen/kabel untuk menghapusnya (Esc untuk keluar)"
-        className={`${toolButton} ${
+        className={`flex h-10 shrink-0 items-center gap-1.5 rounded-full border px-3 text-xs font-medium transition-colors ${
           deleteMode
-            ? 'border-accent-danger bg-accent-danger/20 font-semibold text-accent-danger'
-            : 'border-border-subtle text-zinc-200 hover:border-zinc-500'
+            ? 'border-accent-danger/60 bg-accent-danger/20 font-semibold text-red-200'
+            : 'border-[#5B6478]/60 text-zinc-200 hover:border-[#5B6478]'
         }`}
       >
-        <svg {...iconProps}>
-          <path d="M3 6h18" />
-          <path d="M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2" />
-          <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6" />
-        </svg>
+        <Icon name="trash" />
         Mode Hapus
       </button>
 
       <Separator />
 
-      {/* ===== Grup: suara ===== */}
+      {/* ===== Suara ===== */}
       <button
         type="button"
         onClick={toggleSound}
         aria-pressed={soundOn}
-        title="Suara mekanis & elektrik (Web Audio)"
-        className={`${toolButton} ${
+        title={soundOn ? 'Matikan suara' : 'Hidupkan suara'}
+        aria-label={soundOn ? 'Matikan suara' : 'Hidupkan suara'}
+        className={`${iconButton} ${
           soundOn
-            ? 'border-accent-primary/60 bg-accent-primary/10 text-accent-primary'
-            : 'border-border-subtle text-zinc-400 hover:border-zinc-500'
+            ? 'border-accent-primary/60 bg-accent-primary/10 text-accent-primary hover:border-accent-primary hover:text-accent-primary'
+            : 'text-zinc-400'
         }`}
       >
-        <svg {...iconProps}>
-          <path d="M11 5 6 9H2v6h4l5 4V5Z" />
-          {soundOn ? (
-            <>
-              <path d="M15.5 8.5a5 5 0 0 1 0 7" />
-              <path d="M18.5 5.5a9.5 9.5 0 0 1 0 13" />
-            </>
-          ) : (
-            <>
-              <path d="m16 9 5 6" />
-              <path d="m21 9-5 6" />
-            </>
-          )}
-        </svg>
-        Suara: {soundOn ? 'Nyala' : 'Mati'}
+        <Icon name={soundOn ? 'soundOn' : 'soundOff'} />
       </button>
-
-      <p className="ml-auto hidden shrink-0 text-[11px] text-zinc-500 xl:block">
-        R putar · Spasi jalan/jeda · Del hapus · 1–6 warna · Ctrl+Z undo
-      </p>
     </div>
   );
 }

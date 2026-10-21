@@ -57,7 +57,7 @@ export const RotaryKnobGizmo: ComponentType<RotaryKnobGizmoProps> = ({
   percent,
   ohms,
 }) => (
-  <Html center distanceFactor={12} position={position ?? [0, 4.2, 0]}>
+  <Html center distanceFactor={12} zIndexRange={[100, 0]} position={position ?? [0, 4.2, 0]}>
     <div style={PANEL_STYLE} onPointerDown={(e) => e.stopPropagation()}>
       <span style={PERCENT_STYLE}>{Math.round(percent)}%</span>
       <span style={OHMS_STYLE}>{formatOhms(ohms)}</span>

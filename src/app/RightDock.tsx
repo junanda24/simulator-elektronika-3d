@@ -4,8 +4,9 @@ import LessonsPanel from './LessonsPanel';
 import { useCircuitStore } from '../features/wiring/store/circuitStore';
 
 /**
- * Right Dock (STYLE_GUIDE §5, lebar 380px): tab Kode Sketch
- * (editor + status pin + tombol upload) dan Serial Monitor.
+ * Right Dock (STYLE_GUIDE §5, lebar 380px dari kontainer App): panel
+ * melayang SOLID (bukan glass) berisi tab Kode Sketch (editor + status
+ * pin + tombol Jalankan Ulang) dan Serial Monitor.
  *
  * Error sketch ditampilkan sebagai banner lengket di bawah tab dan
  * terlihat dari SEMUA tab — pengguna yang menekan Jalankan dari header
@@ -40,7 +41,7 @@ export default function RightDock() {
   const errorLine = errorLineMatch ? Number(errorLineMatch[1]) : null;
 
   return (
-    <aside className="flex w-[380px] shrink-0 flex-col border-l border-border-subtle bg-panel">
+    <aside className="flex h-full w-full min-h-0 flex-col overflow-hidden rounded-2xl border border-border-subtle bg-panel shadow-[0_8px_32px_rgb(0_0_0/0.45),0_2px_8px_rgb(0_0_0/0.4)]">
       <div className="flex h-10 shrink-0 items-stretch border-b border-border-subtle">
         {(
           [
@@ -56,7 +57,7 @@ export default function RightDock() {
             className={`flex-1 text-[13px] font-medium transition-colors ${
               tab === t.id
                 ? 'border-b-2 border-accent-primary text-zinc-100'
-                : 'text-zinc-500 hover:text-zinc-300'
+                : 'text-zinc-400 hover:text-zinc-200'
             }`}
           >
             {t.label}
@@ -67,6 +68,7 @@ export default function RightDock() {
       {sketchError && (
         <button
           type="button"
+          role="alert"
           onClick={() => setTab('kode')}
           title="Klik untuk membuka editor dan melihat baris yang salah"
           className="mx-3 mt-3 flex shrink-0 items-start gap-2 rounded-md border border-accent-danger/50 bg-accent-danger/10 p-2.5 text-left transition-colors hover:bg-accent-danger/15"
@@ -96,28 +98,28 @@ export default function RightDock() {
             <SketchEditor value={sketchCode} onChange={setSketchCode} errorLine={errorLine} />
           </div>
           <div className="shrink-0 border-t border-border-subtle p-3">
-            <p className="mb-2 text-xs text-zinc-500">
+            <p className="mb-2 text-xs leading-relaxed text-zinc-400">
               {running
-                ? 'Sketch sedang berjalan. Ubah kode lalu upload ulang untuk menerapkan.'
-                : 'Tekan Upload & Jalankan untuk menyalakan board dan menjalankan sketch.'}
+                ? 'Sketch berjalan. Ubah kode, lalu tekan Jalankan Ulang untuk menerapkan.'
+                : 'Tekan Jalankan untuk menyalakan board dan menjalankan sketch.'}
             </p>
             <button
               type="button"
               onClick={(e) => {
                 restartSketch();
                 // Lepas fokus tombol: bila fokus tertinggal di sini, menekan
-                // Space untuk jalan/jeda akan "mengklik" tombol ini lagi
+                // Space untuk jalan/berhenti akan "mengklik" tombol ini lagi
                 // (aktivasi Space pada button) dan membatalkan perintah user.
                 e.currentTarget.blur();
               }}
-              className="h-8 w-full rounded-md bg-accent-run text-[13px] font-semibold text-[#032117] transition-colors hover:bg-emerald-400"
+              className="h-8 w-full rounded-md border border-border-subtle text-[13px] font-medium text-zinc-200 transition-colors hover:border-zinc-500"
             >
-              Upload &amp; Jalankan
+              Jalankan Ulang
             </button>
 
             {(pinEntries.length > 0 || deadPins.length > 0 || boardFault) && (
               <div className="mt-3">
-                <p className="text-[11px] font-semibold uppercase tracking-wider text-zinc-500">
+                <p className="text-[11px] font-semibold uppercase tracking-wider text-zinc-400">
                   Status Pin
                 </p>
                 <div className="mt-1.5 flex flex-wrap gap-1.5">
@@ -138,7 +140,7 @@ export default function RightDock() {
                   {deadPins.map((pinId) => (
                     <span
                       key={pinId}
-                      className="rounded border border-accent-danger/50 bg-accent-danger/10 px-2 py-0.5 font-mono text-[11px] text-accent-danger"
+                      className="rounded border border-accent-danger/50 bg-accent-danger/10 px-2 py-0.5 font-mono text-[11px] text-red-200"
                     >
                       {pinId} · MATI
                     </span>
@@ -164,13 +166,13 @@ export default function RightDock() {
             className="min-h-0 flex-1 overflow-y-auto whitespace-pre-wrap break-words p-3 font-mono text-xs leading-relaxed text-zinc-300"
           >
             {serialText || (
-              <span className="text-zinc-600">
+              <span className="text-zinc-400">
                 Belum ada keluaran. Serial.println dari sketch akan muncul di sini.
               </span>
             )}
           </pre>
           <div className="flex shrink-0 items-center justify-between border-t border-border-subtle px-3 py-2">
-            <span className="font-mono text-[11px] text-zinc-500">9600 baud</span>
+            <span className="font-mono text-[11px] text-zinc-400">9600 baud</span>
             <button
               type="button"
               onClick={clearSerial}

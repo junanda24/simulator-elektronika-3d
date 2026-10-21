@@ -20,6 +20,7 @@ import {
   parseHole,
 } from '../../shared/boards/breadboard';
 
+import { computeViewOffset } from '../../app/viewportInsets';
 import { useCircuitStore } from '../wiring/store/circuitStore';
 import { terminalWorldPosition } from '../wiring/terminals';
 import type { TerminalRef } from '../wiring/netlist';
@@ -28,14 +29,38 @@ import WireMesh3D from '../wiring/components/WireMesh3D';
 import DanglingWirePreview from '../wiring/components/DanglingWirePreview';
 import GhostPlacementMesh from './effects/GhostPlacementMesh';
 
-export const CAMERA_HOME = new THREE.Vector3(48, 42, 52);
-export const TARGET_HOME = new THREE.Vector3(2, 0, 0);
+// Posisi "rumah" kamera: dibingkai ulang setelah board digeser mendekati
+// breadboard (origin -42 → -21) — target kini di tengah bentang board↔
+// breadboard (-6) dan kamera sedikit lebih rapat (40, 42, 52).
+export const CAMERA_HOME = new THREE.Vector3(40, 42, 52);
+export const TARGET_HOME = new THREE.Vector3(-6, 0, 0);
 
-/** Kamera: reset manual + fokus autopsi + preset view (GSAP, STYLE_GUIDE §4.4). */
+/**
+ * Preferensi gerak dikurangi dari OS (prefers-reduced-motion): penerbangan
+ * kamera menjadi instan, bukan meluncur (SINTESIS-FINAL §J). Dievaluasi
+ * per perintah kamera agar perubahan preferensi di tengah sesi dihormati.
+ */
+function prefersReducedMotion(): boolean {
+  return (
+    typeof window !== 'undefined' &&
+    typeof window.matchMedia === 'function' &&
+    window.matchMedia('(prefers-reduced-motion: reduce)').matches
+  );
+}
+
+/**
+ * Kamera: reset manual + fokus autopsi + preset view (GSAP, STYLE_GUIDE §4.4).
+ * Aturan easing (SINTESIS-FINAL §C): SEMUA gerakan kamera perintah-user
+ * (reset/home, preset, fokus seleksi) memakai power2.inOut 600ms; fokus
+ * autopsi adalah SATU-SATUNYA pengecualian — power3.out 600ms sesuai
+ * STYLE_GUIDE §4 butir 4. Saat prefers-reduced-motion aktif, semua
+ * penerbangan menjadi instan (durasi 0).
+ */
 function CameraRig({ resetSignal }: { resetSignal: number }) {
   const camera = useThree((s) => s.camera);
   const controls = useThree((s) => s.controls) as OrbitControlsImpl | null;
   const gl = useThree((s) => s.gl);
+  const size = useThree((s) => s.size);
   const focusNonce = useCircuitStore((s) => s.focusNonce);
   const focusPosition = useCircuitStore((s) => s.focusPosition);
   const cameraView = useCircuitStore((s) => s.cameraView);
@@ -62,14 +87,35 @@ function CameraRig({ resetSignal }: { resetSignal: number }) {
     };
   }, [gl, camera, controls]);
 
+  // BINGKAI REKTANGEL BEBAS (Floating Studio HUD, SINTESIS-FINAL §C): panel
+  // kini melayang DI ATAS kanvas full-bleed, jadi proyeksi kamera digeser
+  // dengan setViewOffset agar meja tampak terbingkai di ruang bebas antar
+  // panel (katalog kiri, dock kanan, kapsul atas, dock bawah). Ini murni
+  // proyeksi — posisi kamera, OrbitControls, dan tween GSAP tidak berubah
+  // perilaku. Diperbarui pada setiap resize; dibersihkan saat unmount.
+  useEffect(() => {
+    const cam = camera as THREE.PerspectiveCamera;
+    if (typeof cam.setViewOffset !== 'function') return undefined;
+    const o = computeViewOffset(size.width, size.height);
+    cam.setViewOffset(o.fullWidth, o.fullHeight, o.x, o.y, o.width, o.height);
+    cam.updateProjectionMatrix();
+    return () => {
+      cam.clearViewOffset();
+      cam.updateProjectionMatrix();
+    };
+  }, [camera, size]);
+
   useEffect(() => {
     if (resetSignal === 0 || !controls) return;
+    // Reset/home adalah perintah user → power2.inOut (aturan §C); instan
+    // bila prefers-reduced-motion aktif.
+    const duration = prefersReducedMotion() ? 0 : 0.6;
     gsap.to(camera.position, {
-      x: CAMERA_HOME.x, y: CAMERA_HOME.y, z: CAMERA_HOME.z, duration: 0.6, ease: 'power3.out',
+      x: CAMERA_HOME.x, y: CAMERA_HOME.y, z: CAMERA_HOME.z, duration, ease: 'power2.inOut',
       overwrite: 'auto',
     });
     gsap.to(controls.target, {
-      x: TARGET_HOME.x, y: TARGET_HOME.y, z: TARGET_HOME.z, duration: 0.6, ease: 'power3.out',
+      x: TARGET_HOME.x, y: TARGET_HOME.y, z: TARGET_HOME.z, duration, ease: 'power2.inOut',
       overwrite: 'auto',
       onUpdate: () => controls.update(),
     });
@@ -82,12 +128,17 @@ function CameraRig({ resetSignal }: { resetSignal: number }) {
     }
     if (!controls || !focusPosition) return;
     const [x, y, z] = focusPosition;
+    // Fokus AUTOPSI kerusakan: satu-satunya pengecualian easing yang
+    // terdokumentasi — power3.out sesuai STYLE_GUIDE §4 butir 4 (gerakan
+    // kamera perintah-user lain memakai power2.inOut). Tetap instan bila
+    // prefers-reduced-motion aktif.
+    const duration = prefersReducedMotion() ? 0 : 0.6;
     gsap.to(camera.position, {
-      x: x + 13, y: y + 12, z: z + 16, duration: 0.6, ease: 'power3.out',
+      x: x + 13, y: y + 12, z: z + 16, duration, ease: 'power3.out',
       overwrite: 'auto',
     });
     gsap.to(controls.target, {
-      x, y, z, duration: 0.6, ease: 'power3.out',
+      x, y, z, duration, ease: 'power3.out',
       overwrite: 'auto',
       onUpdate: () => controls.update(),
     });
@@ -103,12 +154,15 @@ function CameraRig({ resetSignal }: { resetSignal: number }) {
     if (!controls || !cameraView) return;
     const [tx, ty, tz] = cameraView.target;
     const [px, py, pz] = cameraView.position;
+    // Preset/fokus seleksi = perintah user → power2.inOut; instan bila
+    // prefers-reduced-motion aktif.
+    const duration = prefersReducedMotion() ? 0 : 0.6;
     gsap.to(camera.position, {
-      x: px, y: py, z: pz, duration: 0.6, ease: 'power2.inOut',
+      x: px, y: py, z: pz, duration, ease: 'power2.inOut',
       overwrite: 'auto',
     });
     gsap.to(controls.target, {
-      x: tx, y: ty, z: tz, duration: 0.6, ease: 'power2.inOut',
+      x: tx, y: ty, z: tz, duration, ease: 'power2.inOut',
       overwrite: 'auto',
       onUpdate: () => controls.update(),
     });

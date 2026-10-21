@@ -7,6 +7,10 @@
   --color-panel: #12151c;
   --color-panel-elevated: #1a1e28;
   --color-border-subtle: #282e3d;
+  /* Token border interaktif (SINTESIS §I): hanya untuk batas KONTROL
+     (input, tombol berkotak) — ±3,08:1 terhadap panel. Seam dekoratif
+     antar panel tetap memakai border-subtle. */
+  --color-border-interactive: #5b6478;
   --color-accent-primary: #00e5ff;
   --color-accent-run: #10b981;
   --color-accent-warning: #f59e0b;
@@ -36,4 +40,150 @@ body,
     url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='26' height='26'%3E%3Ctext y='21' font-size='21'%3E🗑️%3C/text%3E%3C/svg%3E")
       13 13,
     crosshair;
+}
+
+/* ===== Floating Studio HUD (SINTESIS-FINAL §A/J/K) ===== */
+
+/* Fokus keyboard global: cincin cyan 2px konsisten di seluruh UI.
+   (Aturan lama di App.css adalah sisa template Vite yang tidak pernah
+   diimpor — aturan ini yang benar-benar sampai ke aplikasi.) */
+:focus-visible {
+  outline: 2px solid #00e5ff;
+  outline-offset: 2px;
+}
+
+/* Kaca HUD: hanya untuk lapisan melayang kecil (kapsul atas, dock bawah,
+   kapsul kamera). Opacity 90% + blur ringan; panel besar tetap solid. */
+.hud-glass {
+  background: rgb(18 21 28 / 0.9);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+
+/* Entrada panel melayang: opacity + geser 8px, easing tanda tangan. */
+@keyframes hud-enter {
+  from {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+@keyframes hud-enter-up {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.hud-enter {
+  animation: hud-enter 240ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+.hud-enter-up {
+  animation: hud-enter-up 240ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+/* Popover: masuk 200ms scale .96→1, origin ke arah pemicunya. */
+@keyframes hud-pop-in {
+  from {
+    opacity: 0;
+    transform: scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+.hud-pop {
+  animation: hud-pop-in 200ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  transform-origin: top center;
+}
+.hud-pop-origin-tl {
+  transform-origin: top left;
+}
+.hud-pop-origin-tr {
+  transform-origin: top right;
+}
+.hud-pop-origin-br {
+  transform-origin: bottom right;
+}
+
+/* Denyut titik status "berjalan" (1,6s). */
+@keyframes hud-pulse {
+  0%,
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.55;
+    transform: scale(0.8);
+  }
+}
+.hud-pulse {
+  animation: hud-pulse 1.6s ease-in-out infinite;
+}
+
+/* AutopsyCard memposisikan dirinya sendiri (absolute bottom-4 right-4)
+   untuk rumah lamanya di pojok viewport. Di HUD baru rumahnya adalah
+   tumpukan tengah-atas; slot ini menetralkan posisi absolutnya agar
+   kartu mengalir sebagai item stack selebar kolom. */
+.hud-autopsy-slot > section {
+  position: static;
+  width: 100%;
+}
+
+/* Preferensi OS: transparansi dikurangi → semua kaca jadi solid. */
+@media (prefers-reduced-transparency: reduce) {
+  .hud-glass {
+    background: #12151c;
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+  }
+}
+
+/* Preferensi OS: kontras ditambah → tanpa transparansi/blur,
+   border dan cincin fokus dipertegas. */
+@media (prefers-contrast: more) {
+  .hud-glass {
+    background: #12151c;
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+    border-color: #5b6478;
+  }
+  :focus-visible {
+    outline-width: 3px;
+  }
+}
+
+/* Gerakan dikurangi: transisi/animasi UI jadi nyaris instan;
+   entrada panel menyisakan fade opacity singkat saja (≤150ms).
+   Fisika simulasi di dalam kanvas tidak disentuh aturan ini. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+  .hud-enter,
+  .hud-enter-up,
+  .hud-pop {
+    animation: hud-fade 120ms ease-out both !important;
+  }
+}
+@keyframes hud-fade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
 }

@@ -41,6 +41,16 @@ const SHAKE_AMPLITUDE = 0.12;
 /** Batas gerak kamera dari posisi tangkapan sebelum shake dibatalkan. */
 const SHAKE_CANCEL_DISTANCE = 1;
 
+/**
+ * Preferensi gerak dikurangi dari OS (prefers-reduced-motion): getaran
+ * kamera DIMATIKAN (SINTESIS-FINAL §J) — lapisan asap, percikan, dan
+ * kilatan tidak terpengaruh. Dievaluasi sekali saat modul dimuat.
+ */
+const REDUCED_MOTION =
+  typeof window !== 'undefined' &&
+  typeof window.matchMedia === 'function' &&
+  window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
 interface ParticleSeed {
   /** Kemajuan awal siklus naik (0–1), acak tapi stabil antar-render. */
   phase: number;
@@ -119,11 +129,13 @@ export function Smoke({ position }: { position: [number, number, number] }) {
 
   /** Waktu clock saat efek pertama kali dirender (acuan semua lapisan). */
   const startTimeRef = useRef<number | null>(null);
-  /** State getaran kamera: posisi tangkapan + offset frame sebelumnya. */
+  /** State getaran kamera: posisi tangkapan + offset frame sebelumnya.
+   * Dianggap selesai sejak awal bila prefers-reduced-motion aktif, agar
+   * blok getaran di useFrame tidak pernah berjalan. */
   const shakeRef = useRef({
     captured: new THREE.Vector3(),
     prevOffset: new THREE.Vector3(),
-    done: false,
+    done: REDUCED_MOTION,
   });
 
   useFrame((state, delta) => {

@@ -4,7 +4,7 @@
  * Board dirender pada UNO_ORIGIN di stage.
  */
 
-export const UNO_ORIGIN: [number, number, number] = [-42, 0, 0];
+export const UNO_ORIGIN: [number, number, number] = [-21, 0, 0];
 export const UNO_TOP_Y = 1.7;
 
 export type UnoPinKind = 'power' | 'ground' | 'digital' | 'analog' | 'control';

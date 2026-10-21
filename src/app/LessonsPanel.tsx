@@ -3,7 +3,7 @@ import { getBoardDefinition } from '../shared/boards/definitions';
 import { useCircuitStore } from '../features/wiring/store/circuitStore';
 
 /**
- * Panel Panduan (mode Lesson): daftar 8 modul, materi, pemuat
+ * Panel Panduan (mode Lesson): daftar modul kurikulum, materi, pemuat
  * rangkaian/sketch awal, dan checklist assertion yang terisi
  * otomatis (sticky) dari evaluasi store atas snapshot live.
  */
@@ -23,9 +23,16 @@ export default function LessonsPanel() {
       <div className="min-h-0 flex-1 overflow-y-auto p-3">
         {!active ? (
           <div className="space-y-2">
-            <p className="text-xs leading-relaxed text-zinc-500">
-              Delapan modul terstruktur dari LED pertama sampai proyek akhir.
-              Selesaikan berurutan atau lompat ke topik yang kamu butuhkan.
+            <p className="text-xs leading-relaxed text-zinc-400">
+              {LESSONS.length} modul terstruktur dari LED pertama sampai proyek
+              akhir. Selesaikan berurutan atau lompat ke topik yang kamu
+              butuhkan.
+            </p>
+            <p className="text-xs leading-relaxed text-zinc-400">
+              Tantangan: coba cabut kabel resistor dari jalur LED, sambungkan
+              anoda langsung ke rail 5V, lalu jalankan lagi — LED akan kelebihan
+              arus dan rusak. Buka kartu autopsinya untuk membaca penyebab
+              kerusakannya.
             </p>
             {LESSONS.map((lesson, idx) => {
               const done = completedLessons.includes(lesson.id);
@@ -37,7 +44,7 @@ export default function LessonsPanel() {
                   className="w-full rounded-lg border border-border-subtle bg-panel-elevated p-3 text-left transition-colors hover:border-zinc-500"
                 >
                   <div className="flex items-center gap-2">
-                    <span className="font-mono text-[11px] text-zinc-500">
+                    <span className="font-mono text-[11px] text-zinc-400">
                       {String(idx + 1).padStart(2, '0')}
                     </span>
                     <span className="flex-1 text-[13px] font-semibold text-zinc-100">
@@ -47,13 +54,13 @@ export default function LessonsPanel() {
                       className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold ${
                         done
                           ? 'border-accent-run/50 text-accent-run'
-                          : 'border-border-subtle text-zinc-500'
+                          : 'border-border-subtle text-zinc-400'
                       }`}
                     >
                       {done ? 'SELESAI' : 'MULAI'}
                     </span>
                   </div>
-                  <p className="mt-1 text-[11px] text-zinc-500">
+                  <p className="mt-1 text-[11px] text-zinc-400">
                     Board: {getBoardDefinition(lesson.boardId).name}
                   </p>
                 </button>
@@ -72,7 +79,7 @@ export default function LessonsPanel() {
             <h3 className="mt-2 text-sm font-bold text-zinc-100">{active.title}</h3>
             <p className="mt-2 text-xs leading-relaxed text-zinc-400">{active.intro}</p>
             <div className="mt-3 rounded-lg border border-border-subtle bg-panel-elevated p-3">
-              <p className="text-[11px] font-semibold uppercase tracking-wider text-zinc-500">
+              <p className="text-[11px] font-semibold uppercase tracking-wider text-zinc-400">
                 Tugasmu
               </p>
               <p className="mt-1 text-xs leading-relaxed text-zinc-300">{active.goal}</p>
@@ -97,7 +104,7 @@ export default function LessonsPanel() {
               </div>
             )}
 
-            <p className="mt-4 text-[11px] font-semibold uppercase tracking-wider text-zinc-500">
+            <p className="mt-4 text-[11px] font-semibold uppercase tracking-wider text-zinc-400">
               Daftar Periksa
             </p>
             <ul className="mt-2 space-y-1.5">
