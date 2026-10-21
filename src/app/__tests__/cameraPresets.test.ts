@@ -1,8 +1,19 @@
 import { describe, expect, it } from 'vitest';
 import * as THREE from 'three';
 import {
+  CAMERA_HOME_POS,
+  CAMERA_TUNING,
+  TARGET_HOME_POS,
+  DOUBLE_CLICK_MAX_DIST_PX,
+  DOUBLE_CLICK_WINDOW_MS,
+  FOCUS_FRAME_MAX_DISTANCE,
+  FOCUS_FRAME_MIN_DISTANCE,
+  FOCUS_OFFSET,
+  frameFocusView,
   getCameraPreset,
+  isDoubleClick,
   tableCenterOf,
+  type ClickPoint,
   type CameraPresetId,
   type Vec3Tuple,
 } from '../cameraPresets';
@@ -132,5 +143,173 @@ describe('proyeksi ujung-ke-ujung (three PerspectiveCamera + setViewOffset)', ()
       const p = new THREE.Vector3(edgeX, 0, 0).project(cam);
       expect(Math.abs(p.x)).toBeLessThan(1);
     }
+  });
+});
+
+describe('CAMERA_TUNING — invariant kenyamanan OrbitControls', () => {
+  it('dampingFactor di pita premium 0,08–0,12 (bukan default three-stdlib 0,05)', () => {
+    expect(CAMERA_TUNING.dampingFactor).toBeGreaterThanOrEqual(0.08);
+    expect(CAMERA_TUNING.dampingFactor).toBeLessThanOrEqual(0.12);
+  });
+
+  it('kecepatan putar/geser/zoom ditundukkan: semua di (0,5 … 1]', () => {
+    for (const v of [
+      CAMERA_TUNING.rotateSpeed,
+      CAMERA_TUNING.panSpeed,
+      CAMERA_TUNING.zoomSpeed,
+    ]) {
+      expect(v).toBeGreaterThan(0.5);
+      expect(v).toBeLessThanOrEqual(1);
+    }
+  });
+
+  it('pita polar: tidak pernah di bawah horizon alas, kutub atas tetap sah untuk preset Atas', () => {
+    expect(CAMERA_TUNING.maxPolarAngle).toBeLessThan(Math.PI / 2);
+    expect(CAMERA_TUNING.maxPolarAngle).toBeGreaterThanOrEqual(1.4);
+    expect(CAMERA_TUNING.minPolarAngle).toBe(0);
+  });
+
+  it('pita jarak: clamp tidak melawan preset Fokus maupun posisi rumah, dan tetap di dalam fog', () => {
+    const fokusDistance = Math.hypot(...FOCUS_OFFSET); // ±10,49
+    const homeDistance = dist(CAMERA_HOME_POS, TARGET_HOME_POS);
+    expect(CAMERA_TUNING.minDistance).toBeLessThan(fokusDistance);
+    expect(CAMERA_TUNING.maxDistance).toBeGreaterThan(homeDistance);
+    // Fog adegan mulai di 160 (Workbench): zoom-out maksimum harus
+    // berhenti jauh sebelum meja larut ke kabut.
+    expect(CAMERA_TUNING.maxDistance).toBeLessThan(160);
+  });
+
+  it('screen-space panning eksplisit menyala (arah geser mengikuti layar)', () => {
+    expect(CAMERA_TUNING.screenSpacePanning).toBe(true);
+  });
+});
+
+describe('frameFocusView — pembingkai klik ganda proporsional', () => {
+  const POS: Vec3Tuple = [12, 3, 10];
+
+  it('target XZ = posisi komponen persis (semantik preset Fokus)', () => {
+    const v = frameFocusView(POS, [
+      [0, 0, -0.5],
+      [0, 0, 0.5],
+    ]);
+    expect(v.target[0]).toBe(POS[0]);
+    expect(v.target[2]).toBe(POS[2]);
+  });
+
+  it('arah bidik sejajar arah kanonik Fokus (6, 5, 7)', () => {
+    const v = frameFocusView(POS, [
+      [-2, 0, 0],
+      [2, 0, 0],
+    ]);
+    const d: Vec3Tuple = [
+      v.position[0] - v.target[0],
+      v.position[1] - v.target[1],
+      v.position[2] - v.target[2],
+    ];
+    expect(d[0] / FOCUS_OFFSET[0]).toBeCloseTo(d[1] / FOCUS_OFFSET[1], 6);
+    expect(d[1] / FOCUS_OFFSET[1]).toBeCloseTo(d[2] / FOCUS_OFFSET[2], 6);
+  });
+
+  it('jarak monoton terhadap bentang pin & selalu di dalam pita bingkai', () => {
+    const kecil = frameFocusView(POS, [
+      [0, 0, -0.5],
+      [0, 0, 0.5],
+    ]);
+    const resistor = frameFocusView(POS, [
+      [-2, 0, 0],
+      [2, 0, 0],
+    ]);
+    const barGraph = frameFocusView(POS, [
+      [-1.5, 0, -5.5],
+      [1.5, 0, 4.5],
+    ]);
+    const dKecil = dist(kecil.position, kecil.target);
+    const dResistor = dist(resistor.position, resistor.target);
+    const dBar = dist(barGraph.position, barGraph.target);
+    expect(dKecil).toBeCloseTo(FOCUS_FRAME_MIN_DISTANCE, 9);
+    expect(dResistor).toBeGreaterThan(dKecil);
+    expect(dBar).toBeGreaterThan(dResistor);
+    for (const d of [dKecil, dResistor, dBar]) {
+      expect(d).toBeGreaterThanOrEqual(FOCUS_FRAME_MIN_DISTANCE);
+      expect(d).toBeLessThanOrEqual(FOCUS_FRAME_MAX_DISTANCE);
+      // Dan di dalam pita clamp OrbitControls — penerbangan tidak
+      // pernah dipangkas controls.update().
+      expect(d).toBeGreaterThanOrEqual(CAMERA_TUNING.minDistance);
+      expect(d).toBeLessThanOrEqual(CAMERA_TUNING.maxDistance);
+    }
+    // Bar graph (bentang ±10,44) mundur jauh: ±19,9.
+    expect(dBar).toBeCloseTo(19.88, 1);
+  });
+
+  it('bentang ekstrem tetap ter-clamp di langit-langit bingkai', () => {
+    const v = frameFocusView(POS, [
+      [-50, 0, 0],
+      [50, 0, 0],
+    ]);
+    expect(dist(v.position, v.target)).toBeCloseTo(FOCUS_FRAME_MAX_DISTANCE, 9);
+  });
+
+  it('tanpa pin: jarak lantai & target tidak terangkat', () => {
+    const v = frameFocusView(POS, []);
+    expect(dist(v.position, v.target)).toBeCloseTo(FOCUS_FRAME_MIN_DISTANCE, 9);
+    expect(v.target).toEqual(POS);
+  });
+
+  it('pin menjulang (baterai 9V, pin y=19,6): target terangkat separuh, ter-clamp 6', () => {
+    const v = frameFocusView([30, 0, 20], [
+      [-2.5, 19.6, 0],
+      [2.5, 19.6, 0],
+    ]);
+    expect(v.target[1]).toBe(6);
+    expect(v.target[0]).toBe(30);
+    expect(v.target[2]).toBe(20);
+  });
+});
+
+describe('isDoubleClick — klasifikasi pasangan klik', () => {
+  const base: ClickPoint = { t: 1000, x: 100, y: 200, key: 'inst-1' };
+
+  it('tanpa klik sebelumnya → bukan klik ganda', () => {
+    expect(isDoubleClick(null, base)).toBe(false);
+  });
+
+  it('pasangan sah: permukaan sama, dalam jendela, dekat di layar', () => {
+    expect(
+      isDoubleClick(base, { t: base.t + 200, x: 103, y: 198, key: 'inst-1' }),
+    ).toBe(true);
+    // Tepi jendela & tepi jarak persis masih sah.
+    expect(
+      isDoubleClick(base, {
+        t: base.t + DOUBLE_CLICK_WINDOW_MS,
+        x: base.x + DOUBLE_CLICK_MAX_DIST_PX,
+        y: base.y,
+        key: 'inst-1',
+      }),
+    ).toBe(true);
+  });
+
+  it('terlalu lambat / permukaan lain / terlalu jauh → bukan', () => {
+    expect(
+      isDoubleClick(base, {
+        t: base.t + DOUBLE_CLICK_WINDOW_MS + 1,
+        x: 100,
+        y: 200,
+        key: 'inst-1',
+      }),
+    ).toBe(false);
+    expect(
+      isDoubleClick(base, { t: base.t + 100, x: 100, y: 200, key: 'inst-2' }),
+    ).toBe(false);
+    expect(
+      isDoubleClick(base, {
+        t: base.t + 100,
+        x: 100 + DOUBLE_CLICK_MAX_DIST_PX + 1,
+        y: 200,
+        key: 'inst-1',
+      }),
+    ).toBe(false);
+    expect(
+      isDoubleClick(base, { t: base.t - 5, x: 100, y: 200, key: 'inst-1' }),
+    ).toBe(false);
   });
 });

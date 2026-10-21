@@ -86,14 +86,20 @@ export const hcSr04Electrical: ComponentElectrical = {
   },
 
   checkDamage: (_instance, result) => {
-    const vcc = result.pinVoltages.VCC ?? 0;
-    if (vcc > VCC_DAMAGE_V) {
+    // Catu dinilai RELATIF terhadap pin GND modul itu sendiri (seperti
+    // semua modul lain di katalog) — bukan tegangan absolut net VCC.
+    // Penilaian absolut salah dua arah: VCC 9 V dengan pin GND di net
+    // 4 V adalah catu sah 5 V tetapi ditembak rusak, dan catu 6,5 V
+    // dengan pin GND di −1 V lolos (terbukti probe audit ekspansi
+    // 2026-10-21).
+    const supply = (result.pinVoltages.VCC ?? 0) - (result.pinVoltages.GND ?? 0);
+    if (supply > VCC_DAMAGE_V) {
       return {
         ruleId: 'HCSR04_OVERVOLTAGE',
         titleId: 'HC-SR04 Rusak — Tegangan Catu Berlebih',
         explanationId:
           'HC-SR04 dirancang untuk catu 5 V. Memberi tegangan jauh di atas itu (mis. langsung dari adaptor 9 V) membakar regulator dan IC pengendali di modul. Beri catu 5 V dari pin 5V board atau regulator 7805.',
-        measured: vcc,
+        measured: supply,
         limit: VCC_DAMAGE_V,
         unit: 'V',
       };

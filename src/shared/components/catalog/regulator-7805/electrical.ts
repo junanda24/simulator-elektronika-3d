@@ -15,6 +15,16 @@ const DROPOUT_V = 2;
 const R_NORTON = 0.5;
 /** Arus diam (quiescent) IN → pin GND (datasheet Iq 5–8 mA). */
 const IQ_A = 0.006;
+/**
+ * Gerbang Iq: arus diam hanya mengalir bila regulator benar-benar
+ * diberi masukan (Vin relatif pin GND di atas nilai ini). Tanpa gerbang
+ * ini, stamp arus tetap 6 mA pada pin IN yang belum tersambung akan
+ * menarik net IN ke tegangan absurd (−6 mA / gmin 1e-9 S = −6.000.000 V)
+ * dan memicu REGULATOR_REVERSED palsu pada komponen yang tidak berdaya
+ * (terbukti probe audit ekspansi 2026-10-21). Regulator asli pada
+ * Vin ≈ 0 memang tidak menarik arus diam yang berarti.
+ */
+const IQ_GATE_V = 1;
 /** Tegangan masukan absolut maksimum L7805 (V). */
 const VIN_MAX = 35;
 /** Batas disipasi tanpa heatsink (W) — ambang sesaat, bukan model termal. */
@@ -41,7 +51,7 @@ export const regulator7805Electrical: ComponentElectrical = {
     const vTarget = vTargetOf(vinPrev);
     ctx.conductance(netOut, netGnd, 1 / R_NORTON);
     if (vTarget > 0) ctx.current(netGnd, netOut, vTarget / R_NORTON);
-    ctx.current(netIn, netGnd, IQ_A);
+    if (vinPrev > IQ_GATE_V) ctx.current(netIn, netGnd, IQ_A);
   },
 
   computeCurrents: (instance, voltages, netOf) => {
@@ -50,8 +60,11 @@ export const regulator7805Electrical: ComponentElectrical = {
     const vout = (voltages.get(netOf(instance.id, 'OUT')) ?? 0) - vGnd;
     // Arus yang diserahkan pin OUT ke beban luar: selisih tegangan
     // target vs aktual dibagi resistansi Norton stamp di atas.
+    // Arus masuk = arus keluar + Iq — dengan gerbang Iq yang sama
+    // seperti stamp, agar tampilan inspektor konsisten (regulator tak
+    // berdaya tidak melaporkan arus masuk hantu 6 mA).
     const out = (vTargetOf(vin) - vout) / R_NORTON;
-    return { in: out + IQ_A, out };
+    return { in: out + (vin > IQ_GATE_V ? IQ_A : 0), out };
   },
 
   checkDamage: (_instance, result) => {

@@ -28,7 +28,15 @@ import {
   shiftViewForInsets,
   viewOffsetFromInsets,
 } from '../../app/viewportInsets';
-import { CAMERA_HOME_POS, TARGET_HOME_POS } from '../../app/cameraPresets';
+import {
+  CAMERA_HOME_POS,
+  CAMERA_TUNING,
+  TARGET_HOME_POS,
+  frameFocusView,
+  getCameraPreset,
+  isDoubleClick,
+  type ClickPoint,
+} from '../../app/cameraPresets';
 import { useUiSettings } from '../../app/uiSettings';
 import { useCircuitStore } from '../wiring/store/circuitStore';
 import { terminalWorldPosition } from '../wiring/terminals';
@@ -539,6 +547,57 @@ function CircuitScene() {
   const wires = useCircuitStore((s) => s.wires);
   const selectInstance = useCircuitStore((s) => s.selectInstance);
   const interact = useCircuitStore((s) => s.interact);
+  const setCameraView = useCircuitStore((s) => s.setCameraView);
+  const toolMode = useCircuitStore((s) => s.toolMode);
+  const placingType = useCircuitStore((s) => s.placingType);
+  // KLIK GANDA FOKUS: pasangan pointerup tanpa seret (>6px dibuang,
+  // semantik klik yang sama dengan handler bidang lain) pada komponen
+  // yang sama dalam jendela isDoubleClick → terbangkan kamera
+  // membingkai komponen itu lewat saluran preset yang SUDAH ada
+  // (setCameraView → CameraRig; BUKAN sistem tween kedua, easing &
+  // kompensasi inset identik dengan tombol Fokus). Hanya mode build:
+  // di mode tangan klik berarti navigasi/seleksi murni dan di mode
+  // hapus klik pertama sudah menghapus komponen — fokus tidak boleh
+  // mencuri gestur kedua mode itu. Selama placingType aktif klik
+  // berarti menempatkan, jadi klik ganda pun tidak memicu apa-apa.
+  // Klik pertama pasangan tetap memilih komponen (onClick di bawah).
+  const downPos = useRef<{ x: number; y: number } | null>(null);
+  const lastClick = useRef<ClickPoint | null>(null);
+
+  const handleInstanceDown = (e: ThreeEvent<PointerEvent>) => {
+    downPos.current = { x: e.clientX, y: e.clientY };
+  };
+  const handleInstanceUp =
+    (instance: ComponentInstanceState) => (e: ThreeEvent<PointerEvent>) => {
+      const down = downPos.current;
+      downPos.current = null;
+      if (!down) return;
+      if (Math.hypot(e.clientX - down.x, e.clientY - down.y) > 6) {
+        lastClick.current = null;
+        return;
+      }
+      if (toolMode !== 'build' || placingType) {
+        lastClick.current = null;
+        return;
+      }
+      const point: ClickPoint = {
+        t: performance.now(),
+        x: e.clientX,
+        y: e.clientY,
+        key: instance.id,
+      };
+      if (!isDoubleClick(lastClick.current, point)) {
+        lastClick.current = point;
+        return;
+      }
+      lastClick.current = null;
+      const meta = getComponentMeta(instance.type);
+      const view = frameFocusView(
+        instance.position,
+        meta?.pins.map((p) => p.localPosition) ?? [],
+      );
+      setCameraView(view.target, view.position);
+    };
 
   return (
     <group>
@@ -549,6 +608,8 @@ function CircuitScene() {
             e.stopPropagation();
             selectInstance(instance.id);
           }}
+          onPointerDown={handleInstanceDown}
+          onPointerUp={handleInstanceUp(instance)}
         >
           <InstanceView instance={instance} interact={interact} />
         </group>
@@ -570,20 +631,30 @@ function ActiveBoard() {
 
 /**
  * Handler klik di permukaan alas meja (bidang di luar bidang interaksi
- * breadboard/board). Dua peran, keduanya hanya untuk klik tanpa seret
+ * breadboard/board). Perannya, semuanya hanya untuk klik tanpa seret
  * (>6px = drag kamera, diabaikan):
  * - Mode pasang komponen TERMINAL-BEBAS (baterai 9V): klik menempatkan
  *   komponen di titik alas itu (store.placeFreeAt) — padanan placeAt
  *   untuk komponen yang tidak menancap ke lubang.
  * - Mode Tangan: klik membatalkan pilihan — padanan InteractionPlane
  *   untuk area yang tidak tertutup bidang interaksi.
+ * - Mode build, tanpa placing aktif: KLIK GANDA pada alas kosong =
+ *   pulang ke bidikan rumah lewat preset Perspektif pada saluran
+ *   setCameraView yang sama dengan tombol HUD & Reset (tujuan dan
+ *   kompensasi inset identik). Bidang interaksi breadboard/board
+ *   menutupi sebagian alas dan TIDAK ikut pola ini — pointerup di sana
+ *   adalah gestur wiring, bukan navigasi.
  */
 function useMatSurfaceClick() {
   const toolMode = useCircuitStore((s) => s.toolMode);
   const placingType = useCircuitStore((s) => s.placingType);
   const selectInstance = useCircuitStore((s) => s.selectInstance);
   const placeFreeAt = useCircuitStore((s) => s.placeFreeAt);
+  const setCameraView = useCircuitStore((s) => s.setCameraView);
+  const boardId = useCircuitStore((s) => s.boardId);
+  const board = getBoardDefinition(boardId);
   const downPos = useRef<{ x: number; y: number } | null>(null);
+  const lastClick = useRef<ClickPoint | null>(null);
   return {
     onPointerDown: (e: ThreeEvent<PointerEvent>) => {
       downPos.current = { x: e.clientX, y: e.clientY };
@@ -592,13 +663,40 @@ function useMatSurfaceClick() {
       const down = downPos.current;
       downPos.current = null;
       if (!down) return;
-      if (Math.hypot(e.clientX - down.x, e.clientY - down.y) > 6) return;
+      if (Math.hypot(e.clientX - down.x, e.clientY - down.y) > 6) {
+        lastClick.current = null;
+        return;
+      }
       if (placingType && isFreePlacementType(placingType)) {
+        lastClick.current = null;
         placeFreeAt([e.point.x, e.point.z]);
         return;
       }
-      if (toolMode !== 'hand') return;
-      selectInstance(null);
+      if (toolMode === 'hand') {
+        lastClick.current = null;
+        selectInstance(null);
+        return;
+      }
+      if (toolMode !== 'build' || placingType) {
+        lastClick.current = null;
+        return;
+      }
+      const point: ClickPoint = {
+        t: performance.now(),
+        x: e.clientX,
+        y: e.clientY,
+        key: 'mat',
+      };
+      if (!isDoubleClick(lastClick.current, point)) {
+        lastClick.current = point;
+        return;
+      }
+      lastClick.current = null;
+      const view = getCameraPreset('perspektif', {
+        boardOrigin: board.origin,
+        selectedPosition: null,
+      });
+      if (view) setCameraView(view.target, view.position);
     },
   };
 }
@@ -767,14 +865,28 @@ export default function Workbench({ resetSignal }: { resetSignal: number }) {
       <InteractionPlane kind="breadboard" />
       <InteractionPlane kind="board" />
 
+      {/* Tuning kenyamanan orbit hidup di CAMERA_TUNING (cameraPresets,
+          dites unit): damping 0,10 agar putaran meluncur berhenti
+          tepat — bukan default three-stdlib 0,05 yang mengambang —
+          kecepatan putar/geser/zoom ditundukkan untuk meja seukuran
+          breadboard, pita polar & jarak menjaga orientasi & mencegah
+          tersesat. zoomToCursor sengaja MATI (alasan di CAMERA_TUNING).
+          Loop damping & autoRotate turntable digerakkan drei sendiri:
+          useFrame memanggil controls.update() tiap frame saat enabled. */}
       <OrbitControls
         makeDefault
         enabled={!isDragging3D}
         enableDamping
+        dampingFactor={CAMERA_TUNING.dampingFactor}
+        rotateSpeed={CAMERA_TUNING.rotateSpeed}
+        panSpeed={CAMERA_TUNING.panSpeed}
+        zoomSpeed={CAMERA_TUNING.zoomSpeed}
+        screenSpacePanning={CAMERA_TUNING.screenSpacePanning}
         target={TARGET_HOME.toArray()}
-        maxPolarAngle={1.45}
-        minDistance={10}
-        maxDistance={120}
+        minPolarAngle={CAMERA_TUNING.minPolarAngle}
+        maxPolarAngle={CAMERA_TUNING.maxPolarAngle}
+        minDistance={CAMERA_TUNING.minDistance}
+        maxDistance={CAMERA_TUNING.maxDistance}
         mouseButtons={toolMode === 'hand' ? HAND_MOUSE_BUTTONS : DEFAULT_MOUSE_BUTTONS}
         touches={toolMode === 'hand' ? HAND_TOUCHES : DEFAULT_TOUCHES}
       />

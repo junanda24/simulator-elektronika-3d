@@ -15,6 +15,7 @@ import {
 } from '../features/share/projectShare';
 import CatalogPanel from './CatalogPanel';
 import DiagnosticsPanel from './DiagnosticsPanel';
+import MusicControl from './MusicControl';
 import ToolbarBar from './ToolbarBar';
 import RecoveryBoundary from './RecoveryBoundary';
 import {
@@ -1025,6 +1026,9 @@ export default function App() {
             </button>
           )}
         </div>
+
+        {/* Kontrol musik lofi generatif (kiri bawah, sejajar kapsul kamera) */}
+        <MusicControl />
 
         {/* Tumpukan tengah-atas: pill proses/mode → inspector → autopsy */}
         <div className="absolute left-[276px] right-[392px] top-[68px] z-10 flex justify-center max-[1279px]:left-[248px]">
