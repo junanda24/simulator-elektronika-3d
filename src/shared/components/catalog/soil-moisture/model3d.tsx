@@ -5,6 +5,10 @@ import type { ComponentRenderProps } from '../../../types';
 import { moistureOf } from './electrical';
 import { useCircuitStore } from '../../../../features/wiring/store/circuitStore';
 import { SensorGizmo3D } from '../../../../features/stage3d/gizmos/SensorGizmo3D';
+import {
+  createThrottledCaller,
+  INTERACT_COMMIT_INTERVAL_MS,
+} from '../../../../features/stage3d/gizmos/throttledCommit';
 
 const METAL = { color: '#cfd4dc', metalness: 0.9, roughness: 0.3 } as const;
 /** Papan modul sensor tanah — biru khas. */
@@ -44,14 +48,22 @@ export const SoilMoistureRender3D: ComponentType<ComponentRenderProps> = ({
     setDragging3D?.(true);
     const startY = e.clientY;
     const startMoisture = moisture;
+    // Commit ter-throttle ±33 ms (pola bersama gizmos/throttledCommit) —
+    // pointermove mentah membanjiri solver & membuat gizmo berkedip
+    // (audit flicker 2026-10-21); nilai akhir di-flush saat lepas.
+    const commit = createThrottledCaller<[Record<string, unknown>]>(
+      (patch) => onInteract(patch),
+      INTERACT_COMMIT_INTERVAL_MS,
+    );
     const onMove = (ev: PointerEvent) => {
       const next = Math.min(
         1,
         Math.max(0, startMoisture + (ev.clientY - startY) / DRAG_PIXELS_FULL_RANGE),
       );
-      onInteract({ moisture: next });
+      commit.call({ moisture: next });
     };
     const onUp = () => {
+      commit.flush();
       window.removeEventListener('pointermove', onMove);
       window.removeEventListener('pointerup', onUp);
       setDragging3D?.(false);

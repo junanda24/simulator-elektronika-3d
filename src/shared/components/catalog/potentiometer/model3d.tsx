@@ -3,6 +3,10 @@ import type { ThreeEvent } from '@react-three/fiber';
 import type { ComponentRenderProps } from '../../../types';
 import { useCircuitStore } from '../../../../features/wiring/store/circuitStore';
 import { RotaryKnobGizmo } from '../../../../features/stage3d/gizmos/RotaryKnobGizmo';
+import {
+  createThrottledCaller,
+  INTERACT_COMMIT_INTERVAL_MS,
+} from '../../../../features/stage3d/gizmos/throttledCommit';
 import { LiveBadge } from '../../../../features/stage3d/LiveBadge';
 
 const METAL = { color: '#cfd4dc', metalness: 0.9, roughness: 0.3 } as const;
@@ -41,14 +45,22 @@ export const PotentiometerRender3D: ComponentType<ComponentRenderProps> = ({
     setDragging3D?.(true);
     const startY = e.clientY;
     const startAlpha = alpha;
+    // Commit ter-throttle ±33 ms (pola bersama gizmos/throttledCommit) —
+    // pointermove mentah membanjiri solver & membuat panel baca berkedip
+    // (audit flicker 2026-10-21); nilai akhir di-flush saat lepas.
+    const commit = createThrottledCaller<[Record<string, unknown>]>(
+      (patch) => onInteract(patch),
+      INTERACT_COMMIT_INTERVAL_MS,
+    );
     const onMove = (ev: PointerEvent) => {
       const next = Math.min(
         1,
         Math.max(0, startAlpha + (startY - ev.clientY) / DRAG_PIXELS_FULL_TURN),
       );
-      onInteract({ alpha: next });
+      commit.call({ alpha: next });
     };
     const onUp = () => {
+      commit.flush();
       window.removeEventListener('pointermove', onMove);
       window.removeEventListener('pointerup', onUp);
       setDragging3D?.(false);

@@ -5,6 +5,10 @@ import type { ComponentRenderProps } from '../../../types';
 import { TEMP_MAX_C, TEMP_MIN_C, tempCOf } from './electrical';
 import { useCircuitStore } from '../../../../features/wiring/store/circuitStore';
 import { SensorGizmo3D } from '../../../../features/stage3d/gizmos/SensorGizmo3D';
+import {
+  createThrottledCaller,
+  INTERACT_COMMIT_INTERVAL_MS,
+} from '../../../../features/stage3d/gizmos/throttledCommit';
 
 const METAL = { color: '#cfd4dc', metalness: 0.9, roughness: 0.3 } as const;
 
@@ -52,12 +56,21 @@ export const Lm35Render3D: ComponentType<ComponentRenderProps> = ({ instance, on
     setDragging3D?.(true);
     const startY = e.clientY;
     const startTemp = tempC;
+    // Commit ter-throttle ±33 ms (pola bersama gizmos/throttledCommit):
+    // pointermove mentah = putaran worker penuh per event — membanjiri
+    // solver dan membuat panel gizmo berkedip (audit flicker 2026-10-21).
+    // Nilai akhir selalu di-flush saat pointer dilepas.
+    const commit = createThrottledCaller<[Record<string, unknown>]>(
+      (patch) => onInteract(patch),
+      INTERACT_COMMIT_INTERVAL_MS,
+    );
     const onMove = (ev: PointerEvent) => {
       const delta = ((startY - ev.clientY) / DRAG_PIXELS_FULL_RANGE) * (TEMP_MAX_C - TEMP_MIN_C);
       const next = Math.min(TEMP_MAX_C, Math.max(TEMP_MIN_C, startTemp + delta));
-      onInteract({ tempC: next });
+      commit.call({ tempC: next });
     };
     const onUp = () => {
+      commit.flush();
       window.removeEventListener('pointermove', onMove);
       window.removeEventListener('pointerup', onUp);
       setDragging3D?.(false);

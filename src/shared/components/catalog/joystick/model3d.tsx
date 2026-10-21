@@ -3,6 +3,10 @@ import { useFrame, type ThreeEvent } from '@react-three/fiber';
 import type { ComponentRenderProps } from '../../../types';
 import { alphaXOf, alphaYOf, pressedOf } from './electrical';
 import { useCircuitStore } from '../../../../features/wiring/store/circuitStore';
+import {
+  createThrottledCaller,
+  INTERACT_COMMIT_INTERVAL_MS,
+} from '../../../../features/stage3d/gizmos/throttledCommit';
 
 const METAL = { color: '#cfd4dc', metalness: 0.9, roughness: 0.3 } as const;
 /** PCB modul joystick — hitam. */
@@ -75,12 +79,21 @@ export const JoystickRender3D: ComponentType<ComponentRenderProps> = ({
     setDragging3D?.(true);
     let accX = alphaX;
     let accY = alphaY;
+    // Commit drag ter-throttle ±33 ms — kaden yang sama dengan pegas di
+    // atas (sebelumnya hanya pegas yang dibatasi; drag-nya sendiri
+    // menulis per pointermove). Nilai akhir di-flush saat lepas
+    // (audit flicker 2026-10-21; pola gizmos/throttledCommit).
+    const commit = createThrottledCaller<[Record<string, unknown>]>(
+      (patch) => onInteract(patch),
+      INTERACT_COMMIT_INTERVAL_MS,
+    );
     const onMove = (ev: PointerEvent) => {
       accX = Math.min(1, Math.max(0, accX + ev.movementX / DRAG_PIXELS_FULL_RANGE));
       accY = Math.min(1, Math.max(0, accY - ev.movementY / DRAG_PIXELS_FULL_RANGE));
-      onInteract({ alphaX: accX, alphaY: accY });
+      commit.call({ alphaX: accX, alphaY: accY });
     };
     const onUp = () => {
+      commit.flush();
       window.removeEventListener('pointermove', onMove);
       window.removeEventListener('pointerup', onUp);
       draggingRef.current = false;

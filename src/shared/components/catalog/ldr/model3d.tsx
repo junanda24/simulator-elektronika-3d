@@ -4,6 +4,10 @@ import type { ThreeEvent } from '@react-three/fiber';
 import type { ComponentRenderProps } from '../../../types';
 import { useCircuitStore } from '../../../../features/wiring/store/circuitStore';
 import { SensorGizmo3D } from '../../../../features/stage3d/gizmos/SensorGizmo3D';
+import {
+  createThrottledCaller,
+  INTERACT_COMMIT_INTERVAL_MS,
+} from '../../../../features/stage3d/gizmos/throttledCommit';
 import { LiveBadge } from '../../../../features/stage3d/LiveBadge';
 
 const METAL = { color: '#cfd4dc', metalness: 0.9, roughness: 0.3 } as const;
@@ -39,14 +43,22 @@ export const LdrRender3D: ComponentType<ComponentRenderProps> = ({ instance, onI
     setDragging3D?.(true);
     const startY = e.clientY;
     const startLight = light;
+    // Commit ter-throttle ±33 ms (pola bersama gizmos/throttledCommit) —
+    // pointermove mentah membanjiri solver & membuat gizmo berkedip
+    // (audit flicker 2026-10-21); nilai akhir di-flush saat lepas.
+    const commit = createThrottledCaller<[Record<string, unknown>]>(
+      (patch) => onInteract(patch),
+      INTERACT_COMMIT_INTERVAL_MS,
+    );
     const onMove = (ev: PointerEvent) => {
       const next = Math.min(
         1,
         Math.max(0, startLight + (startY - ev.clientY) / DRAG_PIXELS_FULL_RANGE),
       );
-      onInteract({ light: next });
+      commit.call({ light: next });
     };
     const onUp = () => {
+      commit.flush();
       window.removeEventListener('pointermove', onMove);
       window.removeEventListener('pointerup', onUp);
       setDragging3D?.(false);
