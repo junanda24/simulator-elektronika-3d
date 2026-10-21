@@ -6,7 +6,7 @@ import { isSoundEnabled, setSoundEnabled } from '../shared/utils/soundFx';
  * Dock Bawah melayang (redesign Floating Studio HUD, SINTESIS §B/§G):
  * kapsul full-round h-12 yang terpusat pada rektangel bebas di bawah
  * kanvas — [7 swatch warna kabel] | [Undo/Redo] | [Putar] |
- * [Mode Hapus] | [Suara]. Glass ringan panel/90 + blur; semua kontrol
+ * [Mode Tangan] [Mode Hapus] | [Suara]. Glass ringan panel/90 + blur; semua kontrol
  * area sentuh ≥40px dengan ikon SVG stroke bersama (grid 24).
  * Diimpor App dengan nama & komponen yang sama seperti bar lama.
  */
@@ -44,8 +44,19 @@ const iconProps = {
 } as const;
 
 /** Satu set ikon SVG stroke bersama untuk seluruh dock (SINTESIS §A). */
-function Icon({ name }: { name: 'undo' | 'redo' | 'rotate' | 'trash' | 'soundOn' | 'soundOff' }) {
+function Icon({ name }: { name: 'undo' | 'redo' | 'rotate' | 'trash' | 'hand' | 'soundOn' | 'soundOff' }) {
   switch (name) {
+    case 'hand':
+      // Tangan terbuka (jalur stroke gaya Lucide "hand"): empat jari +
+      // ibu jari — ikon baku untuk alat geser/pan di editor grafis.
+      return (
+        <svg {...iconProps}>
+          <path d="M18 11V6a2 2 0 0 0-2-2a2 2 0 0 0-2 2" />
+          <path d="M14 10V4a2 2 0 0 0-2-2a2 2 0 0 0-2 2v2" />
+          <path d="M10 10.5V6a2 2 0 0 0-2-2a2 2 0 0 0-2 2v8" />
+          <path d="M18 8a2 2 0 1 1 4 0v6a8 8 0 0 1-8 8h-2c-2.8 0-4.5-.86-5.99-2.34l-3.6-3.6a2 2 0 0 1 2.83-2.82L7 15" />
+        </svg>
+      );
     case 'undo':
       return (
         <svg {...iconProps}>
@@ -103,8 +114,8 @@ export default function ToolbarBar() {
   const redo = useCircuitStore((s) => s.redo);
   const placingType = useCircuitStore((s) => s.placingType);
   const rotatePlacement = useCircuitStore((s) => s.rotatePlacement);
-  const deleteMode = useCircuitStore((s) => s.deleteMode);
-  const setDeleteMode = useCircuitStore((s) => s.setDeleteMode);
+  const toolMode = useCircuitStore((s) => s.toolMode);
+  const setToolMode = useCircuitStore((s) => s.setToolMode);
   const [soundOn, setSoundOn] = useState<boolean>(() => isSoundEnabled());
 
   const toggleSound = () => {
@@ -189,14 +200,30 @@ export default function ToolbarBar() {
 
       <Separator />
 
+      {/* ===== Mode tangan (navigasi murni: geser & pilih) ===== */}
+      <button
+        type="button"
+        onClick={() => setToolMode(toolMode === 'hand' ? 'build' : 'hand')}
+        aria-pressed={toolMode === 'hand'}
+        title="Mode tangan: seret kiri menggeser pandangan, seret kanan memutar, klik untuk memilih (H)"
+        className={`flex h-10 shrink-0 items-center gap-1.5 rounded-full border px-3 text-xs font-medium transition-colors ${
+          toolMode === 'hand'
+            ? 'border-accent-primary/60 bg-accent-primary/20 font-semibold text-accent-primary'
+            : 'border-[#5B6478]/60 text-zinc-200 hover:border-[#5B6478]'
+        }`}
+      >
+        <Icon name="hand" />
+        Mode Tangan
+      </button>
+
       {/* ===== Mode hapus ===== */}
       <button
         type="button"
-        onClick={() => setDeleteMode(!deleteMode)}
-        aria-pressed={deleteMode}
+        onClick={() => setToolMode(toolMode === 'delete' ? 'build' : 'delete')}
+        aria-pressed={toolMode === 'delete'}
         title="Mode hapus: klik komponen/kabel untuk menghapusnya (Esc untuk keluar)"
         className={`flex h-10 shrink-0 items-center gap-1.5 rounded-full border px-3 text-xs font-medium transition-colors ${
-          deleteMode
+          toolMode === 'delete'
             ? 'border-accent-danger/60 bg-accent-danger/20 font-semibold text-red-200'
             : 'border-[#5B6478]/60 text-zinc-200 hover:border-[#5B6478]'
         }`}

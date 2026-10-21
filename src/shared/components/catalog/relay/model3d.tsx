@@ -39,6 +39,23 @@ const RELAY_PINS: Array<[number, number]> = [
 ];
 
 /**
+ * Geometri fitur visual yang WAJIB sejajar jangkar pin elektrik
+ * (meta.ts): kolom kontak lokal x=+1,5 dengan z COM/NO/NC = −1/0/+1,
+ * kolom kendali x=−1,5 di bawah balok koil. Blok terminal KF301 duduk
+ * tepat di atas kolom kontak (muka dalamnya 0,1 dari bidang jangkar)
+ * dan sekrup + lubang kabelnya berbagi z yang PERSIS sama dengan
+ * jangkar COM/NO/NC — bukan pitch 1,27 lama yang meleset 0,27 dan
+ * membuat kabel kontak mendarat di celah kosong di samping blok.
+ * Konstanta diekspor agar tes keselarasan (relay-alignment.test.ts)
+ * mengunci regresi ini.
+ */
+export const RELAY_TERMINAL_BLOCK = { centerX: 2.55, width: 1.9, depth: 3.8 };
+export const RELAY_TERMINAL_SCREW_Z: readonly number[] = [-1, 0, 1];
+export const RELAY_TERMINAL_HOLE_X = 3.51;
+export const RELAY_COIL_BLOCK = { centerX: -1.05, width: 3.9 };
+export const RELAY_LED = { x: 1.25, z: -1.5, radius: 0.28 };
+
+/**
  * Plat label atas relay Songle SRD-05VDC-SL-C, digambar prosedural
  * (§2.5): merek, seri, rating kontak, dan diagram terminal sederhana
  * (koil + sakelar COM/NO/NC + baris 5 pin). Bidang 3,55 × 3,25 unit
@@ -134,13 +151,17 @@ function createModuleSilkscreen(): THREE.CanvasTexture {
       (lz / 4.6 + 0.5) * 620,
     ];
 
-    // Jejak tembaga samar: kolom koil → balok relay; kolom kontak → blok terminal.
+    // Jejak tembaga samar: kolom koil → balok relay; kolom kontak →
+    // blok terminal (lurus sejajar z jangkar menuju pusat blok).
     ctx.strokeStyle = 'rgba(255,255,255,0.10)';
     ctx.lineWidth = 13;
     ctx.lineCap = 'round';
     LEG_POSITIONS.forEach(([x, z]) => {
       const [sx, sy] = toPx(x, z);
-      const [ex, ey] = toPx(x > 0 ? 2.6 : -0.9, z * 0.55);
+      const [ex, ey] =
+        x > 0
+          ? toPx(RELAY_TERMINAL_BLOCK.centerX, z)
+          : toPx(RELAY_COIL_BLOCK.centerX, z * 0.55);
       ctx.beginPath();
       ctx.moveTo(sx, sy);
       ctx.lineTo(ex, ey);
@@ -159,13 +180,14 @@ function createModuleSilkscreen(): THREE.CanvasTexture {
     ctx.fillStyle = 'rgba(255,255,255,0.92)';
     ctx.textAlign = 'center';
 
-    // Legenda pin di tepi depan — kolom kaki koil tertutup balok relay,
-    // jadi label ditaruh sebagai legenda sejajar posisi kolomnya.
+    // Legenda pin kendali di tepi depan — kolom kaki koil tertutup
+    // balok relay, jadi label ditaruh sebagai legenda sejajar posisi
+    // kolomnya (urutan VCC IN GND = z −1 → +1, belakang ke depan).
+    // Kontak TIDAK lagi dilabeli di sini: label COM/NO/NC tercetak di
+    // muka atas blok terminal di samping sekrupnya (createTerminalLabel).
     ctx.font = '600 32px "JetBrains Mono", monospace';
     const [c1x, c1y] = toPx(-1.5, 2.06);
     ctx.fillText('VCC IN GND', c1x, c1y);
-    const [c2x, c2y] = toPx(1.5, 2.06);
-    ctx.fillText('COM NO NC', c2x, c2y);
 
     // Judul modul di tepi belakang.
     ctx.font = '700 36px "JetBrains Mono", monospace';
@@ -174,9 +196,38 @@ function createModuleSilkscreen(): THREE.CanvasTexture {
   }, { width: 1024, height: 620 });
 }
 
+/**
+ * Cetakan label di muka atas blok terminal: COM / NO / NC di samping
+ * kiri kepala sekrupnya masing-masing — z label sama persis dengan
+ * z jangkar pin (RELAY_TERMINAL_SCREW_Z), sehingga sekrup yang
+ * dilihat pengguna adalah kontak yang sama dengan yang disambung
+ * kabel lewat strip breadboard. Bidang 1,7 × 3,3 unit → kanvas
+ * 512 × 1024; sisi atas kanvas menghadap −z (konvensi label proyek).
+ */
+function createTerminalLabel(): THREE.CanvasTexture {
+  return createLabelTexture((ctx) => {
+    const toPx = (lx: number, lz: number): [number, number] => [
+      (lx / 1.7 + 0.5) * 512,
+      (lz / 3.3 + 0.5) * 1024,
+    ];
+    ctx.fillStyle = '#eef4fb';
+    ctx.font = '700 62px "JetBrains Mono", monospace';
+    ctx.textAlign = 'right';
+    const labels: Array<[string, number]> = [
+      ['COM', -1],
+      ['NO', 0],
+      ['NC', 1],
+    ];
+    for (const [text, z] of labels) {
+      const [x, y] = toPx(-0.34, z);
+      ctx.fillText(text, x, y + 21);
+    }
+  }, { width: 512, height: 1024 });
+}
+
 /** Kepala sekrup blok terminal KF301: silinder metal + slot lurus gelap. */
 const TerminalScrew = ({ z, angle }: { z: number; angle: number }) => (
-  <group position={[2.7, 2.53, z]}>
+  <group position={[RELAY_TERMINAL_BLOCK.centerX, 2.53, z]}>
     <mesh castShadow>
       <cylinderGeometry args={[0.27, 0.27, 0.14, 20]} />
       <meshPhysicalMaterial {...MATERIAL_PROPS.metalPin} />
@@ -201,6 +252,7 @@ export const RelayRender3D: ComponentType<ComponentRenderProps> = ({ instance })
 
   const relayLabel = useMemo(createRelayLabel, []);
   const silkscreen = useMemo(createModuleSilkscreen, []);
+  const terminalLabel = useMemo(createTerminalLabel, []);
 
   // Bunyi "tak!" mekanis setiap kali koil berubah status.
   // Ref diinisialisasi dari nilai awal agar mount pertama tidak berbunyi.
@@ -241,37 +293,46 @@ export const RelayRender3D: ComponentType<ComponentRenderProps> = ({ instance })
       ))}
 
       {/* Balok relay biru Songle — proporsi nyaris kubus seperti SRD asli */}
-      <RoundedBox args={[3.9, 3.3, 3.6]} radius={0.16} smoothness={4} position={[-0.9, 2.72, 0]} castShadow>
+      <RoundedBox args={[RELAY_COIL_BLOCK.width, 3.3, 3.6]} radius={0.16} smoothness={4} position={[RELAY_COIL_BLOCK.centerX, 2.72, 0]} castShadow>
         <meshPhysicalMaterial {...MATERIAL_PROPS.absWarna} color={COLOR_TOKENS.relayBlue} />
       </RoundedBox>
       {/* Plat label putih di muka atas balok */}
-      <RoundedBox args={[3.55, 0.07, 3.25]} radius={0.03} smoothness={4} position={[-0.9, 4.41, 0]}>
+      <RoundedBox args={[3.55, 0.07, 3.25]} radius={0.03} smoothness={4} position={[RELAY_COIL_BLOCK.centerX, 4.41, 0]}>
         <meshStandardMaterial color="#eef1f4" roughness={0.5} />
       </RoundedBox>
       {/* Cetakan label: merek, seri, rating, diagram terminal */}
-      <mesh position={[-0.9, 4.448, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+      <mesh position={[RELAY_COIL_BLOCK.centerX, 4.448, 0]} rotation={[-Math.PI / 2, 0, 0]}>
         <planeGeometry args={[3.55, 3.25]} />
         <meshStandardMaterial map={relayLabel} transparent roughness={0.5} />
       </mesh>
 
-      {/* Blok terminal KF301 biru (COM/NO/NC) */}
-      <RoundedBox args={[1.6, 1.5, 3.8]} radius={0.1} smoothness={4} position={[2.7, 1.76, 0]} castShadow>
+      {/* Blok terminal KF301 biru (COM/NO/NC) — duduk tepat di atas
+          kolom jangkar kontak x=+1,5; sekrup & lubang kabel sejajar
+          z jangkar pin (RELAY_TERMINAL_SCREW_Z) */}
+      <RoundedBox args={[RELAY_TERMINAL_BLOCK.width, 1.5, RELAY_TERMINAL_BLOCK.depth]} radius={0.1} smoothness={4} position={[RELAY_TERMINAL_BLOCK.centerX, 1.76, 0]} castShadow>
         <meshPhysicalMaterial {...MATERIAL_PROPS.absWarna} color={TERMINAL_BLUE} />
       </RoundedBox>
+      {/* Cetakan label COM/NO/NC di muka atas blok, di samping sekrupnya */}
+      <mesh position={[RELAY_TERMINAL_BLOCK.centerX, 2.515, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+        <planeGeometry args={[1.7, 3.3]} />
+        <meshStandardMaterial map={terminalLabel} transparent roughness={0.5} />
+      </mesh>
       {/* Tiga kepala sekrup di muka atas blok terminal */}
-      <TerminalScrew z={-1.27} angle={0.4} />
-      <TerminalScrew z={0} angle={1.2} />
-      <TerminalScrew z={1.27} angle={-0.7} />
-      {/* Tiga lubang masuk kabel di sisi luar (+x) */}
-      {[-1.27, 0, 1.27].map((z) => (
-        <mesh key={`hole-${z}`} position={[3.51, 1.6, z]} rotation={[0, 0, Math.PI / 2]}>
+      {RELAY_TERMINAL_SCREW_Z.map((z, i) => (
+        <TerminalScrew key={`screw-${z}`} z={z} angle={[0.4, 1.2, -0.7][i]} />
+      ))}
+      {/* Tiga lubang masuk kabel di sisi luar (+x), sejajar z sekrupnya */}
+      {RELAY_TERMINAL_SCREW_Z.map((z) => (
+        <mesh key={`hole-${z}`} position={[RELAY_TERMINAL_HOLE_X, 1.6, z]} rotation={[0, 0, Math.PI / 2]}>
           <cylinderGeometry args={[0.3, 0.3, 0.1, 20]} />
           <meshStandardMaterial color="#0a0f16" roughness={0.9} />
         </mesh>
       ))}
 
-      {/* Kapasitor elektrolit modul di sudut belakang PCB */}
-      <group position={[-3.15, 1.0, 1.75]}>
+      {/* Kapasitor elektrolit modul di sudut depan PCB (digeser ke
+          sudut agar tidak bergesekan dengan balok relay yang kini
+          berpusat di x=−1,05) */}
+      <group position={[-3.3, 1.0, 1.9]}>
         <mesh position={[0, 0.4, 0]} castShadow>
           <cylinderGeometry args={[0.35, 0.35, 0.8, 24]} />
           <meshPhysicalMaterial {...MATERIAL_PROPS.plastikHitam} color="#2456c8" />
@@ -287,9 +348,12 @@ export const RelayRender3D: ComponentType<ComponentRenderProps> = ({ instance })
         <meshPhysicalMaterial {...MATERIAL_PROPS.plastikHitam} />
       </RoundedBox>
 
-      {/* LED indikator merah — menyala saat relay aktif */}
-      <mesh position={[1.55, 1.23, -1.5]} castShadow>
-        <cylinderGeometry args={[0.3, 0.32, 0.45, 16]} />
+      {/* LED indikator merah — menyala saat relay aktif. Duduk di celah
+          antara balok relay dan blok terminal (RELAY_LED): celah itu
+          menyempit karena blok terminal kini menimpa kolom kontak,
+          jadi LED sedikit diperkecil agar tidak menabrak kedua blok. */}
+      <mesh position={[RELAY_LED.x, 1.23, RELAY_LED.z]} castShadow>
+        <cylinderGeometry args={[0.26, RELAY_LED.radius, 0.45, 16]} />
         <meshStandardMaterial
           color="#ff2a2a"
           roughness={0.3}
@@ -298,7 +362,7 @@ export const RelayRender3D: ComponentType<ComponentRenderProps> = ({ instance })
         />
       </mesh>
       {active && (
-        <pointLight position={[1.55, 2.1, -1.5]} color="#ff2a2a" intensity={6} distance={5} decay={2} />
+        <pointLight position={[RELAY_LED.x, 2.1, RELAY_LED.z]} color="#ff2a2a" intensity={6} distance={5} decay={2} />
       )}
     </group>
   );

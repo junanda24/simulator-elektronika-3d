@@ -62,13 +62,14 @@ describe('computePlacement — rotasi footprint (Batch 6)', () => {
   });
 
   it('relay rotasi 90°: rumus generik berlaku untuk kasus multi-kolom', () => {
-    const p = computePlacement('relay', terminalHoleId('L', 20, 1), new Set(), 90);
+    // Jangkar footprint DIP relay: VCC di tepi kanal bank L (col 4).
+    const p = computePlacement('relay', terminalHoleId('L', 20, 4), new Set(), 90);
     expect(p).not.toBeNull();
-    expect(p?.pinHoles.VCC).toBe(terminalHoleId('L', 20, 1));
-    // COM offset (dCol 3, dRow 0) → rotasi 90° → (0, -3): baris 17, kolom tetap.
-    expect(p?.pinHoles.COM).toBe(terminalHoleId('L', 17, 1));
-    // IN offset (0, 1) → (1, 0): kolom 2, baris tetap.
-    expect(p?.pinHoles.IN).toBe(terminalHoleId('L', 20, 2));
+    expect(p?.pinHoles.VCC).toBe(terminalHoleId('L', 20, 4));
+    // COM offset (dCol 1, dRow 0) → rotasi 90° → (0, -1): baris 19, kolom tetap.
+    expect(p?.pinHoles.COM).toBe(terminalHoleId('L', 19, 4));
+    // IN offset (0, 1) → (1, 0): menyeberang kanal ke kolom 0 bank R, baris tetap.
+    expect(p?.pinHoles.IN).toBe(terminalHoleId('R', 20, 0));
   });
 });
 

@@ -129,8 +129,12 @@ interface PinOffset {
  *   (bank L kolom 4) atau B1 (bank R kolom 0); sisi B selalu +1 kolom
  *   global dari sisi A.
  * - Potensiometer: klik = kaki A; WIPER +1 baris, kaki B +2 baris.
- * - Relay: klik = VCC; sisi kontak 3 kolom di kanan pada bank yang sama
- *   (klik dengan col + 3 > 4 ditolak, sama seperti perilaku lama).
+ * - Relay: klik = VCC, sah hanya di kolom tepi kanal bank L (col 4).
+ *   Pola DIP menjembatani kanal: pin kendali tetap di bank L, pin
+ *   kontak menyeberang ke kolom 0 bank R — baris kontak tidak pernah
+ *   sebank dengan baris kendali, jadi net COM/NO/NC independen penuh
+ *   dari net VCC/IN/GND (perbaikan audit T2: footprint lama menaruh
+ *   kontak sebaris kendali sehingga COM ≡ VCC, NO ≡ IN, NC ≡ GND).
  */
 function pinOffsetsFor(
   type: string,
@@ -182,16 +186,21 @@ function pinOffsetsFor(
     };
   }
   if (type === 'relay') {
-    if (col + 3 > 4) return null;
+    // DIP menjembatani kanal tengah: klik hanya sah di tepi kanal
+    // bank L (col 4). Kontak di kolom global +1 = kolom 0 bank R;
+    // secara fisik itu 3 satuan dari kolom kendali (x −1,5 → +1,5)
+    // karena x kolom bank R mulai di +1,5 — cocok dengan localPosition
+    // meta (kendali −1,5, kontak +1,5) yang dikunci relay-alignment.
+    if (bank !== 'L' || col !== 4) return null;
     return {
       baseRotation: 0,
       offsets: [
         { id: 'VCC', dCol: 0, dRow: 0 },
         { id: 'IN', dCol: 0, dRow: 1 },
         { id: 'GND', dCol: 0, dRow: 2 },
-        { id: 'COM', dCol: 3, dRow: 0 },
-        { id: 'NO', dCol: 3, dRow: 1 },
-        { id: 'NC', dCol: 3, dRow: 2 },
+        { id: 'COM', dCol: 1, dRow: 0 },
+        { id: 'NO', dCol: 1, dRow: 1 },
+        { id: 'NC', dCol: 1, dRow: 2 },
       ],
     };
   }

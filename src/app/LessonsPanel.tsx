@@ -118,9 +118,9 @@ export default function LessonsPanel() {
         {!active ? (
           <div className="hud-content-enter space-y-2">
             <p className="text-xs leading-relaxed text-zinc-400">
-              {LESSONS.length} modul terstruktur dari LED pertama sampai proyek
-              akhir. Selesaikan berurutan atau lompat ke topik yang kamu
-              butuhkan.
+              {LESSONS.length} modul terstruktur dari LED pertama sampai
+              termometer LM35. Selesaikan berurutan atau lompat ke topik yang
+              kamu butuhkan.
             </p>
             <p className="text-xs leading-relaxed text-zinc-400">
               Tantangan: coba cabut kabel resistor dari jalur LED, sambungkan

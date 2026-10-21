@@ -39,6 +39,28 @@ export const CAMERA_HOME = new THREE.Vector3(...CAMERA_HOME_POS);
 export const TARGET_HOME = new THREE.Vector3(...TARGET_HOME_POS);
 
 /**
+ * Pemetaan tombol OrbitControls per mode alat (keluarga ToolMode di
+ * circuitStore). Bawaan three.js — mode 'build' & 'delete': kiri
+ * MEMUTAR, tengah dolly, kanan MENGGESER. Mode 'hand' (navigasi murni):
+ * kiri MENGGESER (pan — gestur utama mode ini), putar pindah ke seret
+ * kanan; sentuh satu jari ikut menggeser, dua jari dolly + putar.
+ * Objek dibuat sekali di level modul agar identitasnya stabil dan drei
+ * tidak menerapkan ulang props di setiap render.
+ */
+const DEFAULT_MOUSE_BUTTONS = {
+  LEFT: THREE.MOUSE.ROTATE,
+  MIDDLE: THREE.MOUSE.DOLLY,
+  RIGHT: THREE.MOUSE.PAN,
+};
+const HAND_MOUSE_BUTTONS = {
+  LEFT: THREE.MOUSE.PAN,
+  MIDDLE: THREE.MOUSE.DOLLY,
+  RIGHT: THREE.MOUSE.ROTATE,
+};
+const DEFAULT_TOUCHES = { ONE: THREE.TOUCH.ROTATE, TWO: THREE.TOUCH.DOLLY_PAN };
+const HAND_TOUCHES = { ONE: THREE.TOUCH.PAN, TWO: THREE.TOUCH.DOLLY_ROTATE };
+
+/**
  * Preferensi gerak dikurangi dari OS (prefers-reduced-motion): penerbangan
  * kamera menjadi instan, bukan meluncur (SINTESIS-FINAL §J). Dievaluasi
  * per perintah kamera agar perubahan preferensi di tengah sesi dihormati.
@@ -268,6 +290,8 @@ function InteractionPlane({
   const setHover = useCircuitStore((s) => s.setHover);
   const placeAt = useCircuitStore((s) => s.placeAt);
   const clickTerminal = useCircuitStore((s) => s.clickTerminal);
+  const toolMode = useCircuitStore((s) => s.toolMode);
+  const selectInstance = useCircuitStore((s) => s.selectInstance);
   const placingType = useCircuitStore((s) => s.placingType);
   const pendingFrom = useCircuitStore((s) => s.pendingFrom);
   const setWireCursorPos = useCircuitStore((s) => s.setWireCursorPos);
@@ -299,6 +323,14 @@ function InteractionPlane({
     downPos.current = null;
     if (!down) return;
     if (Math.hypot(e.clientX - down.x, e.clientY - down.y) > 6) return; // itu drag kamera
+    if (toolMode === 'hand') {
+      // Mode Tangan: klik bidang kerja = klik ruang kosong → batal
+      // pilih. (Klik pada komponen/kabel tiba lewat handler onClick
+      // mereka SETELAH pointerup ini, jadi seleksi mereka tetap menang;
+      // kabel & pasang memang sudah mati di gerbang store.)
+      selectInstance(null);
+      return;
+    }
     const ref = resolve(e.point);
     if (!ref) return;
     if (placingType) {
@@ -466,11 +498,37 @@ function ActiveBoard() {
 }
 
 /**
+ * Handler klik ruang kosong di permukaan di luar bidang interaksi
+ * (alas meja): klik tanpa seret (>6px = drag kamera, diabaikan) saat
+ * Mode Tangan membatalkan pilihan — padanan InteractionPlane untuk
+ * area yang tidak tertutup bidang interaksi.
+ */
+function useEmptySurfaceDeselect() {
+  const toolMode = useCircuitStore((s) => s.toolMode);
+  const selectInstance = useCircuitStore((s) => s.selectInstance);
+  const downPos = useRef<{ x: number; y: number } | null>(null);
+  return {
+    onPointerDown: (e: ThreeEvent<PointerEvent>) => {
+      downPos.current = { x: e.clientX, y: e.clientY };
+    },
+    onPointerUp: (e: ThreeEvent<PointerEvent>) => {
+      const down = downPos.current;
+      downPos.current = null;
+      if (!down || toolMode !== 'hand') return;
+      if (Math.hypot(e.clientX - down.x, e.clientY - down.y) > 6) return;
+      selectInstance(null);
+    },
+  };
+}
+
+/**
  * Panggung 3D "Tactile ESD Workbench": meja ESD, board aktif, breadboard,
  * rangkaian dari store (komponen + kabel), interaksi pasang & wiring.
  */
 export default function Workbench({ resetSignal }: { resetSignal: number }) {
   const isDragging3D = useCircuitStore((s) => s.isDragging3D);
+  const toolMode = useCircuitStore((s) => s.toolMode);
+  const matDeselect = useEmptySurfaceDeselect();
   return (
     <Canvas
       shadows="soft"
@@ -515,7 +573,13 @@ export default function Workbench({ resetSignal }: { resetSignal: number }) {
           desaturasi (#146356 → #0d2b21, SPEK-TEMA-GELAP.md); grid
           #17402f hanya ±1,3:1 di atas alas — terbaca dari dekat,
           nyaris hilang dari jauh. */}
-      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0, 0]} receiveShadow>
+      <mesh
+        rotation={[-Math.PI / 2, 0, 0]}
+        position={[0, 0, 0]}
+        receiveShadow
+        onPointerDown={matDeselect.onPointerDown}
+        onPointerUp={matDeselect.onPointerUp}
+      >
         <planeGeometry args={[420, 420]} />
         <meshStandardMaterial color="#0d2b21" roughness={1} />
       </mesh>
@@ -544,6 +608,8 @@ export default function Workbench({ resetSignal }: { resetSignal: number }) {
         maxPolarAngle={1.45}
         minDistance={10}
         maxDistance={120}
+        mouseButtons={toolMode === 'hand' ? HAND_MOUSE_BUTTONS : DEFAULT_MOUSE_BUTTONS}
+        touches={toolMode === 'hand' ? HAND_TOUCHES : DEFAULT_TOUCHES}
       />
       <CameraRig resetSignal={resetSignal} />
     </Canvas>

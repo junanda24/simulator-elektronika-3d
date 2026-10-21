@@ -152,7 +152,7 @@ describe('Audit konsistensi — (b) placement == meta', () => {
   /** Lubang jangkar sah per tipe (precondition klik placement). */
   function anchorFor(type: string): string {
     if (type === 'push-button') return terminalHoleId('L', 30, 4);
-    if (type === 'relay') return terminalHoleId('L', 30, 1);
+    if (type === 'relay') return terminalHoleId('L', 30, 4);
     return terminalHoleId('L', 30, 0);
   }
 

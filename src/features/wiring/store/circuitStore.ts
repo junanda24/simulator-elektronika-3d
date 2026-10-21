@@ -39,6 +39,19 @@ export interface HoverState {
   clientY: number;
 }
 
+/**
+ * Keluarga MODE ALAT (satu sumber kebenaran untuk perilaku klik/drag di
+ * kanvas — menggantikan boolean deleteMode lama):
+ * - 'build'  : bawaan; semua aksi merakit aktif (pasang, kabel, gizmo).
+ * - 'hand'   : navigasi murni — seret kiri menggeser pandangan, klik
+ *              hanya memilih; pasang/kabel/drag gizmo dimatikan di
+ *              gerbang aksi store (clickTerminal/placeAt/setPlacing/
+ *              interact/setDragging3D), BUKAN di tiap komponen.
+ * - 'delete' : Mode Hapus lama — seleksi berikutnya langsung dihapus
+ *              (perilakunya di App, persis seperti sebelumnya).
+ */
+export type ToolMode = 'build' | 'hand' | 'delete';
+
 /** Snapshot rangkaian untuk histori undo/redo — data polos saja, aman di-deep-clone. */
 interface CircuitSnapshot {
   instances: ComponentInstanceState[];
@@ -157,8 +170,8 @@ interface CircuitStore {
     position: [number, number, number];
     nonce: number;
   } | null;
-  /** Mode hapus: klik seleksi berikutnya langsung menghapus entitasnya. */
-  deleteMode: boolean;
+  /** Mode alat aktif (keluarga ToolMode) — lihat definisi ToolMode. */
+  toolMode: ToolMode;
 
   setPlacing: (type: string | null) => void;
   placeAt: (holeId: string) => boolean;
@@ -182,7 +195,7 @@ interface CircuitStore {
     target: [number, number, number],
     position: [number, number, number],
   ) => void;
-  setDeleteMode: (v: boolean) => void;
+  setToolMode: (mode: ToolMode) => void;
   closeAutopsy: () => void;
   setRunning: (running: boolean) => void;
   setBoard: (boardId: string) => void;
@@ -299,23 +312,51 @@ export const useCircuitStore = create<CircuitStore>((set, get) => ({
   canUndo: false,
   canRedo: false,
   cameraView: null,
-  deleteMode: false,
+  toolMode: 'build',
 
   setCameraView: (target, position) =>
     set((s) => ({
       cameraView: { target, position, nonce: (s.cameraView?.nonce ?? 0) + 1 },
     })),
 
-  setDeleteMode: (v) => set({ deleteMode: v }),
+  setToolMode: (mode) => {
+    if (mode === get().toolMode) return;
+    if (mode === 'hand') {
+      // Masuk Mode Tangan: batalkan gestur merakit yang menggantung
+      // (kabel setengah jadi / mode pasang / pratinjau kursor) agar tidak
+      // bocor ke mode navigasi, dan lepaskan kunci drag 3D agar
+      // OrbitControls tidak tertahan mati oleh drag gizmo yang terputus.
+      set({
+        toolMode: mode,
+        pendingFrom: null,
+        placingType: null,
+        placementRotation: 0,
+        wireCursorPos: null,
+        isDragging3D: false,
+      });
+      return;
+    }
+    set({ toolMode: mode });
+  },
 
-  setPlacing: (type) =>
+  setPlacing: (type) => {
+    // Gerbang Mode Tangan: klik tile katalog tidak boleh mengaktifkan
+    // mode pasang (membatalkan dengan null tetap selalu boleh).
+    if (type !== null && get().toolMode === 'hand') return;
     set({
       placingType: type,
       pendingFrom: null,
       placementRotation: type === null ? 0 : get().placementRotation,
-    }),
+    });
+  },
 
-  setDragging3D: (v) => set({ isDragging3D: v }),
+  setDragging3D: (v) => {
+    // Gerbang Mode Tangan: drag gizmo tidak boleh merebut kamera —
+    // isDragging3D=true akan mematikan OrbitControls dan mengunci
+    // gestur geser. Nilai false (akhir drag) tetap selalu diterima.
+    if (v && get().toolMode === 'hand') return;
+    set({ isDragging3D: v });
+  },
 
   rotatePlacement: () =>
     set((s) => ({
@@ -378,6 +419,8 @@ export const useCircuitStore = create<CircuitStore>((set, get) => ({
   },
 
   placeAt: (holeId) => {
+    // Gerbang Mode Tangan: tidak ada penempatan komponen.
+    if (get().toolMode === 'hand') return false;
     const { placingType, instances, pinHoles, placementRotation } = get();
     if (!placingType) return false;
     const occupied = new Set(Object.values(pinHoles).flatMap((m) => Object.values(m)));
@@ -396,6 +439,8 @@ export const useCircuitStore = create<CircuitStore>((set, get) => ({
   },
 
   clickTerminal: (ref) => {
+    // Gerbang Mode Tangan: klik terminal tidak memulai/menyambung kabel.
+    if (get().toolMode === 'hand') return;
     const { pendingFrom, wires, wireColor } = get();
     if (!pendingFrom) {
       set({ pendingFrom: ref, selectedWireId: null });
@@ -587,6 +632,11 @@ export const useCircuitStore = create<CircuitStore>((set, get) => ({
   },
 
   interact: (instanceId, patch) => {
+    // Gerbang Mode Tangan: SEMUA manipulasi komponen (knop putar,
+    // joystick, gizmo sensor, tombol tekan) bermuara ke aksi ini lewat
+    // onInteract — mematikannya di sini mematikan seluruh gizmo tanpa
+    // menyentuh satu pun model komponen.
+    if (get().toolMode === 'hand') return;
     // SENGAJA tidak dicatat ke histori undo: interact dipakai oleh drag
     // kontinu (potensiometer, joystick, sensor) yang memicu puluhan mutasi
     // per detik — mencatatnya akan membanjiri tumpukan histori (batas 50)

@@ -5,6 +5,7 @@ import AutopsyCard from './AutopsyCard';
 import InspectorPopover from './InspectorPopover';
 import RightDock from './RightDock';
 import { initSim } from '../features/simulation/worker/bridge';
+import { finishBootOverlay } from './bootOverlay';
 import {
   projectFromFileJson,
   projectFromHash,
@@ -201,7 +202,7 @@ export default function App() {
   const hover = useCircuitStore((s) => s.hover);
   const loadShared = useCircuitStore((s) => s.loadShared);
   const pinHoles = useCircuitStore((s) => s.pinHoles);
-  const deleteMode = useCircuitStore((s) => s.deleteMode);
+  const toolMode = useCircuitStore((s) => s.toolMode);
   const setCameraView = useCircuitStore((s) => s.setCameraView);
   const autopsy = useCircuitStore((s) => s.autopsy);
   const [shareNote, setShareNote] = useState<string | null>(null);
@@ -263,7 +264,8 @@ export default function App() {
   useEffect(() => {
     if (placingType) lastPlacingRef.current = placingType;
   }, [placingType]);
-  const deleteP = useExitPresence(deleteMode, 160);
+  const deleteP = useExitPresence(toolMode === 'delete', 160);
+  const handP = useExitPresence(toolMode === 'hand', 160);
   const toastP = useExitPresence(shareNote !== null, 160);
   const lastNoteRef = useRef(shareNote);
   useEffect(() => {
@@ -287,6 +289,25 @@ export default function App() {
       loadDemo();
     }
   }, [loadDemo, loadShared]);
+
+  // Sinyal siap overlay boot (index.html): efek ini berjalan setelah
+  // commit pertama — HUD dan Canvas sudah terpasang di DOM. Dua
+  // requestAnimationFrame memberi loop R3F kesempatan menyajikan frame
+  // 3D pertamanya (semua aset adegan prosedural/sinkron, tidak ada
+  // pemuatan async) sebelum overlay memudar; memudar saat canvas masih
+  // kosong akan mengkhianati janji tahap "Menyiapkan meja kerja 3D…".
+  // Bila WebGL gagal, overlay berstatus error dan finishBootOverlay
+  // menolak memudar — pesan error tetap tampil, bukan layar kosong.
+  useEffect(() => {
+    let raf2 = 0;
+    const raf1 = requestAnimationFrame(() => {
+      raf2 = requestAnimationFrame(() => finishBootOverlay());
+    });
+    return () => {
+      cancelAnimationFrame(raf1);
+      cancelAnimationFrame(raf2);
+    };
+  }, []);
 
   // Toast shareNote hilang sendiri setelah 6 detik.
   useEffect(() => {
@@ -348,7 +369,14 @@ export default function App() {
       switch (e.key) {
         case 'Escape':
           state.cancelPending();
-          if (state.deleteMode) state.setDeleteMode(false);
+          // Esc keluar dari mode alat mana pun (Tangan/Hapus) ke 'build'.
+          if (state.toolMode !== 'build') state.setToolMode('build');
+          break;
+        case 'h':
+        case 'H':
+          // Mode Tangan: navigasi murni (geser & pilih). Penjaga fokus di
+          // atas switch sudah melindungi ketikan di editor/input.
+          state.setToolMode(state.toolMode === 'hand' ? 'build' : 'hand');
           break;
         case 'Delete':
         case 'Backspace':
@@ -396,10 +424,11 @@ export default function App() {
     return () => window.removeEventListener('keydown', onKey);
   }, []);
 
-  // Mode Hapus: seleksi berikutnya (komponen/kabel) langsung dihapus.
-  // Klik kosong tidak memilih apa pun → tidak menghapus apa pun.
+  // Mode Hapus (toolMode 'delete'): seleksi berikutnya (komponen/kabel)
+  // langsung dihapus. Klik kosong tidak memilih apa pun → tidak
+  // menghapus apa pun.
   useEffect(() => {
-    if (!deleteMode) return;
+    if (toolMode !== 'delete') return;
     const state = useCircuitStore.getState();
     if (state.selectedWireId) {
       state.removeWire(state.selectedWireId);
@@ -408,7 +437,7 @@ export default function App() {
       state.removeInstance(state.selectedInstanceId);
       playClick(300);
     }
-  }, [deleteMode, selectedInstanceId, selectedWireId]);
+  }, [toolMode, selectedInstanceId, selectedWireId]);
 
   const currentProject = () =>
     toSharedProject({
@@ -538,7 +567,15 @@ export default function App() {
   return (
     <div className="relative h-[100dvh] overflow-hidden bg-panel">
       {/* ===== Kanvas 3D full-bleed (z-0, stacking context mengurung drei Html) ===== */}
-      <div className={`absolute inset-0 z-0 ${deleteMode ? 'cursor-trash' : ''}`}>
+      <div
+        className={`absolute inset-0 z-0 ${
+          toolMode === 'delete'
+            ? 'cursor-trash'
+            : toolMode === 'hand'
+              ? 'cursor-grab active:cursor-grabbing'
+              : ''
+        }`}
+      >
         <Workbench resetSignal={resetSignal} />
       </div>
 
@@ -812,6 +849,16 @@ export default function App() {
                 Mode Hapus aktif — klik komponen atau kabel untuk menghapus (Esc keluar)
               </div>
             )}
+            {handP.mounted && (
+              <div
+                className={`pointer-events-none rounded-full border border-accent-primary/50 bg-panel/90 px-3.5 py-2 text-xs font-medium text-accent-primary backdrop-blur-md ${
+                  handP.exiting ? 'hud-exit' : 'hud-pop'
+                }`}
+              >
+                Mode Tangan aktif — seret untuk menggeser pandangan, klik komponen
+                untuk memilih (H atau Esc keluar)
+              </div>
+            )}
 
             {/* Popover inspector komponen — komponen terpisah dengan
                 langganan store presisi tampil; render ulang App tidak
@@ -961,6 +1008,15 @@ export default function App() {
                     ['Ctrl+Z', 'Urungkan'],
                     ['Ctrl+Shift+Z', 'Ulangi'],
                     ['Ctrl+Y', 'Ulangi'],
+                  ],
+                },
+                {
+                  title: 'Mode alat',
+                  rows: [
+                    ['H', 'Mode Tangan: navigasi & pilih saja (tekan lagi untuk kembali)'],
+                    ['Seret kiri', 'Menggeser pandangan (Mode Tangan)'],
+                    ['Seret kanan', 'Memutar pandangan (Mode Tangan)'],
+                    ['Esc', 'Keluar dari mode alat aktif'],
                   ],
                 },
                 {

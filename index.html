@@ -14,8 +14,144 @@
       rel="stylesheet"
     />
     <title>Simulator Elektronika 3D</title>
+    <!-- ===== Overlay boot (perintah user 2026-10-21: jangan biarkan user
+         menunggu tanpa tahu apa yang terjadi di belakang layar) =====
+         Semua gaya overlay SENGAJA inline di sini: overlay harus tampil
+         sejak HTML pertama tiba, sebelum bundle JS (±1,9MB) dan CSS
+         aplikasi selesai dimuat — file eksternal apa pun datang terlalu
+         lambat untuk menutup layar kosong itu. Tema gelap proyek
+         (#0b0f0d latar adegan, aksen cyan #00e5ff), BUKAN putih.
+         Tahapnya JUJUR, digerakkan kode aplikasi (src/app/bootOverlay.ts):
+         "Memuat aplikasi…" (dari HTML) → "Menyiapkan meja kerja 3D…"
+         (main.tsx berjalan) → memudar ≤200ms setelah frame 3D pertama
+         tersaji (App.tsx). Bila WebGL tidak tersedia atau bundle gagal
+         dimuat, skrip penjaga inline di bawah mengganti teks tahap
+         menjadi pesan error di overlay yang sama — tidak ada layar
+         kosong abadi. -->
+    <style>
+      #boot-overlay {
+        position: fixed;
+        inset: 0;
+        z-index: 9999;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: #0b0f0d;
+        color: #e8ecf3;
+        font-family:
+          "Plus Jakarta Sans", ui-sans-serif, system-ui, -apple-system,
+          "Segoe UI", sans-serif;
+        transition: opacity 200ms ease-out;
+      }
+      #boot-overlay.boot-done {
+        opacity: 0;
+        pointer-events: none;
+      }
+      .boot-card {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 14px;
+        padding: 24px;
+        text-align: center;
+      }
+      .boot-spinner {
+        width: 36px;
+        height: 36px;
+        border-radius: 50%;
+        border: 3px solid rgb(0 229 255 / 0.18);
+        border-top-color: #00e5ff;
+        animation: boot-spin 0.9s linear infinite;
+      }
+      @keyframes boot-spin {
+        to {
+          transform: rotate(360deg);
+        }
+      }
+      .boot-title {
+        margin: 0;
+        font-size: 17px;
+        font-weight: 700;
+        letter-spacing: -0.01em;
+      }
+      .boot-stage {
+        margin: 0;
+        min-height: 18px;
+        max-width: 420px;
+        font-size: 13px;
+        line-height: 1.45;
+        color: #9aa3b2;
+      }
+      #boot-overlay.boot-error .boot-spinner {
+        display: none;
+      }
+      #boot-overlay.boot-error .boot-stage {
+        color: #ff8fa5;
+      }
+      /* Gerak dikurangi: spinner berputar lambat (tier gerak proyek
+         mengizinkan penunjuk proses tetap bergerak perlahan); fade
+         keluar dipertahankan singkat. */
+      @media (prefers-reduced-motion: reduce) {
+        .boot-spinner {
+          animation-duration: 2.6s;
+        }
+      }
+    </style>
   </head>
   <body>
+    <div id="boot-overlay" role="status" aria-live="polite">
+      <div class="boot-card">
+        <div class="boot-spinner" aria-hidden="true"></div>
+        <p class="boot-title">Simulator Elektronika 3D</p>
+        <p class="boot-stage" id="boot-stage">Memuat aplikasi…</p>
+      </div>
+    </div>
+    <script>
+      // Penjaga boot inline: berjalan seketika, tanpa menunggu bundle.
+      // (1) WebGL2 adalah syarat keras three.js/R3F — cek di sini agar
+      //     kegagalannya tampil sebagai pesan, bukan layar diam.
+      // (2) Kegagalan memuat <script> aplikasi (mis. koneksi putus)
+      //     ditangkap pada fase capture dan dilaporkan di overlay sama.
+      (function () {
+        var overlay = document.getElementById('boot-overlay');
+        var stage = document.getElementById('boot-stage');
+        function bootFail(message) {
+          if (!overlay || overlay.classList.contains('boot-done')) return;
+          overlay.classList.add('boot-error');
+          if (stage) stage.textContent = message;
+        }
+        try {
+          var probe = document.createElement('canvas');
+          var gl = window.WebGL2RenderingContext
+            ? probe.getContext('webgl2')
+            : null;
+          if (!gl) {
+            bootFail(
+              'WebGL tidak tersedia di browser ini. Simulator membutuhkan WebGL untuk menggambar meja kerja 3D — coba browser modern seperti Chrome, Edge, atau Firefox terbaru.',
+            );
+          } else {
+            var lose = gl.getExtension('WEBGL_lose_context');
+            if (lose) lose.loseContext();
+          }
+        } catch (err) {
+          bootFail(
+            'WebGL tidak tersedia di browser ini. Simulator membutuhkan WebGL untuk menggambar meja kerja 3D — coba browser modern seperti Chrome, Edge, atau Firefox terbaru.',
+          );
+        }
+        window.addEventListener(
+          'error',
+          function (event) {
+            var target = event && event.target;
+            if (target && target.tagName === 'SCRIPT') {
+              bootFail(
+                'Gagal memuat aplikasi. Periksa koneksi internet, lalu muat ulang halaman.',
+              );
+            }
+          },
+          true,
+        );
+      })();
+    </script>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
