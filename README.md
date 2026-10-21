@@ -4,6 +4,8 @@ Simulator rangkaian elektronika 3D interaktif di browser untuk belajar Arduino d
 
 Tidak perlu login, tidak perlu database, tanpa instalasi. Semua simulasi berjalan lokal di browser.
 
+**Coba langsung: https://simulator-elektronika-3d.vercel.app**
+
 ## Kenapa proyek ini ada
 
 Belajar elektronika itu mahal dan berisiko: satu kabel salah colok bisa membunuh board beneran, dan pemula justru paling sering salah. Kit fisik juga tidak terjangkau semua orang. Simulator yang ada umumnya tidak memberi konsekuensi atas kesalahan (arus berlebih tidak merusak apa pun), hanya punya satu board, dan hampir semuanya berbahasa Inggris. Proyek ini menjawabnya: simulasi listrik nyata (bukan animasi), board bisa diganti, 20 komponen, kerusakan dengan konsekuensi dan penjelasan Bahasa Indonesia.
