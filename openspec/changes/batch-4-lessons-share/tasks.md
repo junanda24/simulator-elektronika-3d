@@ -1,7 +1,7 @@
 # Tasks — Batch 4
-- [ ] Mesin assertion + tes
-- [ ] Kurikulum 8 modul
-- [ ] Share link + .rangkai (serialisasi + tes round-trip)
-- [ ] Store: state lesson + loadShared + pelacakan kerusakan
-- [ ] UI: tab Panduan + tombol Bagikan/Ekspor/Impor
-- [ ] Verifikasi akhir Batch 4
+- [x] Mesin assertion + tes
+- [x] Kurikulum 8 modul
+- [x] Share link + .rangkai (serialisasi + tes round-trip)
+- [x] Store: state lesson + loadShared + pelacakan kerusakan
+- [x] UI: tab Panduan + tombol Bagikan/Ekspor/Impor
+- [x] Verifikasi akhir Batch 4

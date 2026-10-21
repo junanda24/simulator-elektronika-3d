@@ -1,32 +1,64 @@
-# React + TypeScript + Vite
+# Simulator Elektronika 3D
 
-This template provides a minimal setup to get React working in Vite with HMR and some Oxlint rules.
+Simulator rangkaian elektronika 3D interaktif di browser untuk belajar Arduino dan mikrokontroler — **tempat berlatih elektronika di mana berbuat salah itu gratis**. Rangkai komponen di breadboard 3D, tulis sketch, jalankan, dan kalau salah pasang: komponen bisa benar-benar rusak, lengkap dengan penjelasan penyebabnya (mode Autopsi).
 
-Currently, two official plugins are available:
+Tidak perlu login, tidak perlu database, tanpa instalasi. Semua simulasi berjalan lokal di browser.
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+## Kenapa proyek ini ada
 
-## React Compiler
+Belajar elektronika itu mahal dan berisiko: satu kabel salah colok bisa membunuh board beneran, dan pemula justru paling sering salah. Kit fisik juga tidak terjangkau semua orang. Simulator yang ada umumnya tidak memberi konsekuensi atas kesalahan (arus berlebih tidak merusak apa pun), hanya punya satu board, dan hampir semuanya berbahasa Inggris. Proyek ini menjawabnya: simulasi listrik nyata (bukan animasi), board bisa diganti, 20 komponen, kerusakan dengan konsekuensi dan penjelasan Bahasa Indonesia.
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+Ditujukan untuk siswa SMK, mahasiswa, pemula hobi elektronika, dan guru yang butuh alat peraga aman.
 
-## Expanding the Oxlint configuration
+## Fitur utama
 
-If you are developing a production application, we recommend enabling type-aware lint rules by installing `oxlint-tsgolint` and editing `.oxlintrc.json`:
+- **Simulasi listrik nyata** — solver Modified Nodal Analysis (MNA) berjalan di Web Worker; tegangan dan arus dihitung dari rangkaianmu, bukan ditebak.
+- **4 board yang bisa diganti** — Arduino Uno, ESP32 DevKit, NodeMCU ESP8266, Raspberry Pi Pico, masing-masing dengan profil listrik aslinya (tegangan logika 5V/3,3V, batas arus pin, resolusi ADC, pull-up).
+- **20 komponen plug-and-play** — resistor, LED 5mm, LED RGB, push button, potensiometer, kapasitor elektrolit, dioda 1N4007, transistor NPN 2N2222, modul relay 5V, LDR, PIR, LM35, joystick analog, sensor kelembaban tanah, servo SG90, motor DC, buzzer aktif, display 7-segment, sekering, saklar miring.
+- **Kerusakan real-case + Kartu Autopsi** — LED gosong kelebihan arus, kapasitor rusak karena polaritas terbalik, pin board mati permanen karena overvoltage/overcurrent, korsleting rel catu daya, sekering putus, motor stall terbakar. Setiap kerusakan dijelaskan penyebab dan cara mencegahnya.
+- **Bisa diprogram** — editor sketch Arduino dengan transpiler bawaan (tokenizer + parser tulisan tangan), serial monitor, pinMode/digitalWrite/analogWrite/digitalRead/analogRead berjalan terhadap rangkaian nyatamu.
+- **Mode belajar** — 8 modul kurikulum Bahasa Indonesia dengan rangkaian awal sekali klik dan checklist assertion yang memeriksa rangkaianmu secara langsung.
+- **Berbagi proyek** — seluruh rangkaian + sketch tersimpan di hash URL (kompresi lz-string) dan ekspor/impor berkas `.rangkai`.
+- **Interaksi taktil 3D** — pasang komponen ke breadboard 830 lubang, sambungkan kabel per warna fungsi, hover probe untuk membaca tegangan net secara live, efek asap saat komponen rusak, kamera fokus otomatis ke TKP kerusakan.
 
-```json
-{
-  "$schema": "./node_modules/oxlint/configuration_schema.json",
-  "plugins": ["react", "typescript", "oxc"],
-  "options": {
-    "typeAware": true
-  },
-  "rules": {
-    "react/rules-of-hooks": "error",
-    "react/only-export-components": ["warn", { "allowConstantExport": true }]
-  }
-}
+## Aturan kerusakan (ringkas)
+
+| Rule ID | Pemicu |
+| --- | --- |
+| `LED_OVERCURRENT` | Arus LED > 30 mA |
+| `LED_REVERSE_BREAKDOWN` | Tegangan balik LED > 5 V |
+| `CAP_REVERSE_POLARITY` / `CAP_OVERVOLTAGE` | Kapasitor terbalik > 1 V / melebihi rating |
+| `MCU_PIN_OVERCURRENT` | Arus pin > 40 mA (Uno) / 28 mA (ESP32, Pico) / 12 mA (NodeMCU) |
+| `MCU_PIN_OVERVOLTAGE` | Tegangan net melebihi logika board + 0,5 V |
+| `POWER_SHORT_CIRCUIT` | Rel catu daya terhubung langsung ke GND |
+| `TRANSISTOR_OVERCURRENT` | Arus kolektor > 0,8 A |
+| `MOTOR_STALL` | Arus motor > 1 A (poros terkunci) |
+| `FUSE_BLOWN` | Arus melewati sekering > rating — rangkaian terbuka, ganti sekering |
+
+Detail lengkap: [SIMULATION_RULES.md](SIMULATION_RULES.md).
+
+## Menjalankan lokal
+
+```bash
+npm install
+npm run dev      # mode pengembangan
+npm run build    # build produksi
+npm test         # 85 tes (vitest)
 ```
 
-See the [Oxlint rules documentation](https://oxc.rs/docs/guide/usage/linter/rules) for the full list of rules and categories.
+## Teknologi
+
+React 19 + Vite + TypeScript, Tailwind CSS 4, React Three Fiber v9 (3D), zustand (state), comlink (jembatan Web Worker untuk solver), CodeMirror 6 (editor sketch), GSAP (animasi kamera), lz-string (share link). Arsitektur feature-based dengan kontrak plugin komponen/board — inti simulasi tidak pernah menyebut nama komponen (zero-core-touch).
+
+Dokumen desain: [ARCHITECTURE.md](ARCHITECTURE.md) · [TECH_STACK.md](TECH_STACK.md) · [STYLE_GUIDE.md](STYLE_GUIDE.md) · [ROADMAP.md](ROADMAP.md) · riwayat per batch di `openspec/changes/`.
+
+## Penyederhanaan yang disadari
+
+- **HC-SR04, DHT22, LCD/OLED tidak dimasukkan** — protokolnya berbasis pewaktuan pulsa digital / I2C yang tidak bisa dimodelkan secara jujur oleh solver DC tunak. Diganti LM35 dan sensor kelembaban tanah yang keluarannya analog nyata.
+- **Servo** — sudut mengikuti rasio tegangan rata-rata pin sinyal (duty PWM), bukan lebar pulsa 1–2 ms seperti hardware asli.
+- **Buzzer** — perilaku elektrik dan visual lengkap; suara WebAudio belum disambungkan.
+- **Transpiler sketch** — semantik pembagian mengikuti JavaScript (bukan pemotongan integer C++); tipe library tak dikenal (Servo, DHT, dll.) lolos parse sebagai `null`.
+
+## Status
+
+Seluruh roadmap 5 batch selesai dan terverifikasi: 85/85 tes lulus, TypeScript bersih, build produksi hijau.

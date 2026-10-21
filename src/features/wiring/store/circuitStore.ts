@@ -18,6 +18,9 @@ import {
 } from '../../simulation/worker/bridge';
 import { DEFAULT_SKETCH } from '../../sketch/defaultSketch';
 import { getBoardDefinition } from '../../../shared/boards/definitions';
+import { getLesson } from '../../lessons/curriculum';
+import { evaluateAssertions, type LessonContext } from '../../lessons/engine';
+import type { SharedProject } from '../../share/projectShare';
 
 export interface AutopsyState {
   /** Id komponen yang rusak; null bila yang rusak adalah board. */
@@ -46,6 +49,10 @@ interface CircuitStore {
   deadPins: string[];
   boardFault: boolean;
   sketchError: string | null;
+  activeLessonId: string | null;
+  lessonChecks: boolean[];
+  completedLessons: string[];
+  lastDamageRuleId: string | null;
   autopsy: AutopsyState | null;
   selectedInstanceId: string | null;
   selectedWireId: string | null;
@@ -78,6 +85,9 @@ interface CircuitStore {
   replaceBoard: () => void;
   interact: (instanceId: string, patch: Record<string, unknown>) => void;
   applySnapshot: (snapshot: SimSnapshot) => void;
+  setActiveLesson: (id: string | null) => void;
+  applyStarter: (lessonId: string) => void;
+  loadShared: (project: SharedProject) => void;
   netNameOf: (ref: TerminalRef) => string;
 }
 
@@ -112,6 +122,18 @@ export const useCircuitStore = create<CircuitStore>((set, get) => ({
   deadPins: [],
   boardFault: false,
   sketchError: null,
+  activeLessonId: null,
+  lessonChecks: [],
+  completedLessons: (() => {
+    try {
+      const raw = localStorage.getItem('sim3d:completed-lessons');
+      const parsed: unknown = raw ? JSON.parse(raw) : [];
+      return Array.isArray(parsed) ? parsed.filter((x) => typeof x === 'string') : [];
+    } catch {
+      return [];
+    }
+  })(),
+  lastDamageRuleId: null,
   autopsy: null,
   selectedInstanceId: null,
   selectedWireId: null,
@@ -213,6 +235,8 @@ export const useCircuitStore = create<CircuitStore>((set, get) => ({
       pendingFrom: null,
       running: false,
       pinStates: {},
+      lessonChecks: [],
+      lastDamageRuleId: null,
     });
   },
 
@@ -325,6 +349,54 @@ export const useCircuitStore = create<CircuitStore>((set, get) => ({
       : state.serialText;
     const firstDamage = snapshot.damageEvents[0];
     const firstBoard = snapshot.boardEvents[0];
+
+    // --- Evaluasi lesson (sticky): konteks dari snapshot + netlist segar ---
+    const damageRuleId =
+      firstDamage?.report.ruleId ?? firstBoard?.report.ruleId ?? state.lastDamageRuleId;
+    let lessonChecks = state.lessonChecks;
+    let completedLessons = state.completedLessons;
+    const activeLesson = state.activeLessonId ? getLesson(state.activeLessonId) : undefined;
+    if (activeLesson) {
+      const board = getBoardDefinition(state.boardId);
+      const netlist = buildNetlist(
+        nextInstances,
+        state.pinHoles,
+        state.wires,
+        snapshot.pinStates,
+        board,
+      );
+      const ctx: LessonContext = {
+        boardId: state.boardId,
+        instances: nextInstances,
+        pinStates: snapshot.pinStates,
+        serialText,
+        lastDamageRuleId: damageRuleId,
+        voltageOfBoardPin: (pinId) => snapshot.voltages[netlist.netOfBoardPin(pinId)],
+        voltageOfComponentPin: (type, pinId) => {
+          const inst = nextInstances.find((i) => i.type === type);
+          if (!inst) return undefined;
+          const net = netlist.netOfPin(inst.id, pinId);
+          return net ? snapshot.voltages[net] : undefined;
+        },
+      };
+      const fresh = evaluateAssertions(activeLesson.assertions, ctx);
+      lessonChecks = activeLesson.assertions.map((_, i) => lessonChecks[i] || fresh[i]);
+      if (
+        lessonChecks.every(Boolean) &&
+        !completedLessons.includes(activeLesson.id)
+      ) {
+        completedLessons = [...completedLessons, activeLesson.id];
+        try {
+          localStorage.setItem(
+            'sim3d:completed-lessons',
+            JSON.stringify(completedLessons),
+          );
+        } catch {
+          /* penyimpanan lokal tidak tersedia; abaikan */
+        }
+      }
+    }
+
     if (firstDamage || firstBoard) {
       // Kerusakan baru: hentikan simulasi seperti Batch 1 (autopsi tampil).
       simStopSketch();
@@ -341,6 +413,9 @@ export const useCircuitStore = create<CircuitStore>((set, get) => ({
         boardFault: snapshot.boardFault,
         sketchError: snapshot.sketchError,
         running: false,
+        lastDamageRuleId: damageRuleId,
+        lessonChecks,
+        completedLessons,
         autopsy: firstDamage
           ? { instanceId: firstDamage.instanceId, report: firstDamage.report }
           : { instanceId: null, boardPinId: firstBoard?.pinId ?? null, report: firstBoard!.report },
@@ -357,7 +432,76 @@ export const useCircuitStore = create<CircuitStore>((set, get) => ({
       deadPins: snapshot.deadPins,
       boardFault: snapshot.boardFault,
       sketchError: snapshot.sketchError,
+      lastDamageRuleId: damageRuleId,
+      lessonChecks,
+      completedLessons,
     });
+  },
+
+  setActiveLesson: (id) => {
+    set({
+      activeLessonId: id,
+      lessonChecks: id ? (getLesson(id)?.assertions.map(() => false) ?? []) : [],
+      lastDamageRuleId: null,
+    });
+  },
+
+  applyStarter: (lessonId) => {
+    const lesson = getLesson(lessonId);
+    if (!lesson?.starter) return;
+    if (lesson.boardId !== get().boardId) get().setBoard(lesson.boardId);
+    get().clearAll();
+    const starter = lesson.starter;
+    for (const placement of starter.placements) {
+      set({ placingType: placement.type });
+      const before = new Set(get().instances.map((i) => i.id));
+      get().placeAt(placement.holeId);
+      if (placement.props) {
+        const placed = get().instances.find((i) => !before.has(i.id));
+        if (placed) {
+          set((s) => ({
+            instances: s.instances.map((i) =>
+              i.id === placed.id ? { ...i, props: { ...i.props, ...placement.props } } : i,
+            ),
+          }));
+        }
+      }
+    }
+    set({
+      wires: starter.wires.map((w) => ({ ...w, id: nextWireId() })),
+      placingType: null,
+      sketchCode: starter.sketch ?? get().sketchCode,
+      activeLessonId: lesson.id,
+      lessonChecks: lesson.assertions.map(() => false),
+      lastDamageRuleId: null,
+    });
+    syncSim(get);
+  },
+
+  loadShared: (project) => {
+    simStopSketch();
+    simSetPowered(false);
+    set({
+      boardId: project.boardId,
+      instances: project.instances.map((i) => ({
+        ...i,
+        interactiveState: i.interactiveState ?? {},
+        simState: EMPTY_SIM_RESULT,
+      })),
+      pinHoles: project.pinHoles,
+      wires: project.wires,
+      sketchCode: project.sketchCode,
+      running: false,
+      pinStates: {},
+      autopsy: null,
+      activeLessonId: null,
+      lessonChecks: [],
+      lastDamageRuleId: null,
+      selectedInstanceId: null,
+      selectedWireId: null,
+      pendingFrom: null,
+    });
+    syncSim(get);
   },
 
   netNameOf: (ref) => {

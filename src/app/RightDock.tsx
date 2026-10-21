@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import SketchEditor from '../features/sketch/SketchEditor';
+import LessonsPanel from './LessonsPanel';
 import { useCircuitStore } from '../features/wiring/store/circuitStore';
 
 /**
@@ -7,7 +8,7 @@ import { useCircuitStore } from '../features/wiring/store/circuitStore';
  * (editor + status pin + tombol upload) dan Serial Monitor.
  */
 export default function RightDock() {
-  const [tab, setTab] = useState<'kode' | 'serial'>('kode');
+  const [tab, setTab] = useState<'kode' | 'serial' | 'panduan'>('kode');
   const sketchCode = useCircuitStore((s) => s.sketchCode);
   const setSketchCode = useCircuitStore((s) => s.setSketchCode);
   const restartSketch = useCircuitStore((s) => s.restartSketch);
@@ -35,6 +36,7 @@ export default function RightDock() {
           [
             { id: 'kode', label: 'Kode Sketch' },
             { id: 'serial', label: 'Serial Monitor' },
+            { id: 'panduan', label: 'Panduan' },
           ] as const
         ).map((t) => (
           <button
@@ -52,7 +54,9 @@ export default function RightDock() {
         ))}
       </div>
 
-      {tab === 'kode' ? (
+      {tab === 'panduan' ? (
+        <LessonsPanel />
+      ) : tab === 'kode' ? (
         <div className="flex min-h-0 flex-1 flex-col">
           <div className="min-h-0 flex-1">
             <SketchEditor value={sketchCode} onChange={setSketchCode} />

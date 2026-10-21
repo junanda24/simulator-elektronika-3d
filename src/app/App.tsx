@@ -1,8 +1,15 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type ChangeEvent } from 'react';
 import Workbench from '../features/stage3d/Workbench';
 import AutopsyCard from './AutopsyCard';
 import RightDock from './RightDock';
 import { initSim } from '../features/simulation/worker/bridge';
+import {
+  projectFromFileJson,
+  projectFromHash,
+  projectToFileJson,
+  projectToHash,
+  toSharedProject,
+} from '../features/share/projectShare';
 import { CATALOG, CATEGORY_LABEL_ID, describeDefaultProps } from './catalogData';
 import { useCircuitStore } from '../features/wiring/store/circuitStore';
 import { getComponentPlugin } from '../shared/components/registry';
@@ -56,6 +63,9 @@ export default function App() {
   const loadDemo = useCircuitStore((s) => s.loadDemo);
   const clearAll = useCircuitStore((s) => s.clearAll);
   const hover = useCircuitStore((s) => s.hover);
+  const loadShared = useCircuitStore((s) => s.loadShared);
+  const [shareNote, setShareNote] = useState<string | null>(null);
+  const importRef = useRef<HTMLInputElement>(null);
   const voltages = useCircuitStore((s) => s.voltages);
   const netNameOf = useCircuitStore((s) => s.netNameOf);
 
@@ -66,8 +76,14 @@ export default function App() {
     if (mounted.current) return;
     mounted.current = true;
     initSim((snapshot) => useCircuitStore.getState().applySnapshot(snapshot));
-    loadDemo();
-  }, [loadDemo]);
+    const shared = projectFromHash(window.location.hash);
+    if (shared) {
+      loadShared(shared);
+      setShareNote('Proyek dimuat dari tautan bersama.');
+    } else {
+      loadDemo();
+    }
+  }, [loadDemo, loadShared]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -81,6 +97,52 @@ export default function App() {
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, [cancelPending]);
+
+  const currentProject = () =>
+    toSharedProject({
+      boardId,
+      instances,
+      pinHoles: useCircuitStore.getState().pinHoles,
+      wires,
+      sketchCode: useCircuitStore.getState().sketchCode,
+    });
+
+  const handleShare = async () => {
+    const url = `${window.location.origin}${window.location.pathname}${projectToHash(currentProject())}`;
+    try {
+      await navigator.clipboard.writeText(url);
+      setShareNote('Tautan proyek tersalin. Bagikan ke siapa pun untuk membuka rangkaian yang sama.');
+    } catch {
+      window.location.hash = projectToHash(currentProject());
+      setShareNote('Tautan ada di address bar browser — salin dari sana.');
+    }
+  };
+
+  const handleExport = () => {
+    const blob = new Blob([projectToFileJson(currentProject())], {
+      type: 'application/json',
+    });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.download = 'proyek-simulator.rangkai';
+    anchor.click();
+    URL.revokeObjectURL(url);
+    setShareNote('Berkas .rangkai terunduh.');
+  };
+
+  const handleImport = async (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    if (!file) return;
+    const project = projectFromFileJson(await file.text());
+    if (project) {
+      loadShared(project);
+      setShareNote('Proyek dari berkas berhasil dimuat.');
+    } else {
+      setShareNote('Berkas itu bukan proyek .rangkai yang valid.');
+    }
+  };
 
   const selectedInstance = instances.find((i) => i.id === selectedInstanceId) ?? null;
   const selectedWire = wires.find((w) => w.id === selectedWireId) ?? null;
@@ -229,6 +291,44 @@ export default function App() {
                   ? `Kabel dari ${terminalDisplay(pendingFrom, boardId)} — klik terminal tujuan.`
                   : 'Klik pin board atau lubang breadboard untuk mulai menarik kabel.'}
               </p>
+            </div>
+
+            {/* Proyek: bagikan / ekspor / impor */}
+            <div className="rounded-lg border border-border-subtle bg-panel-elevated p-3">
+              <h3 className="text-[13px] font-semibold text-zinc-100">Proyek</h3>
+              <div className="mt-2 flex gap-1.5">
+                <button
+                  type="button"
+                  onClick={handleShare}
+                  className="h-7 flex-1 rounded-md bg-accent-primary/15 text-[11px] font-semibold text-accent-primary transition-colors hover:bg-accent-primary/25"
+                >
+                  Bagikan
+                </button>
+                <button
+                  type="button"
+                  onClick={handleExport}
+                  className="h-7 flex-1 rounded-md border border-border-subtle text-[11px] font-medium text-zinc-200 transition-colors hover:border-zinc-500"
+                >
+                  Ekspor
+                </button>
+                <button
+                  type="button"
+                  onClick={() => importRef.current?.click()}
+                  className="h-7 flex-1 rounded-md border border-border-subtle text-[11px] font-medium text-zinc-200 transition-colors hover:border-zinc-500"
+                >
+                  Impor
+                </button>
+                <input
+                  ref={importRef}
+                  type="file"
+                  accept=".rangkai,application/json"
+                  className="hidden"
+                  onChange={handleImport}
+                />
+              </div>
+              {shareNote && (
+                <p className="mt-2 text-[11px] leading-relaxed text-zinc-500">{shareNote}</p>
+              )}
             </div>
 
             {/* Panel seleksi komponen */}

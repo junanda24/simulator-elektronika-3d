@@ -29,6 +29,92 @@ function nextId(type: string): string {
  *   kaki B = 2 baris di bawahnya (bank & kolom sama).
  * Mengembalikan null bila lubang tujuan tidak valid / terisi komponen lain.
  */
+/**
+ * Spesifikasi penempatan generik "satu kolom": pin-pin segaris dalam
+ * satu kolom breadboard dengan offset baris dari lubang klik. Dipakai
+ * mayoritas komponen Batch 5 — menambah komponen cukup menambah baris
+ * di tabel ini + meta pin lokal yang cocok (z lokal = offset − rata-rata).
+ */
+const COLUMN_SPECS: Record<string, Array<{ id: string; rowOffset: number }>> = {
+  capacitor: [
+    { id: 'PLUS', rowOffset: 0 },
+    { id: 'MINUS', rowOffset: 2 },
+  ],
+  diode: [
+    { id: 'ANODE', rowOffset: 0 },
+    { id: 'CATHODE', rowOffset: 2 },
+  ],
+  'rgb-led': [
+    { id: 'COM', rowOffset: 0 },
+    { id: 'R', rowOffset: 1 },
+    { id: 'G', rowOffset: 2 },
+    { id: 'B', rowOffset: 3 },
+  ],
+  ldr: [
+    { id: 'A', rowOffset: 0 },
+    { id: 'B', rowOffset: 2 },
+  ],
+  fuse: [
+    { id: 'A', rowOffset: 0 },
+    { id: 'B', rowOffset: 2 },
+  ],
+  'tilt-switch': [
+    { id: 'A', rowOffset: 0 },
+    { id: 'B', rowOffset: 2 },
+  ],
+  buzzer: [
+    { id: 'PLUS', rowOffset: 0 },
+    { id: 'MINUS', rowOffset: 2 },
+  ],
+  'dc-motor': [
+    { id: 'PLUS', rowOffset: 0 },
+    { id: 'MINUS', rowOffset: 2 },
+  ],
+  'lm35': [
+    { id: 'VCC', rowOffset: 0 },
+    { id: 'OUT', rowOffset: 1 },
+    { id: 'GND', rowOffset: 2 },
+  ],
+  'soil-moisture': [
+    { id: 'VCC', rowOffset: 0 },
+    { id: 'AO', rowOffset: 1 },
+    { id: 'GND', rowOffset: 2 },
+  ],
+  pir: [
+    { id: 'VCC', rowOffset: 0 },
+    { id: 'OUT', rowOffset: 1 },
+    { id: 'GND', rowOffset: 2 },
+  ],
+  transistor: [
+    { id: 'E', rowOffset: 0 },
+    { id: 'B', rowOffset: 1 },
+    { id: 'C', rowOffset: 2 },
+  ],
+  servo: [
+    { id: 'GND', rowOffset: 0 },
+    { id: 'VCC', rowOffset: 1 },
+    { id: 'SIG', rowOffset: 2 },
+  ],
+  joystick: [
+    { id: 'VCC', rowOffset: 0 },
+    { id: 'GND', rowOffset: 1 },
+    { id: 'VRX', rowOffset: 2 },
+    { id: 'VRY', rowOffset: 3 },
+    { id: 'SW', rowOffset: 4 },
+  ],
+  'seven-segment': [
+    { id: 'A', rowOffset: 0 },
+    { id: 'B', rowOffset: 1 },
+    { id: 'C', rowOffset: 2 },
+    { id: 'D', rowOffset: 3 },
+    { id: 'E', rowOffset: 4 },
+    { id: 'F', rowOffset: 5 },
+    { id: 'G', rowOffset: 6 },
+    { id: 'DP', rowOffset: 7 },
+    { id: 'COM', rowOffset: 8 },
+  ],
+};
+
 export function computePlacement(
   type: string,
   clickedHoleId: string,
@@ -79,6 +165,25 @@ export function computePlacement(
       WIPER: terminalHoleId(bank, row + 1, col),
       B: terminalHoleId(bank, row + 2, col),
     };
+  } else if (type === 'relay') {
+    // Dua kolom: sisi koil (klik = VCC) dan sisi kontak 3 kolom di kanan.
+    if (row + 2 >= 63 || col + 3 > 4) return null;
+    pinHoles = {
+      VCC: clickedHoleId,
+      IN: terminalHoleId(bank, row + 1, col),
+      GND: terminalHoleId(bank, row + 2, col),
+      COM: terminalHoleId(bank, row, col + 3),
+      NO: terminalHoleId(bank, row + 1, col + 3),
+      NC: terminalHoleId(bank, row + 2, col + 3),
+    };
+  } else if (COLUMN_SPECS[type]) {
+    const spec = COLUMN_SPECS[type];
+    const maxRow = row + Math.max(...spec.map((p) => p.rowOffset));
+    if (maxRow >= 63) return null;
+    pinHoles = {};
+    for (const pinSpec of spec) {
+      pinHoles[pinSpec.id] = terminalHoleId(bank, row + pinSpec.rowOffset, col);
+    }
   } else {
     return null;
   }
