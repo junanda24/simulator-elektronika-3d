@@ -117,7 +117,7 @@ export interface CircuitInput {
 }
 
 /** Mode pin GPIO mikrokontroler (diatur sketch yang berjalan). */
-export type PinMode = 'INPUT' | 'INPUT_PULLUP' | 'OUTPUT';
+export type PinMode = 'INPUT' | 'INPUT_PULLUP' | 'INPUT_PULLDOWN' | 'OUTPUT';
 
 export interface PinState {
   mode: PinMode;

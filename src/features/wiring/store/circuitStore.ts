@@ -11,6 +11,7 @@ import { buildNetlist, type TerminalRef, type WireConnection } from '../netlist'
 import { computePlacement, type PlacementRotation } from '../placement';
 import { playClick, playSnap } from '../../../shared/utils/soundFx';
 import {
+  setSimBusyListener,
   simClearBoardDamage,
   simSetCircuit,
   simSetPowered,
@@ -110,6 +111,14 @@ interface CircuitStore {
   pinHoles: Record<string, Record<string, string>>;
   wires: WireConnection[];
   running: boolean;
+  /**
+   * Indikator proses berat di sesi simulasi: true sejak perintah sesi
+   * dikirim (bridge melaporkan tepi naik in-flight), false saat snapshot
+   * berikutnya tiba di applySnapshot, atau saat proses diakhiri lewat
+   * jalur berhenti/error (lihat setRunning(false) & clearAll). UI
+   * memakai field ini untuk pil "Memproses…" + mengunci tombol.
+   */
+  simBusy: boolean;
   boardId: string;
   voltages: Record<string, number>;
   sketchCode: string;
@@ -251,6 +260,7 @@ export const useCircuitStore = create<CircuitStore>((set, get) => ({
   pinHoles: {},
   wires: [],
   running: false,
+  simBusy: false,
   boardId: 'uno',
   voltages: {},
   sketchCode: DEFAULT_SKETCH,
@@ -464,6 +474,7 @@ export const useCircuitStore = create<CircuitStore>((set, get) => ({
       selectedWireId: null,
       pendingFrom: null,
       running: false,
+      simBusy: false,
       pinStates: {},
       currentLine: null,
       lessonChecks: [],
@@ -551,6 +562,9 @@ export const useCircuitStore = create<CircuitStore>((set, get) => ({
     } else {
       simStopSketch();
       simSetPowered(false);
+      // Jalur keluar simBusy untuk perintah berhenti: jangan menunggu
+      // snapshot — proses memang sedang diakhiri dari sisi UI.
+      set({ simBusy: false });
     }
   },
 
@@ -669,6 +683,7 @@ export const useCircuitStore = create<CircuitStore>((set, get) => ({
         boardFault: snapshot.boardFault,
         sketchError: snapshot.sketchError,
         running: false,
+        simBusy: false,
         currentLine: null,
         lastDamageRuleId: damageRuleId,
         lessonChecks,
@@ -689,6 +704,7 @@ export const useCircuitStore = create<CircuitStore>((set, get) => ({
       deadPins: snapshot.deadPins,
       boardFault: snapshot.boardFault,
       sketchError: snapshot.sketchError,
+      simBusy: false,
       currentLine: snapshot.currentLine,
       // Kejujuran status: bila sketch mati karena error (snapshot
       // melaporkan sketchRunning false) sementara UI mengira masih
@@ -789,3 +805,11 @@ export const useCircuitStore = create<CircuitStore>((set, get) => ({
 }));
 
 export { holeWorldPosition };
+
+// Latch simBusy: tepi naik in-flight dari bridge (perintah sesi pertama
+// dikirim) menyalakan indikator; pemadaman dimiliki store sendiri
+// (applySnapshot / jalur berhenti di setRunning & clearAll) karena
+// "selesai dieksekusi worker" tidak sama dengan "snapshot sudah tiba".
+setSimBusyListener((busy) => {
+  if (busy) useCircuitStore.setState({ simBusy: true });
+});

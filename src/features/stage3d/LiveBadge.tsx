@@ -125,11 +125,15 @@ const PILL_STYLE: CSSProperties = {
   background: 'rgba(18, 21, 28, 0.95)',
   border: '1px solid #282E3D',
   borderRadius: 999,
-  padding: '2px 8px',
+  padding: '5px 11px',
   color: '#F4F4F5',
   fontFamily: "'JetBrains Mono', monospace",
   fontVariantNumeric: 'tabular-nums',
-  fontSize: 11,
+  // Standar keterbacaan indikator melayang (audit hover): 13px semibold di
+  // ruang layar — JANGAN pakai distanceFactor di Html, teks menyusut
+  // mengikuti zoom dan jadi tak terbaca (keluhan user 2026-10-21).
+  fontSize: 13,
+  fontWeight: 600,
   lineHeight: 1.35,
   whiteSpace: 'nowrap',
   userSelect: 'none',
@@ -204,7 +208,6 @@ export const LiveBadge: ComponentType<LiveBadgeProps> = ({ instance, y }) => {
   return (
     <Html
       center
-      distanceFactor={12}
       zIndexRange={[90, 0]}
       position={[0, y, 0]}
       style={{ pointerEvents: 'none' }}

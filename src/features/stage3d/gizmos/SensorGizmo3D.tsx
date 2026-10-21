@@ -17,11 +17,14 @@ const PANEL_STYLE: CSSProperties = {
   background: '#12151C',
   border: '1px solid #282E3D',
   borderRadius: 8,
-  padding: '8px 10px',
-  minWidth: 132,
+  padding: '10px 12px',
+  minWidth: 156,
   color: '#E5E7EB',
   fontFamily: "'Plus Jakarta Sans', sans-serif",
-  fontSize: 11,
+  // Standar keterbacaan indikator melayang (audit hover): label ≥ 12px di
+  // ruang layar — tanpa distanceFactor agar panel (dan slidernya) tidak
+  // menyusut mengikuti zoom.
+  fontSize: 12,
   lineHeight: 1.3,
   boxShadow: '0 6px 18px rgba(0, 0, 0, 0.45)',
   userSelect: 'none',
@@ -41,7 +44,8 @@ const VALUE_STYLE: CSSProperties = {
   fontFamily: "'JetBrains Mono', monospace",
   fontVariantNumeric: 'tabular-nums',
   color: '#00E5FF',
-  fontSize: 12,
+  fontSize: 13,
+  fontWeight: 600,
 };
 
 const SLIDER_STYLE: CSSProperties = {
@@ -71,7 +75,7 @@ export const SensorGizmo3D: ComponentType<SensorGizmo3DProps> = ({
   unit,
   onChange,
 }) => (
-  <Html center distanceFactor={12} zIndexRange={[100, 0]} position={position ?? [0, 4.2, 0]}>
+  <Html center zIndexRange={[100, 0]} position={position ?? [0, 4.2, 0]}>
     <div style={PANEL_STYLE} onPointerDown={(e) => e.stopPropagation()}>
       <div style={HEADER_STYLE}>
         <span>{label}</span>

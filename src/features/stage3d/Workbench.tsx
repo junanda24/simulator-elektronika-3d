@@ -20,7 +20,8 @@ import {
   parseHole,
 } from '../../shared/boards/breadboard';
 
-import { computeViewOffset } from '../../app/viewportInsets';
+import { computeViewOffset, shiftViewForInsets } from '../../app/viewportInsets';
+import { CAMERA_HOME_POS, TARGET_HOME_POS } from '../../app/cameraPresets';
 import { useUiSettings } from '../../app/uiSettings';
 import { useCircuitStore } from '../wiring/store/circuitStore';
 import { terminalWorldPosition } from '../wiring/terminals';
@@ -32,9 +33,10 @@ import GhostPlacementMesh from './effects/GhostPlacementMesh';
 
 // Posisi "rumah" kamera: dibingkai ulang setelah board digeser mendekati
 // breadboard (origin -42 → -21) — target kini di tengah bentang board↔
-// breadboard (-6) dan kamera sedikit lebih rapat (40, 42, 52).
-export const CAMERA_HOME = new THREE.Vector3(40, 42, 52);
-export const TARGET_HOME = new THREE.Vector3(-6, 0, 0);
+// breadboard (-6) dan kamera sedikit lebih rapat (40, 42, 52). Nilai
+// tuple-nya hidup di app/cameraPresets.ts (sumber tunggal, dites unit).
+export const CAMERA_HOME = new THREE.Vector3(...CAMERA_HOME_POS);
+export const TARGET_HOME = new THREE.Vector3(...TARGET_HOME_POS);
 
 /**
  * Preferensi gerak dikurangi dari OS (prefers-reduced-motion): penerbangan
@@ -170,18 +172,26 @@ function CameraRig({ resetSignal }: { resetSignal: number }) {
   useEffect(() => {
     if (resetSignal === 0 || !controls) return;
     // Reset/home adalah perintah user → power2.inOut (aturan §C); instan
-    // bila prefers-reduced-motion aktif.
+    // bila prefers-reduced-motion aktif. Sasaran digeser kompensasi inset
+    // (shiftViewForInsets) agar meja tampil di pusat rektangel bebas.
     const duration = prefersReducedMotion() ? 0 : 0.6;
+    const view = shiftViewForInsets(
+      CAMERA_HOME_POS,
+      TARGET_HOME_POS,
+      computeViewOffset(size.width, size.height),
+      45,
+      size.width / size.height,
+    );
     gsap.to(camera.position, {
-      x: CAMERA_HOME.x, y: CAMERA_HOME.y, z: CAMERA_HOME.z, duration, ease: 'power2.inOut',
+      x: view.position[0], y: view.position[1], z: view.position[2], duration, ease: 'power2.inOut',
       overwrite: 'auto',
     });
     gsap.to(controls.target, {
-      x: TARGET_HOME.x, y: TARGET_HOME.y, z: TARGET_HOME.z, duration, ease: 'power2.inOut',
+      x: view.target[0], y: view.target[1], z: view.target[2], duration, ease: 'power2.inOut',
       overwrite: 'auto',
       onUpdate: () => controls.update(),
     });
-  }, [resetSignal, controls, camera]);
+  }, [resetSignal, controls, camera, size]);
 
   useEffect(() => {
     if (firstFocus.current) {
@@ -206,16 +216,31 @@ function CameraRig({ resetSignal }: { resetSignal: number }) {
     });
   }, [focusNonce, focusPosition, controls, camera]);
 
-  // Preset view dari UI (tombol Perspektif/Atas/Depan/Dekat & fokus autopsi):
+  // Preset view dari UI (kapsul kamera: Perspektif/Atas/Dekat/Fokus):
   // nonce berubah → luncurkan kamera ke posisi + target yang diperintahkan.
+  // KOMPENSASI INSET (akar bug "klik Atas tidak ke atas"): setViewOffset
+  // memotong sub-bingkai antar panel, jadi titik bidik mentah selalu tampil
+  // ±166px di kanan pusat area bebas (subjek preset Atas bahkan tertutup
+  // dock kanan). Posisi & target digeser bersama (arah pandang tetap,
+  // preset tegak tetap tegak) lewat shiftViewForInsets agar subjek tampil
+  // di pusat rektangel bebas. Fokus AUTOPSI tidak dikompensasi (pengecualian
+  // terdokumentasi, sama seperti easing-nya): bidikan dekat titik rusak
+  // mengutamakan pivot yang persis.
   useEffect(() => {
     if (firstView.current) {
       firstView.current = false;
       return;
     }
     if (!controls || !cameraView) return;
-    const [tx, ty, tz] = cameraView.target;
-    const [px, py, pz] = cameraView.position;
+    const view = shiftViewForInsets(
+      cameraView.position,
+      cameraView.target,
+      computeViewOffset(size.width, size.height),
+      45,
+      size.width / size.height,
+    );
+    const [tx, ty, tz] = view.target;
+    const [px, py, pz] = view.position;
     // Preset/fokus seleksi = perintah user → power2.inOut; instan bila
     // prefers-reduced-motion aktif.
     const duration = prefersReducedMotion() ? 0 : 0.6;
@@ -228,7 +253,7 @@ function CameraRig({ resetSignal }: { resetSignal: number }) {
       overwrite: 'auto',
       onUpdate: () => controls.update(),
     });
-  }, [cameraView, controls, camera]);
+  }, [cameraView, controls, camera, size]);
 
   return null;
 }

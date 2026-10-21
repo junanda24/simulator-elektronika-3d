@@ -1,5 +1,6 @@
 import type { BoardProfile, PinMode, PinState } from '../../shared/types';
 import { UNO_PROFILE } from '../../shared/boards/profiles';
+import { getBoardDefinition } from '../../shared/boards/definitions';
 
 /**
  * Runtime sketch Arduino — menjalankan hasil transpile (transpiler.ts)
@@ -9,6 +10,11 @@ import { UNO_PROFILE } from '../../shared/boards/profiles';
  * memberi tahu sesi (lewat onPinStatesChanged) agar solver menghitung
  * ulang secara SINKRON — jadi digitalRead/analogRead tepat setelah tulis
  * membaca tegangan rangkaian terbaru, seperti board asli.
+ *
+ * Audit P1 (2026-10-21): resolusi pin sadar board aktif (createPinResolver),
+ * dirty-check PinState sebelum memicu solver, digitalWrite pada pin
+ * INPUT mengaktifkan INPUT_PULLUP ala Arduino, guard() terikat jam
+ * virtual, dan emisi Serial dibatasi per tick.
  */
 
 export interface RuntimeHooks {
@@ -38,16 +44,68 @@ function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
 }
 
-/** Pin digital ditulis sebagai angka (13) atau id ('D13'/'A0'). */
-function digitalPinId(pin: unknown): string {
-  if (typeof pin === 'number') return `D${pin}`;
-  return String(pin);
-}
+/**
+ * Batas putaran sibuk per 1 ms virtual (audit P1 K4): guard() yang
+ * disisipkan transpiler di awal loop() dan setiap body perulangan tidur
+ * 1 ms virtual setelah sejumlah ini — cukup longgar untuk loop hitung
+ * yang sah, cukup ketat agar loop tanpa delay tidak membakar CPU.
+ */
+const GUARD_CALLS_PER_VIRTUAL_MS = 250;
 
-/** analogRead memakai penomoran analog: 0 → 'A0'. */
-function analogPinId(pin: unknown): string {
-  if (typeof pin === 'number') return `A${pin}`;
-  return String(pin);
+/**
+ * Batas karakter Serial per tick sesi (advance) — audit P1 K4. Sketch
+ * normal (cetak berkala dengan delay) tidak pernah menyentuhnya; loop
+ * tanpa delay yang mencetak terus-menerus terpotong di sini, bukan di
+ * buffer sesi / UI.
+ */
+const SERIAL_BUDGET_PER_TICK = 2048;
+
+/**
+ * Resolusi pin SADAR BOARD (audit P1 K5). Runtime menerima BoardProfile
+ * board aktif dari sesi; daftar id pin diambil dari definisi board itu.
+ *
+ * Aturan:
+ * - Angka untuk pin analog: pilih `A<n>` bila board punya pin itu,
+ *   selain itu `D<n>` bila ada — analogRead(34) di ESP32 menjadi 'D34'
+ *   (pin ADC ESP32 memang bernama D34/D35/D36/D39), BUKAN 'A34' yang
+ *   tidak ada. Di Uno/NodeMCU/Pico angka analog tetap 'A<n>'.
+ * - Angka untuk pin digital: pilih `D<n>` bila ada, selain itu `A<n>`
+ *   (pin analog Uno sah dipakai sebagai pin digital).
+ * - String: id yang persis ada di board dipakai apa adanya ('A0' untuk
+ *   digitalWrite di Uno tetap 'A0' — klaim 'DA0' tidak terbukti pada
+ *   kode ini); string angka ('34') diperlakukan seperti angka; string
+ *   lain diteruskan (huruf besar dinormalisasi bila cocok dengan board).
+ */
+function createPinResolver(profile: BoardProfile): (
+  pin: unknown,
+  kind: 'digital' | 'analog',
+) => string {
+  const boardPinIds = new Set(
+    getBoardDefinition(profile.id).pins.map((p) => p.id),
+  );
+  const fromNumber = (n: number, kind: 'digital' | 'analog'): string => {
+    const d = `D${n}`;
+    const a = `A${n}`;
+    if (kind === 'analog') {
+      if (boardPinIds.has(a)) return a;
+      if (boardPinIds.has(d)) return d;
+      return a;
+    }
+    if (boardPinIds.has(d)) return d;
+    if (boardPinIds.has(a)) return a;
+    return d;
+  };
+  return (pin, kind) => {
+    if (typeof pin === 'number' && Number.isFinite(pin)) {
+      return fromNumber(Math.trunc(pin), kind);
+    }
+    const raw = String(pin).trim();
+    if (boardPinIds.has(raw)) return raw;
+    const upper = raw.toUpperCase();
+    if (boardPinIds.has(upper)) return upper;
+    if (/^\d+$/.test(raw)) return fromNumber(Number(raw), kind);
+    return raw;
+  };
 }
 
 /**
@@ -115,9 +173,39 @@ export function startSketchProgram(
   let virtualNow = 0;
   let waiters: Array<{ at: number; resolve: () => void }> = [];
   let guardCalls = 0;
+  let serialBudget = SERIAL_BUDGET_PER_TICK;
+
+  const resolvePin = createPinResolver(profile);
+  const digitalPinId = (pin: unknown) => resolvePin(pin, 'digital');
+  const analogPinId = (pin: unknown) => resolvePin(pin, 'analog');
+
+  /** Tidur sampai jam virtual mencapai virtualNow + ms (mekanisme delay). */
+  const sleepVirtual = (ms: number): Promise<void> => {
+    if (stopped || ms === 0) return Promise.resolve();
+    return new Promise<void>((resolve) => {
+      waiters.push({ at: virtualNow + ms, resolve });
+    });
+  };
+
+  /** Emisi Serial dibatasi per tick sesi agar loop tanpa delay tidak membanjiri UI. */
+  const emitSerial = (text: string) => {
+    if (!text || serialBudget <= 0) return;
+    const slice =
+      text.length > serialBudget ? text.slice(0, serialBudget) : text;
+    serialBudget -= slice.length;
+    hooks.onSerial(slice);
+  };
+
+  const samePinState = (a: PinState | undefined, b: PinState): boolean =>
+    a !== undefined &&
+    a.mode === b.mode &&
+    a.high === b.high &&
+    a.pwm === b.pwm;
 
   const writePin = (pinId: string, state: PinState) => {
     if (hooks.isPinDead(pinId)) return; // pin mati tidak merespons lagi
+    // Dirty-check (audit P1 K6): state identik tidak memicu solver ulang.
+    if (samePinState(pinStates[pinId], state)) return;
     pinStates[pinId] = state;
     hooks.onPinStatesChanged();
   };
@@ -126,11 +214,30 @@ export function startSketchProgram(
     pinMode(pin: unknown, mode: unknown) {
       const pinId = digitalPinId(pin);
       if (hooks.isPinDead(pinId)) return;
-      pinStates[pinId] = { mode: String(mode) as PinMode };
+      const nextMode = String(mode) as PinMode;
+      const prev = pinStates[pinId];
+      // Dirty-check (K6): mode yang sama tidak memicu solver ulang.
+      // pinMode hanya mengubah mode — level/PWM tersimpan dipertahankan,
+      // seperti register PORT pada hardware asli yang tidak dibersihkan
+      // oleh perubahan DDR/pinMode.
+      if (prev && prev.mode === nextMode) return;
+      pinStates[pinId] = prev ? { ...prev, mode: nextMode } : { mode: nextMode };
       hooks.onPinStatesChanged();
     },
     digitalWrite(pin: unknown, value: unknown) {
-      writePin(digitalPinId(pin), { mode: 'OUTPUT', high: Number(value) !== 0 });
+      const pinId = digitalPinId(pin);
+      const isHigh = Number(value) !== 0;
+      const current = pinStates[pinId];
+      // Semantik Arduino asli (audit P1 K6): menulis HIGH ke pin yang
+      // secara eksplisit ber-mode INPUT mengaktifkan pull-up internal
+      // (mode menjadi INPUT_PULLUP); menulis LOW menonaktifkannya.
+      // Pin tanpa pinMode eksplisit / ber-mode OUTPUT tetap berperilaku
+      // seperti sebelumnya (OUTPUT) agar sketch pemula tetap jalan.
+      if (current && (current.mode === 'INPUT' || current.mode === 'INPUT_PULLUP')) {
+        writePin(pinId, { mode: isHigh ? 'INPUT_PULLUP' : 'INPUT' });
+        return;
+      }
+      writePin(pinId, { mode: 'OUTPUT', high: isHigh });
     },
     analogWrite(pin: unknown, duty: unknown) {
       const pwm = clamp(Math.round(Number(duty) || 0), 0, 255);
@@ -146,11 +253,7 @@ export function startSketchProgram(
       return Math.round(clamp(volts / profile.adcRefVolts, 0, 1) * maxCount);
     },
     delay(ms: unknown) {
-      const duration = Math.max(0, Number(ms) || 0);
-      if (stopped || duration === 0) return Promise.resolve();
-      return new Promise<void>((resolve) => {
-        waiters.push({ at: virtualNow + duration, resolve });
-      });
+      return sleepVirtual(Math.max(0, Number(ms) || 0));
     },
     millis() {
       return Math.floor(virtualNow);
@@ -162,11 +265,29 @@ export function startSketchProgram(
     __line(line: number) {
       hooks.onLine?.(line);
     },
-    /** LOOP_GUARD dari transpiler: serahkan kendali berkala agar worker tidak membeku. */
+    /**
+     * LOOP_GUARD dari transpiler (audit P1 K4): dulu menyerah lewat
+     * setTimeout(0) setiap 1000 panggilan — lepas dari jam virtual,
+     * sehingga loop() tanpa delay() berputar ±375 ribu kali/detik nyata
+     * sementara millis() membeku di antara tick sesi dan Serial
+     * membanjiri buffer (terukur: 112.500 println dalam 300 ms tanpa
+     * advance). Sekarang guard MENGANTRE ke mekanisme tunggu virtual
+     * yang sama dengan delay(): setelah GUARD_CALLS_PER_VIRTUAL_MS
+     * panggilan, eksekusi tidur 1 ms virtual — loop sibuk hanya bisa
+     * maju secepat jam simulasi, dan pola millis() non-blocking bekerja
+     * tanpa membakar CPU. Semantik delay()/millis() tidak berubah.
+     */
     async guard() {
-      guardCalls += 1;
-      if (guardCalls % 1000 === 0) {
+      if (stopped) {
+        // Setelah stop, waiter virtual langsung resolve; jaga agar loop
+        // liar pasca-stop tetap menyerah ke event loop, bukan microtask.
         await new Promise<void>((resolve) => setTimeout(resolve, 0));
+        return;
+      }
+      guardCalls += 1;
+      if (guardCalls >= GUARD_CALLS_PER_VIRTUAL_MS) {
+        guardCalls = 0;
+        await sleepVirtual(1);
       }
     },
     Serial: {
@@ -174,10 +295,10 @@ export function startSketchProgram(
         /* baud rate tidak berpengaruh di simulator */
       },
       print(value: unknown) {
-        hooks.onSerial(formatSerialValue(value));
+        emitSerial(formatSerialValue(value));
       },
       println(value: unknown = '') {
-        hooks.onSerial(`${formatSerialValue(value)}\n`);
+        emitSerial(`${formatSerialValue(value)}\n`);
       },
       available() {
         return 0;
@@ -224,6 +345,7 @@ export function startSketchProgram(
   return {
     advance(deltaMs: number) {
       virtualNow += deltaMs;
+      serialBudget = SERIAL_BUDGET_PER_TICK;
       const due = waiters.filter((w) => w.at <= virtualNow);
       waiters = waiters.filter((w) => w.at > virtualNow);
       for (const waiter of due) waiter.resolve();

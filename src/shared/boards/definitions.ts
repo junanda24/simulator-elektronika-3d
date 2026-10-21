@@ -297,8 +297,11 @@ const PICO_DEF: BoardDefinition = {
     { net: '3V3', volts: 3.3 },
   ],
   logicRailNet: '3V3',
-  demoPinId: 'D25',
-  demoPinNumber: 25,
+  // Pin demo WAJIB ada di daftar pins Pico (D0–D22). D25 adalah pin ESP32 —
+  // dulu tersalin ke sini padahal Pico kita tidak punya D23–D25 (audit
+  // 2026-10-21, klaim K13 terbukti). D15 = pin digital terakhir kolom kiri.
+  demoPinId: 'D15',
+  demoPinNumber: 15,
   pcbColor: '#14632f',
 };
 

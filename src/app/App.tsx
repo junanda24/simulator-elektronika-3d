@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type ChangeEvent } from 'react';
-import Workbench, { CAMERA_HOME, TARGET_HOME } from '../features/stage3d/Workbench';
+import Workbench from '../features/stage3d/Workbench';
+import { getCameraPreset, type CameraPresetId } from './cameraPresets';
 import AutopsyCard from './AutopsyCard';
 import RightDock from './RightDock';
 import { initSim } from '../features/simulation/worker/bridge';
@@ -15,7 +16,7 @@ import ToolbarBar from './ToolbarBar';
 import { useUiSettings } from './uiSettings';
 import { useCircuitStore } from '../features/wiring/store/circuitStore';
 import { getComponentPlugin } from '../shared/components/registry';
-import { BREADBOARD_ORIGIN, holeLabel } from '../shared/boards/breadboard';
+import { holeLabel } from '../shared/boards/breadboard';
 import { playClick } from '../shared/utils/soundFx';
 import {
   boardPinById,
@@ -117,7 +118,7 @@ function ShellIcon({
   );
 }
 
-type MenuId = 'demo' | 'proyek' | 'cam3d' | 'camAtas';
+type MenuId = 'demo' | 'proyek';
 
 /**
  * Shell aplikasi — Floating Studio HUD (SINTESIS-FINAL):
@@ -161,8 +162,27 @@ function SettingsSwitch({
   );
 }
 
+/** Ikon putar untuk status "Memproses…" — putarannya dimatikan oleh
+ *  aturan prefers-reduced-motion global di index.css; teksnya tetap tampil. */
+function SpinnerIcon({ className = 'size-4' }: { className?: string }) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      className={className}
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2.5"
+      strokeLinecap="round"
+      aria-hidden="true"
+    >
+      <path d="M12 3a9 9 0 1 0 9 9" />
+    </svg>
+  );
+}
+
 export default function App() {
   const running = useCircuitStore((s) => s.running);
+  const simBusy = useCircuitStore((s) => s.simBusy);
   const sketchError = useCircuitStore((s) => s.sketchError);
   const setRunning = useCircuitStore((s) => s.setRunning);
   const boardId = useCircuitStore((s) => s.boardId);
@@ -324,6 +344,11 @@ export default function App() {
           // (e.repeat sudah disaring di atas switch.)
           const active = document.activeElement;
           if (active instanceof HTMLButtonElement) active.blur();
+          // Selaras dengan kunci tombol Jalankan: selama proses sesi
+          // berjalan (simBusy) dan simulasi belum jalan, Space tidak
+          // boleh menumpuk eksekusi start baru. Berhenti (running)
+          // tetap selalu boleh.
+          if (!state.running && state.simBusy) break;
           state.setRunning(!state.running);
           break;
         }
@@ -435,58 +460,20 @@ export default function App() {
   }
 
   // --- Preset kamera (CameraRig mengeksekusi lewat cameraView) ---
-  const boardDef = getBoardDefinition(boardId);
-  const breadboardCenter: [number, number, number] = [
-    BREADBOARD_ORIGIN[0],
-    0,
-    BREADBOARD_ORIGIN[2],
-  ];
-  const tableCenter: [number, number, number] = [
-    (boardDef.origin[0] + BREADBOARD_ORIGIN[0]) / 2,
-    0,
-    (boardDef.origin[2] + BREADBOARD_ORIGIN[2]) / 2,
-  ];
-  const boardCenter: [number, number, number] = [boardDef.origin[0], 1, boardDef.origin[2]];
-  const applyCameraPreset = (
-    preset:
-      | 'perspektif'
-      | 'depan'
-      | 'dekat'
-      | 'board-miring'
-      | 'board-atas'
-      | 'bb-miring'
-      | 'bb-atas',
-  ) => {
-    setActivePreset(preset);
-    if (preset === 'perspektif') {
-      setCameraView(
-        [TARGET_HOME.x, TARGET_HOME.y, TARGET_HOME.z],
-        [CAMERA_HOME.x, CAMERA_HOME.y, CAMERA_HOME.z],
-      );
-    } else if (preset === 'depan') {
-      setCameraView(tableCenter, [tableCenter[0], 14, 58]);
-    } else if (preset === 'board-miring') {
-      // Sudut 3/4 dekat ke board mikrokontroler aktif.
-      setCameraView(boardCenter, [boardCenter[0] + 14, 13, boardCenter[2] + 18]);
-    } else if (preset === 'board-atas') {
-      // Tegak lurus di atas board; offset z 0.01 menghindari gimbal lock.
-      setCameraView(boardCenter, [boardCenter[0], 55, boardCenter[2] + 0.01]);
-    } else if (preset === 'bb-miring') {
-      // Sudut 3/4 dekat ke breadboard — enak untuk merangkai kabel.
-      setCameraView(breadboardCenter, [
-        breadboardCenter[0] + 13,
-        17,
-        breadboardCenter[2] + 21,
-      ]);
-    } else if (preset === 'bb-atas') {
-      // Tepat tegak lurus di atas breadboard; offset z 0.01 menghindari gimbal lock.
-      setCameraView(breadboardCenter, [breadboardCenter[0], 80, breadboardCenter[2] + 0.01]);
-    } else {
-      const target = selectedInstance
+  // Empat tombol langsung tanpa dropdown: Perspektif / Atas / Dekat /
+  // Fokus. Definisi posisi & target yang murni ada di cameraPresets.ts
+  // (dites unit); kompensasi inset proyeksi diterapkan CameraRig saat
+  // eksekusi, bukan di sini.
+  const applyCameraPreset = (preset: CameraPresetId) => {
+    const view = getCameraPreset(preset, {
+      boardOrigin: getBoardDefinition(boardId).origin,
+      selectedPosition: selectedInstance
         ? ([...selectedInstance.position] as [number, number, number])
-        : breadboardCenter;
-      setCameraView(target, [target[0] + 6, target[1] + 5, target[2] + 7]);
-    }
+        : null,
+    });
+    if (!view) return;
+    setActivePreset(preset);
+    setCameraView(view.target, view.position);
   };
 
   const statusText = anyDamaged
@@ -496,6 +483,14 @@ export default function App() {
       : running
         ? 'Simulasi berjalan'
         : 'Simulasi berhenti';
+
+  // Kunci eksekusi start selama proses sesi berjalan: simBusy menyala dan
+  // simulasi belum jalan → start baru (tombol Jalankan, Space, Jalankan
+  // Ulang) ditahan sampai snapshot tiba agar perintah tidak menumpuk di
+  // worker. Bila SUDAH running, tombol yang sama berfungsi sebagai
+  // Berhenti dan TIDAK PERNAH dikunci — setRunning(false) memadamkan
+  // simBusy seketika dari sisi UI, jadi Berhenti selalu jadi jalan keluar.
+  const startLocked = simBusy && !running;
 
   const capsuleShadow =
     'shadow-[0_8px_32px_rgb(0_0_0/0.45),0_2px_8px_rgb(0_0_0/0.4)]';
@@ -537,7 +532,9 @@ export default function App() {
             Board
             <select
               aria-label="Pilih board"
-              className="h-8 rounded-lg border border-border-interactive bg-panel-elevated px-2 text-[13px] font-medium text-zinc-100 outline-none focus:border-accent-primary"
+              disabled={simBusy}
+              title={simBusy ? 'Tunggu proses selesai' : undefined}
+              className="h-8 rounded-lg border border-border-interactive bg-panel-elevated px-2 text-[13px] font-medium text-zinc-100 outline-none focus:border-accent-primary disabled:cursor-not-allowed disabled:opacity-50"
               value={boardId}
               onChange={(e) => setBoard(e.target.value)}
             >
@@ -570,26 +567,38 @@ export default function App() {
             <button
               type="button"
               onClick={() => setRunning(!running)}
-              aria-label={running ? 'Berhenti' : 'Jalankan'}
-              className={`flex h-8 shrink-0 items-center gap-2 rounded-full px-4 text-[13px] font-semibold transition-colors duration-200 active:scale-[0.97] ${
-                running
-                  ? 'bg-accent-warning text-[#2a1a00] hover:bg-amber-400'
-                  : 'bg-accent-run text-[#032117] hover:bg-emerald-400'
+              disabled={startLocked}
+              aria-label={startLocked ? 'Memproses…' : running ? 'Berhenti' : 'Jalankan'}
+              className={`flex h-8 shrink-0 items-center gap-2 rounded-full px-4 text-[13px] font-semibold transition-colors duration-200 active:scale-[0.97] disabled:cursor-not-allowed disabled:opacity-60 disabled:active:scale-100 ${
+                startLocked
+                  ? 'bg-panel-elevated text-zinc-300'
+                  : running
+                    ? 'bg-accent-warning text-[#2a1a00] hover:bg-amber-400'
+                    : 'bg-accent-run text-[#032117] hover:bg-emerald-400'
               }`}
             >
-              <span className="relative inline-block size-3.5 shrink-0" aria-hidden="true">
-                <span
-                  className={`absolute inset-0 transition-opacity duration-150 ${running ? 'opacity-0' : 'opacity-100'}`}
-                >
-                  <ShellIcon name="play" className="size-3.5" />
-                </span>
-                <span
-                  className={`absolute inset-0 transition-opacity duration-150 ${running ? 'opacity-100' : 'opacity-0'}`}
-                >
-                  <ShellIcon name="stop" className="size-3.5" />
-                </span>
-              </span>
-              {running ? 'Berhenti' : 'Jalankan'}
+              {startLocked ? (
+                <>
+                  <SpinnerIcon className="size-3.5 shrink-0 animate-spin text-accent-primary" />
+                  Memproses…
+                </>
+              ) : (
+                <>
+                  <span className="relative inline-block size-3.5 shrink-0" aria-hidden="true">
+                    <span
+                      className={`absolute inset-0 transition-opacity duration-150 ${running ? 'opacity-0' : 'opacity-100'}`}
+                    >
+                      <ShellIcon name="play" className="size-3.5" />
+                    </span>
+                    <span
+                      className={`absolute inset-0 transition-opacity duration-150 ${running ? 'opacity-100' : 'opacity-0'}`}
+                    >
+                      <ShellIcon name="stop" className="size-3.5" />
+                    </span>
+                  </span>
+                  {running ? 'Berhenti' : 'Jalankan'}
+                </>
+              )}
             </button>
             <div
               role="status"
@@ -674,83 +683,69 @@ export default function App() {
           </div>
         </div>
 
-        {/* Kapsul kamera (kanan bawah) */}
+        {/* Kapsul kamera (kanan bawah): empat tombol langsung, TANPA dropdown.
+            Fokus hanya tampil bila ada komponen terpilih. */}
         <div
           className={`hud-enter-up hud-glass pointer-events-auto absolute bottom-3 right-3 z-10 flex h-11 items-center gap-1 rounded-full border border-border-subtle px-1.5 ${capsuleShadow}`}
           style={{ animationDelay: '240ms' }}
           role="group"
           aria-label="Preset kamera"
         >
-          <button
-            type="button"
-            aria-pressed={activePreset === 'perspektif'}
-            title="Tampilan perspektif (seperti Reset Kamera)"
-            onClick={() => applyCameraPreset('perspektif')}
-            className={`h-8 rounded-full border px-3 text-xs font-semibold transition-colors active:scale-[0.97] ${
-              activePreset === 'perspektif'
-                ? 'border-accent-primary text-accent-primary'
-                : 'border-border-interactive text-zinc-200 hover:border-accent-primary hover:text-accent-primary'
-            }`}
-          >
-            3D
-          </button>
-          <button
-            type="button"
-            aria-label="Preset 3D lainnya"
-            aria-haspopup="menu"
-            aria-expanded={openMenu === 'cam3d'}
-            title="Preset 3D lainnya"
-            onClick={() => setMenu(openMenu === 'cam3d' ? null : 'cam3d')}
-            className="grid size-8 place-items-center rounded-full text-zinc-300 transition-colors hover:text-accent-primary active:scale-[0.97]"
-          >
-            <ShellIcon name="chevron" className="size-4" />
-          </button>
-          <span className="h-5 w-px bg-border-subtle" aria-hidden="true" />
-          <button
-            type="button"
-            aria-pressed={activePreset === 'bb-atas'}
-            title="Lihat breadboard dari atas"
-            onClick={() => applyCameraPreset('bb-atas')}
-            className={`h-8 rounded-full border px-3 text-xs font-semibold transition-colors active:scale-[0.97] ${
-              activePreset === 'bb-atas'
-                ? 'border-accent-primary text-accent-primary'
-                : 'border-border-interactive text-zinc-200 hover:border-accent-primary hover:text-accent-primary'
-            }`}
-          >
-            Atas
-          </button>
-          <button
-            type="button"
-            aria-label="Preset atas lainnya"
-            aria-haspopup="menu"
-            aria-expanded={openMenu === 'camAtas'}
-            title="Preset atas lainnya"
-            onClick={() => setMenu(openMenu === 'camAtas' ? null : 'camAtas')}
-            className="grid size-8 place-items-center rounded-full text-zinc-300 transition-colors hover:text-accent-primary active:scale-[0.97]"
-          >
-            <ShellIcon name="chevron" className="size-4" />
-          </button>
-          <span className="h-5 w-px bg-border-subtle" aria-hidden="true" />
-          <button
-            type="button"
-            aria-pressed={activePreset === 'dekat'}
-            title="Fokus dekat ke komponen terpilih (atau tampil depan bila tidak ada pilihan)"
-            onClick={() =>
-              applyCameraPreset(selectedInstance ? 'dekat' : 'depan')
-            }
-            className={`h-8 rounded-full border px-3 text-xs font-semibold transition-colors active:scale-[0.97] ${
-              activePreset === 'dekat'
-                ? 'border-accent-primary text-accent-primary'
-                : 'border-border-interactive text-zinc-200 hover:border-accent-primary hover:text-accent-primary'
-            }`}
-          >
-            Fokus
-          </button>
+          {(
+            [
+              { id: 'perspektif', label: 'Perspektif', title: 'Tampilan perspektif meja kerja' },
+              { id: 'atas', label: 'Atas', title: 'Lihat meja kerja tegak dari atas' },
+              { id: 'dekat', label: 'Dekat', title: 'Bidikan dekat ke pusat area kerja' },
+            ] as const
+          ).map((p) => (
+            <button
+              key={p.id}
+              type="button"
+              aria-pressed={activePreset === p.id}
+              title={p.title}
+              onClick={() => applyCameraPreset(p.id)}
+              className={`h-8 rounded-full border px-3 text-xs font-semibold transition-colors active:scale-[0.97] ${
+                activePreset === p.id
+                  ? 'border-accent-primary text-accent-primary'
+                  : 'border-border-interactive text-zinc-200 hover:border-accent-primary hover:text-accent-primary'
+              }`}
+            >
+              {p.label}
+            </button>
+          ))}
+          {selectedInstance && (
+            <button
+              type="button"
+              aria-pressed={activePreset === 'fokus'}
+              title="Fokus dekat ke komponen terpilih"
+              onClick={() => applyCameraPreset('fokus')}
+              className={`h-8 rounded-full border px-3 text-xs font-semibold transition-colors active:scale-[0.97] ${
+                activePreset === 'fokus'
+                  ? 'border-accent-primary text-accent-primary'
+                  : 'border-border-interactive text-zinc-200 hover:border-accent-primary hover:text-accent-primary'
+              }`}
+            >
+              Fokus
+            </button>
+          )}
         </div>
 
-        {/* Tumpukan tengah-atas: pill mode → inspector → autopsy */}
+        {/* Tumpukan tengah-atas: pill proses/mode → inspector → autopsy */}
         <div className="absolute left-[276px] right-[392px] top-[68px] z-10 flex justify-center max-[1279px]:left-[248px]">
           <div className="flex w-full max-w-[400px] flex-col items-center gap-2">
+            {/* Indikator proses sesi (simBusy): worker sedang memproses
+                perintah berat (transpile + solve) di belakang layar —
+                tanpa pill ini UI tampak diam/hang padahal sedang bekerja. */}
+            {simBusy && (
+              <div
+                role="status"
+                aria-live="polite"
+                className={`hud-pop pointer-events-none flex items-center gap-2 rounded-full border border-border-subtle bg-panel px-3.5 py-2 text-xs font-medium text-zinc-200 ${capsuleShadow}`}
+              >
+                <SpinnerIcon className="size-3.5 shrink-0 animate-spin text-accent-primary" />
+                Memproses…
+              </div>
+            )}
             {placingType && (
               <div className="hud-pop pointer-events-none rounded-full border border-accent-primary/50 bg-panel/90 px-3.5 py-2 text-xs font-medium text-accent-primary backdrop-blur-md">
                 Mode pasang: klik lubang breadboard untuk menaruh{' '}
@@ -900,51 +895,6 @@ export default function App() {
           </div>
         )}
 
-        {/* Menu preset 3D lainnya */}
-        {openMenu === 'cam3d' && (
-          <div className={`${popoverClass} hud-pop-origin-br bottom-[60px] right-3 w-56 p-1.5`} role="menu">
-            {(
-              [
-                { id: 'depan', label: 'Depan' },
-                { id: 'board-miring', label: 'Board Miring' },
-                { id: 'bb-miring', label: 'Breadboard Miring' },
-              ] as const
-            ).map((p) => (
-              <button
-                key={p.id}
-                type="button"
-                role="menuitem"
-                aria-current={activePreset === p.id || undefined}
-                className={`${menuItemClass} ${activePreset === p.id ? 'text-accent-primary' : ''}`}
-                onClick={() => {
-                  applyCameraPreset(p.id);
-                  setMenu(null);
-                }}
-              >
-                {p.label}
-              </button>
-            ))}
-          </div>
-        )}
-
-        {/* Menu preset atas lainnya */}
-        {openMenu === 'camAtas' && (
-          <div className={`${popoverClass} hud-pop-origin-br bottom-[60px] right-3 w-56 p-1.5`} role="menu">
-            <button
-              type="button"
-              role="menuitem"
-              aria-current={activePreset === 'board-atas' || undefined}
-              className={`${menuItemClass} ${activePreset === 'board-atas' ? 'text-accent-primary' : ''}`}
-              onClick={() => {
-                applyCameraPreset('board-atas');
-                setMenu(null);
-              }}
-            >
-              Board Atas
-            </button>
-          </div>
-        )}
-
         {/* Popover bantuan "?" — satu rumah untuk semua referensi (§E) */}
         {helpOpen && (
           <div
@@ -989,7 +939,7 @@ export default function App() {
                     ['Seret', 'Memutar'],
                     ['Roda tetikus', 'Memperbesar'],
                     ['Seret kanan', 'Menggeser'],
-                    ['Preset', '3D · Atas · Fokus, menu ▾ untuk varian per area'],
+                    ['Preset', 'Perspektif · Atas · Dekat · Fokus (tombol langsung, kanan bawah)'],
                   ],
                 },
               ] as const
@@ -1061,19 +1011,44 @@ export default function App() {
         onChange={handleImport}
       />
 
-      {/* Probe multimeter mengikuti kursor — TETAP anak langsung root */}
+      {/* Probe multimeter mengikuti kursor — TETAP anak langsung root.
+          Satu sistem pill dengan LiveBadge: rounded-full, bg-panel/95,
+          13px semibold tabular, desimal koma id-ID, teks sekunder minimal
+          zinc-400 (lantai kontras). Posisi: offset tetap dari kursor,
+          membalik ke sisi lain kursor dekat tepi kanan/bawah viewport
+          agar tidak pernah terpotong keluar layar. */}
       {hover && (
         <div
-          className="pointer-events-none fixed z-30 rounded-md border border-border-subtle bg-panel-elevated/95 px-2.5 py-1.5 font-mono text-[11px] text-zinc-200 shadow-lg"
-          style={{ left: hover.clientX + 14, top: hover.clientY + 14 }}
+          className="pointer-events-none fixed z-30 whitespace-nowrap rounded-full border border-border-subtle bg-panel/95 px-3 py-1.5 font-mono text-[13px] font-semibold tabular-nums text-zinc-100 shadow-lg"
+          style={{
+            left: hover.clientX,
+            top: hover.clientY,
+            transform: `translate(${
+              hover.clientX > window.innerWidth - 300
+                ? 'calc(-100% - 14px)'
+                : '14px'
+            }, ${
+              hover.clientY > window.innerHeight - 80
+                ? 'calc(-100% - 14px)'
+                : '16px'
+            })`,
+          }}
         >
           <span className="text-accent-primary">{terminalDisplay(hover.ref, boardId)}</span>
-          {hoverNet && <span className="text-zinc-500"> · net {hoverNet}</span>}
+          {hoverNet && (
+            <span className="font-medium text-zinc-400"> · net {hoverNet}</span>
+          )}
           {hoverVolts !== undefined && (
-            <span className={hoverVoltsClass}> · {hoverVolts.toFixed(2)} V</span>
+            <span className={hoverVoltsClass}>
+              {' '}
+              · {hoverVolts.toFixed(2).replace('.', ',')} V
+            </span>
           )}
           {hoverAmpsMa !== undefined && (
-            <span className="text-zinc-400"> · ≈ {hoverAmpsMa.toFixed(1)} mA</span>
+            <span className="font-medium text-zinc-400">
+              {' '}
+              · ≈ {hoverAmpsMa.toFixed(1).replace('.', ',')} mA
+            </span>
           )}
           {pendingFrom && <span className="text-accent-warning"> · klik tujuan kabel</span>}
         </div>

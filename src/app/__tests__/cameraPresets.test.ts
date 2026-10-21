@@ -1,0 +1,136 @@
+import { describe, expect, it } from 'vitest';
+import * as THREE from 'three';
+import {
+  getCameraPreset,
+  tableCenterOf,
+  type CameraPresetId,
+  type Vec3Tuple,
+} from '../cameraPresets';
+import { computeViewOffset, shiftViewForInsets } from '../viewportInsets';
+
+/**
+ * Preset kamera menu baru (Perspektif / Atas / Dekat / Fokus) + bukti
+ * proyeksi ujung-ke-ujung: setelah kompensasi inset CameraRig, subjek
+ * setiap preset tampil di pusat rektangel bebas antar panel — regresi
+ * untuk bug "klik Atas tidak ke atas" (subjek lama tampil +0,150 NDC,
+ * ±166px terlalu ke kanan; breadboard tertutup dock kanan).
+ */
+
+const BOARD_ORIGIN: Vec3Tuple = [-21, 0, 0]; // semua board aktif
+const SELECTED: Vec3Tuple = [12, 3, 10];
+const CTX = { boardOrigin: BOARD_ORIGIN, selectedPosition: SELECTED };
+
+function dist(a: Vec3Tuple, b: Vec3Tuple): number {
+  return Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]);
+}
+
+describe('getCameraPreset — matematika preset murni', () => {
+  it('pusat area kerja = titik tengah board↔breadboard', () => {
+    expect(tableCenterOf(BOARD_ORIGIN)).toEqual([-4.5, 0, 0]);
+  });
+
+  it('perspektif = posisi rumah yang sama seperti Reset Kamera', () => {
+    const v = getCameraPreset('perspektif', CTX)!;
+    expect(v.target).toEqual([-6, 0, 0]);
+    expect(v.position).toEqual([40, 42, 52]);
+  });
+
+  it('atas: TEGAK di atas pusat area kerja (x posisi === x target persis)', () => {
+    const v = getCameraPreset('atas', CTX)!;
+    expect(v.target).toEqual([-4.5, 0, 0]);
+    expect(v.position[0]).toBe(v.target[0]);
+    // z hanya boleh menyimpang sebesar epsilon anti-singularitas (0.01).
+    expect(Math.abs(v.position[2] - v.target[2])).toBeLessThanOrEqual(0.01);
+    expect(v.position[1]).toBeGreaterThan(0);
+  });
+
+  it('dekat: target sama dengan atas, jarak jauh lebih dekat dari perspektif', () => {
+    const dekat = getCameraPreset('dekat', CTX)!;
+    const perspektif = getCameraPreset('perspektif', CTX)!;
+    expect(dekat.target).toEqual([-4.5, 0, 0]);
+    expect(dist(dekat.position, dekat.target)).toBeLessThan(
+      dist(perspektif.position, perspektif.target),
+    );
+  });
+
+  it('fokus: membidik komponen terpilih; tanpa pilihan → null (tombol disembunyikan)', () => {
+    const v = getCameraPreset('fokus', CTX)!;
+    expect(v.target).toEqual(SELECTED);
+    expect(v.position).toEqual([18, 8, 17]);
+    expect(
+      getCameraPreset('fokus', { boardOrigin: BOARD_ORIGIN, selectedPosition: null }),
+    ).toBeNull();
+  });
+
+  it('semua preset: kamera di atas bidang meja & jarak di dalam pita clamp OrbitControls [10, 120]', () => {
+    // OrbitControls menulis ulang posisi dari spherical ter-clamp setiap
+    // update() — preset di luar [minDistance, maxDistance] akan dipangkas
+    // diam-diam. Semua preset wajib hidup di dalam pita itu.
+    const ids: CameraPresetId[] = ['perspektif', 'atas', 'dekat', 'fokus'];
+    for (const id of ids) {
+      const v = getCameraPreset(id, CTX)!;
+      expect(v.position[1]).toBeGreaterThan(v.target[1]);
+      const d = dist(v.position, v.target);
+      expect(d).toBeGreaterThanOrEqual(10);
+      expect(d).toBeLessThanOrEqual(120);
+    }
+  });
+});
+
+describe('proyeksi ujung-ke-ujung (three PerspectiveCamera + setViewOffset)', () => {
+  const W = 1440;
+  const H = 900;
+  const view = computeViewOffset(W, H);
+  // NDC hasil render tempat pusat rektangel bebas berada di kanvas.
+  const freeNdcX = 2 * ((view.x + view.width / 2) / view.fullWidth) - 1;
+  const freeNdcY = 1 - 2 * ((view.y + view.height / 2) / view.fullHeight);
+
+  function projectSubject(
+    position: Vec3Tuple,
+    lookTarget: Vec3Tuple,
+    subject: Vec3Tuple,
+  ): THREE.Vector3 {
+    const cam = new THREE.PerspectiveCamera(45, W / H, 0.5, 600);
+    cam.position.set(...position);
+    cam.lookAt(...lookTarget);
+    cam.setViewOffset(view.fullWidth, view.fullHeight, view.x, view.y, view.width, view.height);
+    cam.updateProjectionMatrix();
+    cam.updateMatrixWorld();
+    return new THREE.Vector3(...subject).project(cam);
+  }
+
+  it('TANPA kompensasi: subjek tampil +0,150 NDC (dokumen bug — terlalu ke kanan)', () => {
+    const v = getCameraPreset('atas', CTX)!;
+    const p = projectSubject(v.position, v.target, v.target);
+    expect(p.x).toBeCloseTo(0.15, 2);
+    expect(p.x).not.toBeCloseTo(freeNdcX, 1);
+  });
+
+  it('DENGAN kompensasi CameraRig: subjek SEMUA preset tampil di pusat rektangel bebas', () => {
+    const ids: CameraPresetId[] = ['perspektif', 'atas', 'dekat', 'fokus'];
+    for (const id of ids) {
+      const v = getCameraPreset(id, CTX)!;
+      const shifted = shiftViewForInsets(v.position, v.target, view, 45, W / H);
+      const p = projectSubject(shifted.position, shifted.target, v.target);
+      expect(p.x).toBeCloseTo(freeNdcX, 2);
+      expect(p.y).toBeCloseTo(freeNdcY, 2);
+    }
+  });
+
+  it('atas terkompensasi: seluruh lebar breadboard muat di dalam rektangel bebas', () => {
+    const v = getCameraPreset('atas', CTX)!;
+    const shifted = shiftViewForInsets(v.position, v.target, view, 45, W / H);
+    const cam = new THREE.PerspectiveCamera(45, W / H, 0.5, 600);
+    cam.position.set(...shifted.position);
+    cam.lookAt(...shifted.target);
+    cam.setViewOffset(view.fullWidth, view.fullHeight, view.x, view.y, view.width, view.height);
+    cam.updateProjectionMatrix();
+    cam.updateMatrixWorld();
+    // Tepi breadboard (origin x=12 ± 11) harus jatuh di dalam bingkai yang
+    // dirender — sebelum perbaikan tepi kanannya di 1107px, tertutup dock.
+    for (const edgeX of [1, 23]) {
+      const p = new THREE.Vector3(edgeX, 0, 0).project(cam);
+      expect(Math.abs(p.x)).toBeLessThan(1);
+    }
+  });
+});

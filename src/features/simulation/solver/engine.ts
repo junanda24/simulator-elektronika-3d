@@ -3,6 +3,7 @@
  *
  * Alur: bangun peta net → iterasi PWL (maks 8×, berhenti saat konvergen) →
  * hitung arus cabang per instance → evaluasi aturan kerusakan.
+ * Iterasi ke-0 dapat disemai `initialVoltages` (solusi tick sebelumnya).
  *
  * Zero-core-touch: engine tidak pernah memeriksa tipe komponen; semua
  * perilaku elektrik datang dari `electricalOf` (registry plugin).
@@ -26,6 +27,15 @@ const SIM_DT = 1 / 60;
 export function solveCircuit(
   input: CircuitInput,
   electricalOf: (type: string) => ComponentElectrical | undefined,
+  /**
+   * Tegangan solusi tick sebelumnya (opsional, kontrak antar-tick dari
+   * simSession). Dipakai sebagai `prevVoltage` pada iterasi PWL ke-0 —
+   * menggantikan awal dingin 0 V — sehingga komponen yang membaca
+   * tegangan sebelumnya (LED/dioda PWL, transistor, relay, sensor aktif)
+   * mulai dari titik kerja terakhir, bukan dari nol setiap tick.
+   * Peta disalin: milik pemanggil tidak pernah dimutasi solver.
+   */
+  initialVoltages?: Map<string, number>,
 ): CircuitSolution {
   // Pin tanpa entri di pinNets = net unik sendiri (mengambang, tegangan 0 via gmin).
   const netOf = (instanceId: string, pinId: string): string =>
@@ -44,7 +54,7 @@ export function solveCircuit(
   }
   const nets = [...netSet];
 
-  let prev = new Map<string, number>();
+  let prev = initialVoltages ? new Map(initialVoltages) : new Map<string, number>();
   let voltages = new Map<string, number>([[GND_NET, 0]]);
 
   for (let iter = 0; iter < MAX_PWL_ITERATIONS; iter++) {

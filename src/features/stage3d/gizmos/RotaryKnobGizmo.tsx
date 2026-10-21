@@ -29,7 +29,8 @@ const PERCENT_STYLE: CSSProperties = {
   display: 'block',
   fontFamily: "'JetBrains Mono', monospace",
   fontVariantNumeric: 'tabular-nums',
-  fontSize: 15,
+  fontSize: 16,
+  fontWeight: 600,
   color: '#00E5FF',
 };
 
@@ -37,7 +38,9 @@ const OHMS_STYLE: CSSProperties = {
   display: 'block',
   fontFamily: "'JetBrains Mono', monospace",
   fontVariantNumeric: 'tabular-nums',
-  fontSize: 11,
+  // Standar keterbacaan indikator melayang (audit hover): ≥ 12px, ruang
+  // layar (tanpa distanceFactor) agar tidak menyusut mengikuti zoom.
+  fontSize: 12,
   color: '#E5E7EB',
 };
 
@@ -57,7 +60,7 @@ export const RotaryKnobGizmo: ComponentType<RotaryKnobGizmoProps> = ({
   percent,
   ohms,
 }) => (
-  <Html center distanceFactor={12} zIndexRange={[100, 0]} position={position ?? [0, 4.2, 0]}>
+  <Html center zIndexRange={[100, 0]} position={position ?? [0, 4.2, 0]}>
     <div style={PANEL_STYLE} onPointerDown={(e) => e.stopPropagation()}>
       <span style={PERCENT_STYLE}>{Math.round(percent)}%</span>
       <span style={OHMS_STYLE}>{formatOhms(ohms)}</span>

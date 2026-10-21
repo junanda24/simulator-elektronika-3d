@@ -15,6 +15,9 @@ import {
 
 const UNO_DEF = getBoardDefinition('uno');
 
+/** Resistansi bleed high-Z pin mode INPUT ke GND (Ω) — lihat buildNetlist. */
+export const INPUT_BLEED_OHMS = 10_000_000;
+
 /** Ujung kabel: lubang breadboard atau pin board. */
 export type TerminalRef =
   | { kind: 'hole'; holeId: string }
@@ -180,12 +183,25 @@ export function buildNetlist(
   // Korsleting: ada rel daya yang tergabung langsung ke GND.
   const shortCircuit = shortVolts !== null ? { volts: shortVolts } : null;
 
-  // --- State pin GPIO dari sketch → sumber Thevenin / tautan pull-up ---
+  // --- State pin GPIO dari sketch → sumber Thevenin / tautan resistif ---
+  // OUTPUT: Thevenin logicVolts/0 lewat pinOhms profil.
+  // INPUT_PULLUP: resistor internal profil (pullupOhms) ke rel logika —
+  //   pin diam di HIGH dan sakelar ke GND menariknya ke LOW (inti pola
+  //   push button; terverifikasi audit P3: lepas ≈ 5,00 V, tekan ≈ 0 V).
+  // INPUT_PULLDOWN: resistor profil yang sama ke GND (mode belum ada di
+  //   tipe PinMode/runtime — ditangani defensif agar kontrak netlist
+  //   lengkap begitu runtime memancarkannya).
+  // INPUT murni: bleed high-Z 10 MΩ ke GND. Tanpa jangkar eksplisit ini
+  //   tegangan net pin hanya ditentukan gmin solver (1 GΩ) — terlalu
+  //   lemah dan tidak terdokumentasi; 10 MΩ meniru impedansi input
+  //   mikrokontroler dan bebannya dapat diabaikan (≤ 0,5 µA pada 5 V,
+  //   galat ≤ 0,1 % pada sumber 10 kΩ).
   const links: ResistiveLink[] = [];
   const vccNet = canonicalName(`board:${board.logicRailNet}`);
   for (const [pinId, state] of Object.entries(pinStates)) {
     const net = canonicalName(`board:${boardPinById(board, pinId)?.net ?? pinId}`);
-    if (state.mode === 'OUTPUT') {
+    const mode: string = state.mode;
+    if (mode === 'OUTPUT') {
       if (net === 'GND') continue; // arusnya dinilai aturan board dari tegangan target
       const volts =
         state.pwm !== undefined
@@ -194,9 +210,17 @@ export function buildNetlist(
             ? profile.logicVolts
             : 0;
       sources.push({ net, volts, seriesOhms: profile.pinOhms });
-    } else if (state.mode === 'INPUT_PULLUP') {
+    } else if (mode === 'INPUT_PULLUP') {
       if (net !== vccNet && net !== 'GND') {
         links.push({ a: net, b: vccNet, ohms: profile.pullupOhms });
+      }
+    } else if (mode === 'INPUT_PULLDOWN') {
+      if (net !== 'GND') {
+        links.push({ a: net, b: 'GND', ohms: profile.pullupOhms });
+      }
+    } else if (mode === 'INPUT') {
+      if (net !== 'GND') {
+        links.push({ a: net, b: 'GND', ohms: INPUT_BLEED_OHMS });
       }
     }
   }

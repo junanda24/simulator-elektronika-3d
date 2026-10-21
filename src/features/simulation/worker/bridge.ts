@@ -39,6 +39,53 @@ let lastParts: CircuitParts | null = null;
 let lastPowered: boolean | null = null;
 let lastSketch: string | null = null;
 
+/**
+ * Pelacakan operasi sibuk (indikator "Memproses…"): penghitung perintah
+ * yang sedang berjalan (in-flight). Listener menerima `true` saat
+ * penghitung naik dari 0 (perintah pertama dikirim) dan `false` saat
+ * kembali ke 0 (perintah terakhir selesai dieksekusi sesi). Untuk jalur
+ * worker, selesai = promise comlink settle; untuk fallback sesi lokal,
+ * selesai = panggilan sinkron kembali (snapshot-nya sendiri sudah
+ * terkirim sinkron di dalamnya). Store memakai tepi naik ini untuk
+ * mengunci latch `simBusy` miliknya.
+ */
+let inFlight = 0;
+let busyListener: ((busy: boolean) => void) | null = null;
+
+export function setSimBusyListener(
+  listener: ((busy: boolean) => void) | null,
+): void {
+  busyListener = listener;
+}
+
+function opBegin(): void {
+  inFlight += 1;
+  if (inFlight === 1) busyListener?.(true);
+}
+
+function opEnd(): void {
+  inFlight = Math.max(0, inFlight - 1);
+  if (inFlight === 0) busyListener?.(false);
+}
+
+/** Kirim satu perintah sesi sambil melacak status sibuknya. */
+function dispatchOp(
+  remoteCall: () => Promise<unknown>,
+  localCall: () => void,
+): void {
+  opBegin();
+  try {
+    if (remote) {
+      void Promise.resolve(remoteCall()).then(opEnd, opEnd);
+    } else {
+      localCall();
+      opEnd();
+    }
+  } catch {
+    opEnd();
+  }
+}
+
 /** Aktifkan sesi lokal (fallback) dan putar ulang state terakhir. */
 function useLocalSession(): void {
   if (localSession) return;
@@ -94,29 +141,39 @@ export function initSim(onSnapshot: (snapshot: SimSnapshot) => void): void {
 
 export function simSetCircuit(parts: CircuitParts): void {
   lastParts = parts;
-  if (remote) void remote.setCircuit(parts as never);
-  else localSession?.setCircuit(parts);
+  dispatchOp(
+    () => remote!.setCircuit(parts as never),
+    () => localSession?.setCircuit(parts),
+  );
 }
 
 export function simSetPowered(on: boolean): void {
   lastPowered = on;
-  if (remote) void remote.setPowered(on);
-  else localSession?.setPowered(on);
+  dispatchOp(
+    () => remote!.setPowered(on),
+    () => localSession?.setPowered(on),
+  );
 }
 
 export function simStartSketch(source: string): void {
   lastSketch = source;
-  if (remote) void remote.startSketch(source);
-  else localSession?.startSketch(source);
+  dispatchOp(
+    () => remote!.startSketch(source),
+    () => localSession?.startSketch(source),
+  );
 }
 
 export function simStopSketch(): void {
   lastSketch = null;
-  if (remote) void remote.stopSketch();
-  else localSession?.stopSketch();
+  dispatchOp(
+    () => remote!.stopSketch(),
+    () => localSession?.stopSketch(),
+  );
 }
 
 export function simClearBoardDamage(): void {
-  if (remote) void remote.clearBoardDamage();
-  else localSession?.clearBoardDamage();
+  dispatchOp(
+    () => remote!.clearBoardDamage(),
+    () => localSession?.clearBoardDamage(),
+  );
 }

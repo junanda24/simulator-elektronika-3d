@@ -23,6 +23,7 @@ export default function RightDock() {
   const serialText = useCircuitStore((s) => s.serialText);
   const clearSerial = useCircuitStore((s) => s.clearSerial);
   const running = useCircuitStore((s) => s.running);
+  const simBusy = useCircuitStore((s) => s.simBusy);
   const pinStates = useCircuitStore((s) => s.pinStates);
   const deadPins = useCircuitStore((s) => s.deadPins);
   const boardFault = useCircuitStore((s) => s.boardFault);
@@ -106,6 +107,8 @@ export default function RightDock() {
             </p>
             <button
               type="button"
+              disabled={simBusy}
+              title={simBusy ? 'Tunggu proses selesai' : undefined}
               onClick={(e) => {
                 restartSketch();
                 // Lepas fokus tombol: bila fokus tertinggal di sini, menekan
@@ -113,7 +116,7 @@ export default function RightDock() {
                 // (aktivasi Space pada button) dan membatalkan perintah user.
                 e.currentTarget.blur();
               }}
-              className="h-8 w-full rounded-md border border-border-subtle text-[13px] font-medium text-zinc-200 transition-colors hover:border-zinc-500"
+              className="h-8 w-full rounded-md border border-border-subtle text-[13px] font-medium text-zinc-200 transition-colors hover:border-zinc-500 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:border-border-subtle"
             >
               Jalankan Ulang
             </button>

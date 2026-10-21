@@ -158,6 +158,13 @@ export class SimSession {
     }
   }
 
+  /** Komponen yang perilakunya layak di-solve ulang tiap tick (K10). */
+  private hasDynamicComponents(): boolean {
+    return this.parts.instances.some(
+      (i) => i.type === 'capacitor' || i.type === 'dc-motor' || i.type === 'servo',
+    );
+  }
+
   private ensureTimer(): void {
     if (this.timer) return;
     this.lastTickAt = Date.now();
@@ -168,7 +175,19 @@ export class SimSession {
       if (this.runtime && !this.runtime.isStopped()) {
         this.runtime.advance(delta);
       }
-      if (this.serialDirty) this.emit();
+      // Audit K10: selama runtime diam di dalam delay(), tidak ada
+      // perubahan pin dan tidak ada serial — tanpa cabang ini solver
+      // tidak pernah berjalan lagi sampai delay berakhir, sehingga
+      // komponen dinamis membeku. Perubahan pin sudah menyelesaikan
+      // dirinya secara sinkron lewat onPinStatesChanged; di sini kita
+      // menyelesaikan ulang maksimal 1× per tick (16 ms) HANYA bila
+      // rangkaian berdaya dan memuat komponen dinamis — rangkaian
+      // statis tidak dibanjiri snapshot.
+      if (this.powered && !this.boardFault && this.hasDynamicComponents()) {
+        this.solveAndEmit();
+      } else if (this.serialDirty) {
+        this.emit();
+      }
     }, 16);
   }
 
@@ -194,9 +213,14 @@ export class SimSession {
     );
     this.netOfBoardPin = netlist.netOfBoardPin;
 
+    // Kontrak audit K10: solusi tick sebelumnya diteruskan sebagai
+    // tegangan awal iterasi PWL (initialVoltages, parameter ke-3
+    // solveCircuit) agar komponen non-linear tidak mulai dari 0 V
+    // setiap solve.
     let solution = solveCircuit(
       this.powered && !this.boardFault ? netlist.input : { ...netlist.input, sources: [] },
       electricalOf,
+      this.lastSolution?.voltages,
     );
 
     if (this.powered && !this.boardFault && netlist.shortCircuit) {
@@ -205,7 +229,7 @@ export class SimSession {
         pinId: null,
         report: shortCircuitDamageReport(netlist.shortCircuit.volts),
       });
-      solution = solveCircuit({ ...netlist.input, sources: [] }, electricalOf);
+      solution = solveCircuit({ ...netlist.input, sources: [] }, electricalOf, this.lastSolution?.voltages);
     }
 
     if (this.powered && !this.boardFault) {
@@ -247,7 +271,7 @@ export class SimSession {
           this.board,
         );
         this.netOfBoardPin = rebuilt.netOfBoardPin;
-        solution = solveCircuit(rebuilt.input, electricalOf);
+        solution = solveCircuit(rebuilt.input, electricalOf, this.lastSolution?.voltages);
       }
     }
 

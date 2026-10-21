@@ -44,6 +44,11 @@
  *   yang melempar error Bahasa Indonesia menyebut library & method pada
  *   pemanggilan pertama. (Dulu `null`, yang menghasilkan "Cannot read
  *   properties of null" — tak berarti apa-apa bagi pemula.)
+ * - Konstanta pin PREAMBLE: A0–A7 dan D0–D39 sebagai string id pin
+ *   ('D2', 'A0', ...) agar sketch yang menulis nama silkscreen board
+ *   (NodeMCU/ESP32/Pico/Uno) tidak ReferenceError; resolusi akhir ke pin
+ *   board aktif adalah urusan runtime (audit P1 K1/K5). Kualifikasi tipe
+ *   `volatile` diterima sebagai kata tipe (dibuang seperti const/static).
  * - Fungsi Arduino murni yang murah disediakan PREAMBLE sebagai JS polos:
  *   random/randomSeed, pow/sqrt/sq/sin/cos/tan, konstanta PI/TWO_PI/HALF_PI
  *   dan DEC/HEX/OCT/BIN, micros (dari millis), delayMicroseconds (dari
@@ -67,8 +72,13 @@ export interface TranspileResult {
 /** Awalan wajib kode hasil: destrukturisasi API + konstanta Arduino. */
 const PREAMBLE = [
   "const { pinMode, digitalWrite, digitalRead, analogWrite, analogRead, delay, millis, guard, Serial, map, constrain, min, max, abs, __line } = __api;",
-  "const HIGH = 1, LOW = 0, INPUT = 'INPUT', OUTPUT = 'OUTPUT', INPUT_PULLUP = 'INPUT_PULLUP';",
-  "const A0='A0',A1='A1',A2='A2',A3='A3',A4='A4',A5='A5';",
+  "const HIGH = 1, LOW = 0, INPUT = 'INPUT', OUTPUT = 'OUTPUT', INPUT_PULLUP = 'INPUT_PULLUP', INPUT_PULLDOWN = 'INPUT_PULLDOWN';",
+  "const A0='A0',A1='A1',A2='A2',A3='A3',A4='A4',A5='A5',A6='A6',A7='A7';",
+  // Konstanta pin digital D0..D39 sebagai STRING id pin (konsisten dengan
+  // resolusi runtime & silkscreen board): digitalWrite(D2, ...) di
+  // NodeMCU/ESP32/Pico dan digitalWrite(D13, ...) di Uno harus jalan —
+  // sebelum ini semua identifier D* adalah ReferenceError (audit P1 K1).
+  "const D0='D0',D1='D1',D2='D2',D3='D3',D4='D4',D5='D5',D6='D6',D7='D7',D8='D8',D9='D9',D10='D10',D11='D11',D12='D12',D13='D13',D14='D14',D15='D15',D16='D16',D17='D17',D18='D18',D19='D19',D20='D20',D21='D21',D22='D22',D23='D23',D24='D24',D25='D25',D26='D26',D27='D27',D28='D28',D29='D29',D30='D30',D31='D31',D32='D32',D33='D33',D34='D34',D35='D35',D36='D36',D37='D37',D38='D38',D39='D39';",
   'const LED_BUILTIN = 13;',
   // Builtin Arduino murni-JS (tidak butuh runtime): konstanta & matematika.
   'const PI = Math.PI, TWO_PI = Math.PI * 2, HALF_PI = Math.PI / 2;',
@@ -407,6 +417,7 @@ function applyMacros(tokens: Token[], macros: Map<string, Token[]>): Token[] {
 const TYPE_WORDS = new Set([
   'const',
   'static',
+  'volatile',
   'unsigned',
   'signed',
   'int',
@@ -433,7 +444,9 @@ const TYPE_WORDS = new Set([
 ]);
 /** Kata tipe dasar (tanpa kualifikasi) — untuk deteksi cast. */
 const BASE_TYPE_WORDS = new Set(
-  [...TYPE_WORDS].filter((w) => w !== 'const' && w !== 'static' && w !== 'signed'),
+  [...TYPE_WORDS].filter(
+    (w) => w !== 'const' && w !== 'static' && w !== 'volatile' && w !== 'signed',
+  ),
 );
 const INT_TYPE_WORDS = new Set([
   'int',
