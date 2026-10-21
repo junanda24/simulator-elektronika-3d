@@ -105,10 +105,10 @@ function createTopTexture(): THREE.CanvasTexture {
         ctx.fillRect(cx - arm + dx, cy - 13 + dy, arm * 2, 26);
         ctx.fillRect(cx - 13 + dx, cy - arm + dy, 26, arm * 2);
       };
-      drawScore('#e6eaee', 3, 3); // sorot tepi alur
-      drawScore('#878d95', 0, 0); // inti alur gelap
+      drawScore('#edf1f4', 3, 3); // sorot tepi alur
+      drawScore('#98a0a9', 0, 0); // inti alur gelap
       // Ring tepi tutup sedikit lebih gelap
-      ctx.strokeStyle = '#9aa0a8';
+      ctx.strokeStyle = '#b4bbc2';
       ctx.lineWidth = 10;
       ctx.beginPath();
       ctx.arc(cx, cy, width * 0.47, 0, Math.PI * 2);
@@ -163,7 +163,7 @@ export const CapacitorRender3D: ComponentType<ComponentRenderProps> = ({ instanc
   );
 
   const bungMaterial = getMaterial3D('karet');
-  const crimpMaterial = getMaterial3D('canAluminium', { color: '#878d95', roughness: 0.5 });
+  const crimpMaterial = getMaterial3D('canAluminium', { color: '#98a0a9', roughness: 0.5 });
 
   return (
     <group position={instance.position} rotation={[0, instance.rotation, 0]}>
@@ -208,7 +208,7 @@ export const CapacitorRender3D: ComponentType<ComponentRenderProps> = ({ instanc
       {damaged ? (
         <mesh position={[0, BODY_TOP - 0.02, 0]} rotation={[-Math.PI / 2, 0, 0]}>
           <circleGeometry args={[1.14, 32]} />
-          <meshPhysicalMaterial {...MATERIAL_PROPS.canAluminium} color="#8f959d" />
+          <meshPhysicalMaterial {...MATERIAL_PROPS.canAluminium} color="#a6adb6" />
         </mesh>
       ) : (
         <mesh position={[0, BODY_TOP - 0.02, 0]} rotation={[-Math.PI / 2, 0, 0]}>

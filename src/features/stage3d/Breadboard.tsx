@@ -1,7 +1,7 @@
 import { useLayoutEffect, useMemo, useRef } from 'react';
 import * as THREE from 'three';
 import { RoundedBox } from '@react-three/drei';
-import { MATERIAL_PROPS } from './materials3d';
+import { COLOR_TOKENS, MATERIAL_PROPS } from './materials3d';
 
 interface BreadboardProps {
   position?: [number, number, number];
@@ -41,9 +41,10 @@ function createPrintTexture(): THREE.CanvasTexture {
 
   const X = (x: number) => (x + 11) * PRINT_PX_PER_UNIT;
   const Y = (z: number) => (z + 33) * PRINT_PX_PER_UNIT;
-  const INK = '#374151';
-  const RED = '#d42a1e';
-  const BLUE = '#2456c8';
+  const INK = '#3d4756';
+  // Rel +/− adalah warna fungsional standar → dari token terkunci pustaka
+  const RED = COLOR_TOKENS.breadboardRailPlus;
+  const BLUE = COLOR_TOKENS.breadboardRailMinus;
 
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
@@ -138,7 +139,7 @@ export default function Breadboard({ position = [0, 0, 0] }: BreadboardProps) {
   const printTexture = useMemo(createPrintTexture, []);
   const holeGeometry = useMemo(() => new THREE.BoxGeometry(0.55, 0.25, 0.55), []);
   const holeMaterial = useMemo(
-    () => new THREE.MeshStandardMaterial({ color: '#17181c', roughness: 0.95 }),
+    () => new THREE.MeshStandardMaterial({ color: '#1d1e24', roughness: 0.95 }),
     [],
   );
 
@@ -156,8 +157,9 @@ export default function Breadboard({ position = [0, 0, 0] }: BreadboardProps) {
 
   return (
     <group position={position}>
-      {/* Bodi putih gading — material disamakan ke kelas breadboardKrem
-          pustaka bersama (SPESIFIKASI §3); warna token #f2ede2 sama */}
+      {/* Bodi putih gading — material kelas breadboardKrem pustaka
+          bersama (SPESIFIKASI §3); warna dari token breadboardBody
+          (SPEK-WARNA-SEGAR: krem bersih #faf7ee) */}
       <RoundedBox
         args={[22, BREADBOARD_TOP_Y, 66]}
         radius={0.35}
@@ -172,7 +174,7 @@ export default function Breadboard({ position = [0, 0, 0] }: BreadboardProps) {
       {/* Parit tengah pemisah dua blok terminal */}
       <mesh position={[0, 2.99, 0]}>
         <boxGeometry args={[1.8, 0.06, 63]} />
-        <meshStandardMaterial color="#ddd6c4" roughness={0.8} />
+        <meshStandardMaterial color="#e7e1cf" roughness={0.8} />
       </mesh>
 
       {/* Takik penanda di tengah parit (seperti MB-102 asli): strip
@@ -180,7 +182,7 @@ export default function Breadboard({ position = [0, 0, 0] }: BreadboardProps) {
           tidak menyentuh geometri/instancing lubang sama sekali */}
       <mesh position={[0, 3.03, 0]}>
         <boxGeometry args={[1.8, 0.02, 0.5]} />
-        <meshStandardMaterial color="#c9c0a8" roughness={0.85} />
+        <meshStandardMaterial color="#d8d0ba" roughness={0.85} />
       </mesh>
 
       {/* Cetakan permukaan (angka baris, huruf kolom, label rel, merek) —
@@ -198,22 +200,22 @@ export default function Breadboard({ position = [0, 0, 0] }: BreadboardProps) {
         receiveShadow
       />
 
-      {/* Garis penanda rail daya: merah (+) dan biru (-) */}
+      {/* Garis penanda rail daya: merah (+) dan biru (-) — token fungsional */}
       <mesh position={[-7.5, 3.02, 0]}>
         <boxGeometry args={[0.16, 0.03, 50]} />
-        <meshStandardMaterial color="#d42a1e" roughness={0.6} />
+        <meshStandardMaterial color={COLOR_TOKENS.breadboardRailPlus} roughness={0.6} />
       </mesh>
       <mesh position={[-10, 3.02, 0]}>
         <boxGeometry args={[0.16, 0.03, 50]} />
-        <meshStandardMaterial color="#2456c8" roughness={0.6} />
+        <meshStandardMaterial color={COLOR_TOKENS.breadboardRailMinus} roughness={0.6} />
       </mesh>
       <mesh position={[7.5, 3.02, 0]}>
         <boxGeometry args={[0.16, 0.03, 50]} />
-        <meshStandardMaterial color="#2456c8" roughness={0.6} />
+        <meshStandardMaterial color={COLOR_TOKENS.breadboardRailMinus} roughness={0.6} />
       </mesh>
       <mesh position={[10, 3.02, 0]}>
         <boxGeometry args={[0.16, 0.03, 50]} />
-        <meshStandardMaterial color="#d42a1e" roughness={0.6} />
+        <meshStandardMaterial color={COLOR_TOKENS.breadboardRailPlus} roughness={0.6} />
       </mesh>
     </group>
   );

@@ -109,7 +109,7 @@ export const DcMotorRender3D: ComponentType<ComponentRenderProps> = ({ instance,
     onInteract({ locked: !locked });
   };
 
-  const propColor = locked ? '#b91c1c' : COLOR_TOKENS.servoWireOrange;
+  const propColor = locked ? COLOR_TOKENS.cableRed : COLOR_TOKENS.servoWireOrange;
 
   return (
     <group

@@ -47,10 +47,12 @@ describe('materials3d — tabel parameter §3', () => {
     expect(MATERIAL_PARAMS.epoxyLed.clearcoat).toBe(1);
   });
 
-  it('plastikHitam memakai #1B1B1F, bukan hitam murni', () => {
+  it('plastikHitam memakai arang kebiruan terang, bukan hitam murni', () => {
+    // Nilai berubah #1b1b1f → #222229 atas SPEK-WARNA-SEGAR (user:
+    // warna lama terasa tua/pekat); syarat aslinya tetap: bukan #000000.
     const mat = createMaterial3D('plastikHitam');
     expect(`#${mat.color.getHexString()}`).toBe(COLOR_TOKENS.plastikHitam);
-    expect(COLOR_TOKENS.plastikHitam).toBe('#1b1b1f');
+    expect(COLOR_TOKENS.plastikHitam).toBe('#222229');
   });
 });
 
@@ -83,21 +85,34 @@ describe('materials3d — factory', () => {
 
 describe('materials3d — warna §4', () => {
   it('token fungsional terkunci utuh (gelang, kabel servo, rel, teal Uno, biru relay)', () => {
+    // Nilai unoTeal/relayBlue berubah atas SPEK-WARNA-SEGAR (arah segar
+    // user 2026-10-21): hue sama, lightness/chroma naik. Gelang & rel
+    // adalah standar murni — nilainya TIDAK ikut berubah.
     expect(COLOR_TOKENS.resistorBands).toHaveLength(10);
-    expect(COLOR_TOKENS.unoTeal).toBe('#008184');
-    expect(COLOR_TOKENS.relayBlue).toBe('#1d6fd1');
+    expect(COLOR_TOKENS.unoTeal).toBe('#00a6b0');
+    expect(COLOR_TOKENS.relayBlue).toBe('#2b7de0');
     expect(COLOR_TOKENS.breadboardRailPlus).toBe('#d42a1e');
     expect(COLOR_TOKENS.breadboardRailMinus).toBe('#2456c8');
   });
 
   it('token emas & kabel FC-28 terkunci nilainya', () => {
-    expect(COLOR_TOKENS.goldPlated).toBe('#d4af37');
-    expect(COLOR_TOKENS.goldTrace).toBe('#a8842c');
-    expect(COLOR_TOKENS.brassScrew).toBe('#b08d3e');
-    expect(COLOR_TOKENS.cableRed).toBe('#b91c1c');
+    // Nilai berubah atas SPEK-WARNA-SEGAR §2 (emas antik → emas muda,
+    // merah bata → merah bersih); peran token tidak berubah.
+    expect(COLOR_TOKENS.goldPlated).toBe('#e4b93e');
+    expect(COLOR_TOKENS.goldTrace).toBe('#be9736');
+    expect(COLOR_TOKENS.brassScrew).toBe('#c29b45');
+    expect(COLOR_TOKENS.cableRed).toBe('#e02b20');
   });
 
-  it('vivid menaikkan saturasi ±12,5% tanpa menggeser hue', () => {
+  it('token PCB board generik tersedia (SPEK-WARNA-SEGAR §2)', () => {
+    expect(COLOR_TOKENS.esp32Pcb).toBe('#22335c');
+    expect(COLOR_TOKENS.nodeMcuPcb).toBe('#2b3a67');
+    expect(COLOR_TOKENS.picoPcb).toBe('#1f9d4d');
+  });
+
+  it('vivid menaikkan saturasi ±30% + mengangkat lightness, tanpa menggeser hue', () => {
+    // Derivasi berubah atas SPEK-WARNA-SEGAR §3: rasio lama 1,125 tanpa
+    // sentuhan lightness dibatalkan user (terasa tua/kusam).
     const before = new THREE.Color(COLOR_TOKENS.relayBlue);
     const after = new THREE.Color(vivid(COLOR_TOKENS.relayBlue));
     const hb = { h: 0, s: 0, l: 0 };
@@ -106,7 +121,13 @@ describe('materials3d — warna §4', () => {
     after.getHSL(ha, THREE.SRGBColorSpace);
     expect(ha.h).toBeCloseTo(hb.h, 3);
     expect(ha.s).toBeGreaterThan(hb.s);
-    expect(ha.s / hb.s).toBeCloseTo(1.125, 2);
+    expect(ha.s / hb.s).toBeCloseTo(1.3, 2);
+    // relayBlue L=0,52 sudah di atas pita tengah → lightness tidak berubah
     expect(ha.l).toBeCloseTo(hb.l, 3);
+    // Warna gelap (L<0,5) wajib TERANGKAT menuju pita tengah
+    const dark = new THREE.Color(vivid('#14632f'));
+    const hd = { h: 0, s: 0, l: 0 };
+    dark.getHSL(hd, THREE.SRGBColorSpace);
+    expect(hd.l).toBeGreaterThan(0.23);
   });
 });

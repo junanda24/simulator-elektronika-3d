@@ -1,3 +1,4 @@
+import { useEffect, useRef } from 'react';
 import { useCircuitStore } from '../features/wiring/store/circuitStore';
 import { getComponentPlugin } from '../shared/components/registry';
 import { boardPinWorldPosition, getBoardDefinition } from '../shared/boards/definitions';
@@ -15,7 +16,13 @@ function formatMeasure(value: number, unit: string): string {
   return String(value);
 }
 
-export default function AutopsyCard() {
+/**
+ * @param exiting — App menahan mount kartu ini lewat useExitPresence
+ * selama 170ms setelah state autopsy kosong; selama itu kartu dirender
+ * dari laporan terakhir (lastAutopsyRef) dengan kelas .hud-exit dan
+ * pointer-events mati, agar tidak lenyap secara mendadak.
+ */
+export default function AutopsyCard({ exiting = false }: { exiting?: boolean }) {
   const autopsy = useCircuitStore((s) => s.autopsy);
   const instances = useCircuitStore((s) => s.instances);
   const replaceInstance = useCircuitStore((s) => s.replaceInstance);
@@ -24,15 +31,21 @@ export default function AutopsyCard() {
   const setCameraView = useCircuitStore((s) => s.setCameraView);
   const boardId = useCircuitStore((s) => s.boardId);
 
-  if (!autopsy) return null;
+  const lastAutopsyRef = useRef(autopsy);
+  useEffect(() => {
+    if (autopsy) lastAutopsyRef.current = autopsy;
+  }, [autopsy]);
+  const shown = autopsy ?? lastAutopsyRef.current;
 
-  const { instanceId, report } = autopsy;
+  if (!shown) return null;
+
+  const { instanceId, report } = shown;
   const isBoard = instanceId === null;
   const instance = isBoard ? undefined : instances.find((i) => i.id === instanceId);
   const plugin = instance ? getComponentPlugin(instance.type) : undefined;
   const componentName = isBoard
-    ? autopsy.boardPinId
-      ? `Board Arduino Uno · Pin ${autopsy.boardPinId}`
+    ? shown.boardPinId
+      ? `Board Arduino Uno · Pin ${shown.boardPinId}`
       : 'Board Arduino Uno'
     : (plugin?.name ?? instance?.type ?? 'Komponen');
 
@@ -44,7 +57,7 @@ export default function AutopsyCard() {
     } else {
       const board = getBoardDefinition(boardId);
       target =
-        (autopsy.boardPinId ? boardPinWorldPosition(board, autopsy.boardPinId) : null) ??
+        (shown.boardPinId ? boardPinWorldPosition(board, shown.boardPinId) : null) ??
         ([...board.origin] as [number, number, number]);
     }
     if (!target) return;
@@ -53,7 +66,9 @@ export default function AutopsyCard() {
 
   return (
     <section
-      className="absolute bottom-4 right-4 z-20 w-[340px] rounded-xl border border-accent-danger/60 bg-panel-elevated p-4 shadow-2xl"
+      className={`hud-pop absolute bottom-4 right-4 z-20 w-[340px] rounded-xl border border-accent-danger/60 bg-panel-elevated p-4 shadow-2xl ${
+        exiting ? 'hud-exit pointer-events-none' : ''
+      }`}
       role="alert"
       aria-label="Laporan autopsi kerusakan komponen"
     >

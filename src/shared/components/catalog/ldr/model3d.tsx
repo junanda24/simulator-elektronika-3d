@@ -140,7 +140,7 @@ export const LdrRender3D: ComponentType<ComponentRenderProps> = ({ instance, onI
       >
         <meshPhysicalMaterial
           {...MATERIAL_PROPS.epoxyLed}
-          color="#b4551f"
+          color="#c05f24"
           opacity={0.78}
           emissive="#f59e0b"
           emissiveIntensity={0.05 + light * 0.35}

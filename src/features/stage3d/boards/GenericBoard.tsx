@@ -3,6 +3,7 @@ import * as THREE from 'three';
 import { RoundedBox } from '@react-three/drei';
 import type { BoardDefinition } from '../../../shared/boards/definitions';
 import {
+  COLOR_TOKENS,
   MATERIAL_PROPS,
   createMaterial3D,
 } from '../materials3d';
@@ -20,6 +21,18 @@ import { createLabelTexture } from '../labelTexture';
  */
 
 const PCB_HEIGHT = 1.2;
+
+/**
+ * Warna PCB arah segar (SPEK-WARNA-SEGAR §2): pcbColor asal definitions
+ * nyaris hitam (#23262b/#1f2733) — penyumbang kesan "tua" terbesar.
+ * Token pustaka menggantikannya di render; definitions.ts disinkronkan
+ * pada gelombang sapuan agar sumber kebenarannya tidak basi.
+ */
+const PCB_WARNA_SEGAR: Record<string, string> = {
+  esp32: COLOR_TOKENS.esp32Pcb,
+  nodemcu: COLOR_TOKENS.nodeMcuPcb,
+  pico: COLOR_TOKENS.picoPcb,
+};
 const HEADER_Y = 1.15;
 const PX_PER_UNIT = 46;
 
@@ -32,7 +45,7 @@ function createAntennaTexture(): THREE.CanvasTexture {
   return createLabelTexture(
     (ctx, w, h) => {
       ctx.clearRect(0, 0, w, h);
-      ctx.strokeStyle = 'rgba(205,150,80,0.95)';
+      ctx.strokeStyle = 'rgba(219,158,80,0.95)';
       ctx.lineWidth = Math.round(h * 0.13);
       ctx.lineCap = 'square';
       const top = h * 0.24;
@@ -177,9 +190,9 @@ interface ModuleLabelConfig {
 function createModuleLabelTexture(cfg: ModuleLabelConfig): THREE.CanvasTexture {
   return createLabelTexture(
     (ctx, w, h) => {
-      ctx.fillStyle = '#dde1e6';
+      ctx.fillStyle = '#e9edf2';
       ctx.fillRect(0, 0, w, h);
-      const ink = '#41474f';
+      const ink = '#3c4653';
       ctx.fillStyle = ink;
       ctx.strokeStyle = ink;
       ctx.textAlign = 'left';
@@ -376,7 +389,7 @@ export default function GenericBoard({ definition }: { definition: BoardDefiniti
   const castRef = useRef<THREE.InstancedMesh>(null);
   const baseGeometry = useMemo(() => new THREE.BoxGeometry(0.55, 0.9, 0.55), []);
   const baseMaterial = useMemo(
-    () => createMaterial3D('plastikHitam', { color: '#26262b' }),
+    () => createMaterial3D('plastikHitam', { color: COLOR_TOKENS.karetGelap }),
     [],
   );
   const pinGeometry = useMemo(() => new THREE.BoxGeometry(0.2, 0.5, 0.2), []);
@@ -444,7 +457,10 @@ export default function GenericBoard({ definition }: { definition: BoardDefiniti
         castShadow
         receiveShadow
       >
-        <meshPhysicalMaterial {...MATERIAL_PROPS.pcb} color={definition.pcbColor} />
+        <meshPhysicalMaterial
+          {...MATERIAL_PROPS.pcb}
+          color={PCB_WARNA_SEGAR[definition.id] ?? definition.pcbColor}
+        />
       </RoundedBox>
 
       {/* Lubang pemasangan di 4 sudut + sekrup metal berkepala slot minus */}

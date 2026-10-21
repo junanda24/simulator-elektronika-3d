@@ -85,7 +85,7 @@ const UNO_DEF: BoardDefinition = {
   logicRailNet: '5V',
   demoPinId: 'D13',
   demoPinNumber: 13,
-  pcbColor: '#0e7490',
+  pcbColor: '#00a6b0',
 };
 
 /* ---------------- ESP32 DevKit V1 (30 pin) ---------------- */
@@ -154,7 +154,7 @@ const ESP32_DEF: BoardDefinition = {
   logicRailNet: '3V3',
   demoPinId: 'D2',
   demoPinNumber: 2,
-  pcbColor: '#23262b',
+  pcbColor: '#22335c',
 };
 
 /* ---------------- NodeMCU ESP8266 (penyederhanaan silkscreen) ---------------- */
@@ -220,7 +220,7 @@ const NODEMCU_DEF: BoardDefinition = {
   // di simulator disederhanakan aktif-tinggi.
   demoPinId: 'D4',
   demoPinNumber: 4,
-  pcbColor: '#1f2733',
+  pcbColor: '#2b3a67',
 };
 
 /* ---------------- Raspberry Pi Pico (40 pin) ---------------- */
@@ -302,7 +302,7 @@ const PICO_DEF: BoardDefinition = {
   // 2026-10-21, klaim K13 terbukti). D15 = pin digital terakhir kolom kiri.
   demoPinId: 'D15',
   demoPinNumber: 15,
-  pcbColor: '#14632f',
+  pcbColor: '#1f9d4d',
 };
 
 export const BOARD_DEFINITIONS: Record<string, BoardDefinition> = {

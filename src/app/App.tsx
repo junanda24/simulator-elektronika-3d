@@ -14,6 +14,7 @@ import {
 } from '../features/share/projectShare';
 import CatalogPanel from './CatalogPanel';
 import ToolbarBar from './ToolbarBar';
+import { useExitPresence } from './useExitPresence';
 import { useUiSettings } from './uiSettings';
 import { useCircuitStore } from '../features/wiring/store/circuitStore';
 import { getComponentPlugin } from '../shared/components/registry';
@@ -154,7 +155,7 @@ function SettingsSwitch({
         }`}
       >
         <span
-          className={`absolute top-1/2 size-3.5 -translate-y-1/2 rounded-full transition-all ${
+          className={`absolute top-1/2 size-3.5 -translate-y-1/2 rounded-full transition-all duration-200 ease-[cubic-bezier(0.34,1.3,0.64,1)] ${
             checked ? 'left-[18px] bg-accent-primary' : 'left-[3px] bg-zinc-400'
           }`}
         />
@@ -246,6 +247,33 @@ export default function App() {
     openMenuRef.current = null;
     setOpenMenu(null);
   };
+
+  // --- Presence animasi keluar (useExitPresence) ---
+  // Elemen kondisional HUD tidak lagi lenyap mendadak: node ditahan
+  // 150–170ms dengan kelas .hud-exit/.hud-exit-slide sementara state
+  // sumbernya sudah mati. Konten dinamis dirender dari nilai terakhir
+  // (ref) selama exit agar tidak berkedip kosong.
+  const demoMenuP = useExitPresence(openMenu === 'demo', 150);
+  const proyekMenuP = useExitPresence(openMenu === 'proyek', 150);
+  const helpP = useExitPresence(helpOpen, 150);
+  const autopsyP = useExitPresence(autopsy !== null, 170);
+  const busyP = useExitPresence(simBusy, 160);
+  const placingP = useExitPresence(placingType !== null, 160);
+  const lastPlacingRef = useRef(placingType);
+  useEffect(() => {
+    if (placingType) lastPlacingRef.current = placingType;
+  }, [placingType]);
+  const deleteP = useExitPresence(deleteMode, 160);
+  const toastP = useExitPresence(shareNote !== null, 160);
+  const lastNoteRef = useRef(shareNote);
+  useEffect(() => {
+    if (shareNote) lastNoteRef.current = shareNote;
+  }, [shareNote]);
+  const pendingP = useExitPresence(pendingFrom !== null, 160);
+  const lastPendingRef = useRef(pendingFrom);
+  useEffect(() => {
+    if (pendingFrom) lastPendingRef.current = pendingFrom;
+  }, [pendingFrom]);
 
   useEffect(() => {
     if (mounted.current) return;
@@ -430,6 +458,12 @@ export default function App() {
 
   const selectedInstance = instances.find((i) => i.id === selectedInstanceId) ?? null;
   const selectedWire = wires.find((w) => w.id === selectedWireId) ?? null;
+  const wireP = useExitPresence(selectedWire !== null, 150);
+  const lastWireRef = useRef(selectedWire);
+  useEffect(() => {
+    if (selectedWire) lastWireRef.current = selectedWire;
+  }, [selectedWire]);
+  const shownWire = selectedWire ?? lastWireRef.current;
   const anyDamaged = instances.some((i) => i.simState.isDamaged);
   const hoverNet = hover ? netNameOf(hover.ref) : null;
   const hoverVolts = hoverNet !== null ? voltages[hoverNet] : undefined;
@@ -495,7 +529,11 @@ export default function App() {
     'shadow-[0_8px_32px_rgb(0_0_0/0.45),0_2px_8px_rgb(0_0_0/0.4)]';
   const menuItemClass =
     'flex h-9 w-full items-center rounded-lg px-3 text-left text-[13px] font-medium text-zinc-200 transition-colors hover:bg-panel-elevated active:scale-[0.98]';
-  const popoverClass = `hud-pop pointer-events-auto absolute z-[25] rounded-2xl border border-border-subtle bg-panel ${capsuleShadow}`;
+  const popoverClass = `hud-pop absolute z-[25] rounded-2xl border border-border-subtle bg-panel ${capsuleShadow}`;
+  // Kelas presence popover: hidup = pointer aktif; exit = .hud-exit +
+  // pointer mati agar klik meneruskan seketika (animasi tak menahan aksi).
+  const popoverPresence = (p: { exiting: boolean }) =>
+    p.exiting ? 'hud-exit pointer-events-none' : 'pointer-events-auto';
 
   return (
     <div className="relative h-[100dvh] overflow-hidden bg-panel">
@@ -583,7 +621,11 @@ export default function App() {
                 </>
               ) : (
                 <>
-                  <span className="relative inline-block size-3.5 shrink-0" aria-hidden="true">
+                  <span
+                    key={running ? 'berhenti' : 'jalankan'}
+                    className="hud-micro-pop relative inline-block size-3.5 shrink-0"
+                    aria-hidden="true"
+                  >
                     <span
                       className={`absolute inset-0 transition-opacity duration-150 ${running ? 'opacity-0' : 'opacity-100'}`}
                     >
@@ -613,7 +655,9 @@ export default function App() {
                       : 'bg-zinc-500'
                 }`}
               />
-              <span className="truncate whitespace-nowrap">{statusText}</span>
+              <span key={statusText} className="hud-fade-in truncate whitespace-nowrap">
+                {statusText}
+              </span>
             </div>
           </div>
         </div>
@@ -735,24 +779,36 @@ export default function App() {
             {/* Indikator proses sesi (simBusy): worker sedang memproses
                 perintah berat (transpile + solve) di belakang layar —
                 tanpa pill ini UI tampak diam/hang padahal sedang bekerja. */}
-            {simBusy && (
+            {busyP.mounted && (
               <div
                 role="status"
                 aria-live="polite"
-                className={`hud-pop pointer-events-none flex items-center gap-2 rounded-full border border-border-subtle bg-panel px-3.5 py-2 text-xs font-medium text-zinc-200 ${capsuleShadow}`}
+                className={`pointer-events-none flex items-center gap-2 rounded-full border border-border-subtle bg-panel px-3.5 py-2 text-xs font-medium text-zinc-200 ${capsuleShadow} ${
+                  busyP.exiting ? 'hud-exit' : 'hud-pop-breathe'
+                }`}
               >
                 <SpinnerIcon className="size-3.5 shrink-0 animate-spin text-accent-primary" />
                 Memproses…
               </div>
             )}
-            {placingType && (
-              <div className="hud-pop pointer-events-none rounded-full border border-accent-primary/50 bg-panel/90 px-3.5 py-2 text-xs font-medium text-accent-primary backdrop-blur-md">
+            {placingP.mounted && (
+              <div
+                className={`pointer-events-none rounded-full border border-accent-primary/50 bg-panel/90 px-3.5 py-2 text-xs font-medium text-accent-primary backdrop-blur-md ${
+                  placingP.exiting ? 'hud-exit' : 'hud-pop'
+                }`}
+              >
                 Mode pasang: klik lubang breadboard untuk menaruh{' '}
-                {getComponentPlugin(placingType)?.name ?? placingType} (Esc untuk batal)
+                {getComponentPlugin(lastPlacingRef.current ?? '')?.name ??
+                  lastPlacingRef.current}{' '}
+                (Esc untuk batal)
               </div>
             )}
-            {deleteMode && (
-              <div className="hud-pop pointer-events-none rounded-full border border-accent-danger/60 bg-panel/90 px-3.5 py-2 text-xs font-semibold text-red-200 backdrop-blur-md">
+            {deleteP.mounted && (
+              <div
+                className={`pointer-events-none rounded-full border border-accent-danger/60 bg-panel/90 px-3.5 py-2 text-xs font-semibold text-red-200 backdrop-blur-md ${
+                  deleteP.exiting ? 'hud-exit' : 'hud-pop'
+                }`}
+              >
                 Mode Hapus aktif — klik komponen atau kabel untuk menghapus (Esc keluar)
               </div>
             )}
@@ -762,19 +818,22 @@ export default function App() {
                 mengecat ulangnya (lihat InspectorPopover.tsx). */}
             <InspectorPopover />
 
-            {/* Popover inspector kabel */}
-            {selectedWire && (
+            {/* Popover inspector kabel (presence: keluar .hud-exit dari
+                data kabel terakhir; selama exit pointer-events mati) */}
+            {wireP.mounted && shownWire && (
               <div
-                className={`hud-pop pointer-events-auto w-full rounded-2xl border border-border-subtle bg-panel/95 p-3 ${capsuleShadow}`}
+                className={`w-full rounded-2xl border border-border-subtle bg-panel/95 p-3 ${capsuleShadow} ${
+                  wireP.exiting ? 'hud-exit pointer-events-none' : 'hud-pop pointer-events-auto'
+                }`}
               >
                 <h3 className="text-[13px] font-semibold text-zinc-100">Kabel Terpilih</h3>
                 <p className="mt-1 text-xs leading-relaxed text-zinc-400">
-                  {terminalLabel(selectedWire.a, getBoardDefinition(boardId))} →{' '}
-                  {terminalLabel(selectedWire.b, getBoardDefinition(boardId))}
+                  {terminalLabel(shownWire.a, getBoardDefinition(boardId))} →{' '}
+                  {terminalLabel(shownWire.b, getBoardDefinition(boardId))}
                 </p>
                 <button
                   type="button"
-                  onClick={() => removeWire(selectedWire.id)}
+                  onClick={() => removeWire(shownWire.id)}
                   className="mt-2.5 h-7 w-full rounded-lg border border-border-interactive text-xs font-medium text-zinc-200 transition-colors hover:border-accent-danger hover:text-red-200 active:scale-[0.97]"
                 >
                   Hapus Kabel
@@ -783,10 +842,11 @@ export default function App() {
             )}
 
             {/* AutopsyCard memposisikan dirinya absolute — slot menetralkannya
-                via CSS (.hud-autopsy-slot > section) agar mengalir dalam stack. */}
-            {autopsy && (
+                via CSS (.hud-autopsy-slot > section) agar mengalir dalam stack.
+                Slot ditahan presence App selama exit kartu berjalan. */}
+            {autopsyP.mounted && (
               <div className="hud-autopsy-slot pointer-events-auto relative z-40 w-full">
-                <AutopsyCard />
+                <AutopsyCard exiting={autopsyP.exiting} />
               </div>
             )}
           </div>
@@ -802,12 +862,15 @@ export default function App() {
         )}
 
         {/* Menu Demo */}
-        {openMenu === 'demo' && (
-          <div className={`${popoverClass} hud-pop-origin-tl left-3 top-[60px] w-52 p-1.5`} role="menu">
+        {demoMenuP.mounted && (
+          <div
+            className={`${popoverClass} ${popoverPresence(demoMenuP)} hud-pop-origin-tl left-3 top-[60px] w-52 p-1.5`}
+            role="menu"
+          >
             <button
               type="button"
               role="menuitem"
-              className={menuItemClass}
+              className={`${menuItemClass} hud-menu-item`}
               onClick={() => {
                 loadDemo();
                 setMenu(null);
@@ -818,7 +881,8 @@ export default function App() {
             <button
               type="button"
               role="menuitem"
-              className={`${menuItemClass} text-red-200 hover:bg-accent-danger/10`}
+              className={`${menuItemClass} hud-menu-item text-red-200 hover:bg-accent-danger/10`}
+              style={{ animationDelay: '35ms' }}
               onClick={() => {
                 clearAll();
                 setMenu(null);
@@ -830,12 +894,15 @@ export default function App() {
         )}
 
         {/* Menu Proyek */}
-        {openMenu === 'proyek' && (
-          <div className={`${popoverClass} hud-pop-origin-tr right-3 top-[60px] w-44 p-1.5`} role="menu">
+        {proyekMenuP.mounted && (
+          <div
+            className={`${popoverClass} ${popoverPresence(proyekMenuP)} hud-pop-origin-tr right-3 top-[60px] w-44 p-1.5`}
+            role="menu"
+          >
             <button
               type="button"
               role="menuitem"
-              className={menuItemClass}
+              className={`${menuItemClass} hud-menu-item`}
               onClick={() => {
                 handleExport();
                 setMenu(null);
@@ -846,7 +913,8 @@ export default function App() {
             <button
               type="button"
               role="menuitem"
-              className={menuItemClass}
+              className={`${menuItemClass} hud-menu-item`}
+              style={{ animationDelay: '35ms' }}
               onClick={() => {
                 setMenu(null);
                 importRef.current?.click();
@@ -858,9 +926,9 @@ export default function App() {
         )}
 
         {/* Popover bantuan "?" — satu rumah untuk semua referensi (§E) */}
-        {helpOpen && (
+        {helpP.mounted && (
           <div
-            className={`${popoverClass} hud-pop-origin-tr right-3 top-[60px] w-[350px] max-w-[calc(100vw-24px)] p-4`}
+            className={`${popoverClass} ${popoverPresence(helpP)} hud-pop-origin-tr right-3 top-[60px] w-[350px] max-w-[calc(100vw-24px)] p-4`}
             role="dialog"
             aria-label="Bantuan dan pintasan keyboard"
           >
@@ -948,17 +1016,23 @@ export default function App() {
 
         {/* Toast shareNote + pill petunjuk kabel, terpusat di atas dock bawah */}
         <div className="absolute bottom-[68px] left-[288px] right-[404px] z-50 flex flex-col items-center gap-2 max-[1279px]:left-[248px]">
-          {shareNote && (
+          {toastP.mounted && (
             <div
               role="status"
-              className={`hud-pop rounded-full border border-border-subtle bg-panel px-4 py-2 text-center text-xs text-zinc-200 ${capsuleShadow}`}
+              className={`rounded-full border border-border-subtle bg-panel px-4 py-2 text-center text-xs text-zinc-200 ${capsuleShadow} ${
+                toastP.exiting ? 'hud-exit-slide' : 'hud-content-enter'
+              }`}
             >
-              {shareNote}
+              {lastNoteRef.current}
             </div>
           )}
-          {pendingFrom && (
-            <div className="hud-pop rounded-full border border-accent-warning/50 bg-panel/90 px-3.5 py-2 text-xs font-medium text-accent-warning backdrop-blur-md">
-              Kabel dari {terminalDisplay(pendingFrom, boardId)} — klik terminal tujuan.
+          {pendingP.mounted && lastPendingRef.current && (
+            <div
+              className={`rounded-full border border-accent-warning/50 bg-panel/90 px-3.5 py-2 text-xs font-medium text-accent-warning backdrop-blur-md ${
+                pendingP.exiting ? 'hud-exit-slide' : 'hud-content-enter'
+              }`}
+            >
+              Kabel dari {terminalDisplay(lastPendingRef.current, boardId)} — klik terminal tujuan.
             </div>
           )}
         </div>

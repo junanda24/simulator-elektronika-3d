@@ -1,11 +1,26 @@
-import { useEffect, useMemo, useRef } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import * as THREE from 'three';
+import gsap from 'gsap';
 import { useFrame } from '@react-three/fiber';
 import { getBoardDefinition } from '../../../shared/boards/definitions';
 import { useCircuitStore } from '../store/circuitStore';
 import { terminalWorldPosition } from '../terminals';
 import type { WireConnection } from '../netlist';
 import CurrentFlowDots from '../../stage3d/effects/CurrentFlowDots';
+
+/** Gerbang reduced-motion proyek — pola sama dengan CameraRig/Smoke. */
+function prefersReducedMotion(): boolean {
+  return (
+    typeof window !== 'undefined' &&
+    typeof window.matchMedia === 'function' &&
+    window.matchMedia('(prefers-reduced-motion: reduce)').matches
+  );
+}
+
+/** Segmen tubular TubeGeometry kabel (harus sama dengan pemanggilan di bawah). */
+const TUBULAR_SEGMENTS = 40;
+/** Durasi efek menggambar kabel baru (detik) — pita micro-feedback. */
+const DRAW_DURATION_S = 0.25;
 
 /** Titik tengah melengkung untuk kabel dari A ke B (sama seperti render lama). */
 function wirePoints(
@@ -82,10 +97,60 @@ export default function WireMesh3D({ wire }: { wire: WireConnection }) {
   );
 
   const geometry = useMemo(
-    () => (curve ? new THREE.TubeGeometry(curve, 40, selected ? 0.21 : 0.16, 8, false) : null),
+    () => (curve ? new THREE.TubeGeometry(curve, TUBULAR_SEGMENTS, selected ? 0.21 : 0.16, 8, false) : null),
     [curve, selected],
   );
   useEffect(() => () => geometry?.dispose(), [geometry]);
+
+  // --- Efek menggambar (draw-on) untuk kabel BARU tersambung -----------
+  // TubeGeometry digambar bertahap lewat setDrawRange yang dimajukan per
+  // segmen tubular (depan gambar selalu utuh per penampang, bukan potongan
+  // segitiga acak): kemajuan 0→1 dalam 250 ms power2.out (entrance =
+  // decelerate) mengikuti kurva kabel dari ujung a ke ujung b. Titik aliran
+  // (CurrentFlowDots) baru tampil SETELAH gambar selesai. Reduced motion:
+  // perjalanan gambar adalah gerak Tier-1 — kabel langsung tampil utuh.
+  // Kemajuan hidup di ref & ditulis GSAP tanpa alokasi per frame; geometri
+  // yang berganti di tengah jalan (toggle seleksi mengubah radius tube)
+  // menerima ulang kemajuan terakhir lewat effect di bawah.
+  const drawRef = useRef({ t: 0 });
+  const geometryRef = useRef<THREE.BufferGeometry | null>(null);
+  const [drawDone, setDrawDone] = useState(false);
+
+  const applyDrawRange = useCallback(() => {
+    const geo = geometryRef.current;
+    if (!geo || !geo.index) return;
+    const t = drawRef.current.t;
+    if (t >= 1) {
+      geo.setDrawRange(0, Infinity);
+      return;
+    }
+    const perSegment = geo.index.count / TUBULAR_SEGMENTS;
+    geo.setDrawRange(0, Math.floor(t * TUBULAR_SEGMENTS) * perSegment);
+  }, []);
+
+  useEffect(() => {
+    geometryRef.current = geometry;
+    applyDrawRange();
+  }, [geometry, applyDrawRange]);
+
+  useEffect(() => {
+    if (prefersReducedMotion()) {
+      drawRef.current.t = 1;
+      applyDrawRange();
+      setDrawDone(true);
+      return undefined;
+    }
+    const tween = gsap.to(drawRef.current, {
+      t: 1,
+      duration: DRAW_DURATION_S,
+      ease: 'power2.out',
+      onUpdate: applyDrawRange,
+      onComplete: () => setDrawDone(true),
+    });
+    return () => {
+      tween.kill();
+    };
+  }, [applyDrawRange]);
 
   // Nama net kanonis kedua ujung + status jalur korslet. Memo ini HANYA
   // bergantung pada topologi & status fault — bukan tegangan — supaya
@@ -132,7 +197,7 @@ export default function WireMesh3D({ wire }: { wire: WireConnection }) {
           emissiveIntensity={thermal ? 0.6 : selected ? 0.35 : 0}
         />
       </mesh>
-      <WireFlowDots curve={curve} netA={netA} netB={netB} />
+      {drawDone && <WireFlowDots curve={curve} netA={netA} netB={netB} />}
     </group>
   );
 }

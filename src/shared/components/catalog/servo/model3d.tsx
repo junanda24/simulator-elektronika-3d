@@ -21,7 +21,7 @@ const WIRE_TOKENS = [
 /** Putih plastik tanduk — nilai incumbent file ini (benda asli setempat). */
 const HORN_WHITE = '#f2f3f5';
 /** Tinta stiker label — sama dengan tinta label relay (preseden gelombang 1). */
-const LABEL_INK = '#16233c';
+const LABEL_INK = '#1b2a47';
 /**
  * Shade gelap case untuk garis seam & leher poros: DITURUNKAN dari token
  * biru SG90 (Color Expert: encode the derivation), bukan hex karangan.

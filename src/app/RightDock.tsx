@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import SketchEditor from '../features/sketch/SketchEditor';
 import LessonsPanel from './LessonsPanel';
+import { useExitPresence } from './useExitPresence';
 import { useCircuitStore } from '../features/wiring/store/circuitStore';
 
 /**
@@ -37,6 +38,16 @@ export default function RightDock() {
 
   const pinEntries = Object.entries(pinStates);
 
+  // Banner error: presence keluar (.hud-exit) + guncangan mikro sekali
+  // tiap error BARU (banner di-key oleh teks error → error berbeda
+  // me-mount ulang dan mengguncang; error sama tidak mengulang).
+  const errP = useExitPresence(sketchError !== null, 150);
+  const lastErrorRef = useRef(sketchError);
+  useEffect(() => {
+    if (sketchError) lastErrorRef.current = sketchError;
+  }, [sketchError]);
+  const shownError = sketchError ?? lastErrorRef.current;
+
   // Baris yang disebut pesan error ("Baris 3: …") — editor menggambar
   // latar merah tipis pada baris itu agar kesalahan mudah ditemukan.
   const errorLineMatch = sketchError ? /Baris\s+(\d+)/.exec(sketchError) : null;
@@ -67,13 +78,16 @@ export default function RightDock() {
         ))}
       </div>
 
-      {sketchError && (
+      {errP.mounted && shownError && (
         <button
+          key={shownError}
           type="button"
           role="alert"
           onClick={() => setTab('kode')}
           title="Klik untuk membuka editor dan melihat baris yang salah"
-          className="mx-3 mt-3 flex shrink-0 items-start gap-2 rounded-md border border-accent-danger/50 bg-accent-danger/10 p-2.5 text-left transition-colors hover:bg-accent-danger/15"
+          className={`mx-3 mt-3 flex shrink-0 items-start gap-2 rounded-md border border-accent-danger/50 bg-accent-danger/10 p-2.5 text-left transition-colors hover:bg-accent-danger/15 ${
+            errP.exiting ? 'hud-exit pointer-events-none' : 'hud-shake'
+          }`}
         >
           <svg
             viewBox="0 0 24 24"
@@ -88,19 +102,19 @@ export default function RightDock() {
             <path d="M12 10v5" strokeLinecap="round" />
             <circle cx="12" cy="18" r="0.4" fill="currentColor" />
           </svg>
-          <span className="text-xs leading-relaxed text-red-200">{sketchError}</span>
+          <span className="text-xs leading-relaxed text-red-200">{shownError}</span>
         </button>
       )}
 
       {tab === 'panduan' ? (
         <LessonsPanel />
       ) : tab === 'kode' ? (
-        <div className="flex min-h-0 flex-1 flex-col">
+        <div className="hud-content-enter flex min-h-0 flex-1 flex-col">
           <div className="min-h-0 flex-1">
             <SketchEditor value={sketchCode} onChange={setSketchCode} errorLine={errorLine} execLine={currentLine} />
           </div>
           <div className="shrink-0 border-t border-border-subtle p-3">
-            <p className="mb-2 text-xs leading-relaxed text-zinc-400">
+            <p key={running ? 'jalan' : 'berhenti'} className="hud-fade-in mb-2 text-xs leading-relaxed text-zinc-400">
               {running
                 ? 'Sketch berjalan. Ubah kode, lalu tekan Jalankan Ulang untuk menerapkan.'
                 : 'Tekan Jalankan untuk menyalakan board dan menjalankan sketch.'}
@@ -130,7 +144,7 @@ export default function RightDock() {
                   {pinEntries.map(([pinId, state]) => (
                     <span
                       key={pinId}
-                      className="rounded border border-border-subtle bg-panel-elevated px-2 py-0.5 font-mono text-[11px] text-zinc-300"
+                      className="hud-fade-in rounded border border-border-subtle bg-panel-elevated px-2 py-0.5 font-mono text-[11px] text-zinc-300"
                     >
                       {pinId} · {state.mode}
                       {state.mode === 'OUTPUT' &&
@@ -144,7 +158,7 @@ export default function RightDock() {
                   {deadPins.map((pinId) => (
                     <span
                       key={pinId}
-                      className="rounded border border-accent-danger/50 bg-accent-danger/10 px-2 py-0.5 font-mono text-[11px] text-red-200"
+                      className="hud-fade-in rounded border border-accent-danger/50 bg-accent-danger/10 px-2 py-0.5 font-mono text-[11px] text-red-200"
                     >
                       {pinId} · MATI
                     </span>
@@ -164,7 +178,7 @@ export default function RightDock() {
           </div>
         </div>
       ) : (
-        <div className="flex min-h-0 flex-1 flex-col">
+        <div className="hud-content-enter flex min-h-0 flex-1 flex-col">
           <pre
             ref={serialRef}
             className="min-h-0 flex-1 overflow-y-auto whitespace-pre-wrap break-words p-3 font-mono text-xs leading-relaxed text-zinc-300"

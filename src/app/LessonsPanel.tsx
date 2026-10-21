@@ -1,6 +1,98 @@
+import { useEffect, useRef, useState } from 'react';
 import { LESSONS } from '../features/lessons/curriculum';
 import { getBoardDefinition } from '../shared/boards/definitions';
 import { useCircuitStore } from '../features/wiring/store/circuitStore';
+
+/**
+ * Baris daftar periksa: titik status meletup sekali (hud-check-pop,
+ * spring overshoot) tepat pada transisi belum→tuntas — bukan saat
+ * panel dibuka dengan butir yang memang sudah tuntas.
+ */
+function CheckRow({ done, label }: { done: boolean; label: string }) {
+  const prevDoneRef = useRef(done);
+  const [pop, setPop] = useState(false);
+  useEffect(() => {
+    const was = prevDoneRef.current;
+    prevDoneRef.current = done;
+    if (done && !was) {
+      setPop(true);
+      const t = window.setTimeout(() => setPop(false), 460);
+      return () => window.clearTimeout(t);
+    }
+  }, [done]);
+  return (
+    <li
+      className={`flex items-start gap-2 rounded-md border px-2.5 py-2 text-xs leading-relaxed transition-colors duration-300 ${
+        done
+          ? 'border-accent-run/40 bg-accent-run/10 text-zinc-200'
+          : 'border-border-subtle bg-panel-elevated text-zinc-400'
+      }`}
+    >
+      <span
+        className={`mt-0.5 inline-block size-2 shrink-0 rounded-full ${
+          done ? 'bg-accent-run' : 'bg-zinc-600'
+        } ${pop ? 'hud-check-pop' : ''}`}
+      />
+      {label}
+    </li>
+  );
+}
+
+/** Modul yang sudah dirayakan sesi ini — perayaan tidak berulang
+ *  setiap kali panel/pelajaran dibuka kembali. */
+const celebratedLessonIds = new Set<string>();
+
+/**
+ * Banner "Modul selesai!": perayaan terukur sekali per modul per sesi —
+ * banner berdenyut sekali + sapuan cahaya melintas (.hud-celebrate)
+ * dan centang menggambar dirinya (.hud-check-draw) sambil meletup
+ * (.hud-check-pop). Tanpa confetti; mati total di reduced-motion.
+ */
+function CompletionBanner({ lessonId }: { lessonId: string }) {
+  const [celebrating, setCelebrating] = useState(
+    () => !celebratedLessonIds.has(lessonId),
+  );
+  useEffect(() => {
+    if (!celebrating) return;
+    celebratedLessonIds.add(lessonId);
+    const t = window.setTimeout(() => setCelebrating(false), 1400);
+    return () => window.clearTimeout(t);
+  }, [celebrating, lessonId]);
+  return (
+    <div
+      className={`relative mt-3 overflow-hidden rounded-lg border border-accent-run/50 bg-accent-run/10 p-3 ${
+        celebrating ? 'hud-celebrate' : ''
+      }`}
+    >
+      <div className="flex items-center gap-2.5">
+        <span
+          className={`grid size-6 shrink-0 place-items-center rounded-full bg-accent-run text-[#032117] ${
+            celebrating ? 'hud-check-pop' : ''
+          }`}
+        >
+          <svg
+            viewBox="0 0 24 24"
+            className={`size-4 ${celebrating ? 'hud-check-draw' : ''}`}
+            fill="none"
+            stroke="currentColor"
+            strokeWidth={3}
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            aria-hidden="true"
+          >
+            <path pathLength={100} d="M4.5 12.5 10 18 19.5 6.5" />
+          </svg>
+        </span>
+        <div>
+          <p className="text-[13px] font-semibold text-accent-run">Modul selesai!</p>
+          <p className="mt-0.5 text-xs text-zinc-300">
+            Semua butir terpenuhi. Kembali ke daftar dan lanjutkan ke modul berikutnya.
+          </p>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 /**
  * Panel Panduan (mode Lesson): daftar modul kurikulum, materi, pemuat
@@ -22,7 +114,7 @@ export default function LessonsPanel() {
     <div className="flex min-h-0 flex-1 flex-col">
       <div className="min-h-0 flex-1 overflow-y-auto p-3">
         {!active ? (
-          <div className="space-y-2">
+          <div className="hud-content-enter space-y-2">
             <p className="text-xs leading-relaxed text-zinc-400">
               {LESSONS.length} modul terstruktur dari LED pertama sampai proyek
               akhir. Selesaikan berurutan atau lompat ke topik yang kamu
@@ -41,7 +133,7 @@ export default function LessonsPanel() {
                   key={lesson.id}
                   type="button"
                   onClick={() => setActiveLesson(lesson.id)}
-                  className="w-full rounded-lg border border-border-subtle bg-panel-elevated p-3 text-left transition-colors hover:border-zinc-500"
+                  className="w-full rounded-lg border border-border-subtle bg-panel-elevated p-3 text-left transition-[transform,border-color] duration-150 ease-[cubic-bezier(0.22,1,0.36,1)] hover:border-zinc-500 active:scale-[0.99]"
                 >
                   <div className="flex items-center gap-2">
                     <span className="font-mono text-[11px] text-zinc-400">
@@ -68,7 +160,7 @@ export default function LessonsPanel() {
             })}
           </div>
         ) : (
-          <div>
+          <div className="hud-content-enter">
             <button
               type="button"
               onClick={() => setActiveLesson(null)}
@@ -108,36 +200,12 @@ export default function LessonsPanel() {
               Daftar Periksa
             </p>
             <ul className="mt-2 space-y-1.5">
-              {active.assertions.map((assertion, i) => {
-                const done = lessonChecks[i] ?? false;
-                return (
-                  <li
-                    key={i}
-                    className={`flex items-start gap-2 rounded-md border px-2.5 py-2 text-xs leading-relaxed ${
-                      done
-                        ? 'border-accent-run/40 bg-accent-run/10 text-zinc-200'
-                        : 'border-border-subtle bg-panel-elevated text-zinc-400'
-                    }`}
-                  >
-                    <span
-                      className={`mt-0.5 inline-block size-2 shrink-0 rounded-full ${
-                        done ? 'bg-accent-run' : 'bg-zinc-600'
-                      }`}
-                    />
-                    {assertion.label}
-                  </li>
-                );
-              })}
+              {active.assertions.map((assertion, i) => (
+                <CheckRow key={i} done={lessonChecks[i] ?? false} label={assertion.label} />
+              ))}
             </ul>
 
-            {allDone && (
-              <div className="mt-3 rounded-lg border border-accent-run/50 bg-accent-run/10 p-3">
-                <p className="text-[13px] font-semibold text-accent-run">Modul selesai!</p>
-                <p className="mt-0.5 text-xs text-zinc-300">
-                  Semua butir terpenuhi. Kembali ke daftar dan lanjutkan ke modul berikutnya.
-                </p>
-              </div>
-            )}
+            {allDone && <CompletionBanner lessonId={active.id} />}
           </div>
         )}
       </div>

@@ -127,7 +127,7 @@ export default function CatalogPanel() {
             type="button"
             aria-pressed={tab === 'semua' && !normalizedQuery}
             onClick={() => pickTab('semua')}
-            className={`h-7 shrink-0 rounded-full border px-2.5 text-[11px] font-medium transition-colors ${
+            className={`h-7 shrink-0 rounded-full border px-2.5 text-[11px] font-medium transition-[color,background-color,border-color,transform] active:scale-[0.96] ${
               tab === 'semua' && !normalizedQuery
                 ? 'border-accent-primary/60 bg-accent-primary/15 text-accent-primary'
                 : 'border-border-subtle text-zinc-400 hover:border-zinc-500 hover:text-zinc-200'
@@ -141,7 +141,7 @@ export default function CatalogPanel() {
               type="button"
               aria-pressed={tab === category && !normalizedQuery}
               onClick={() => pickTab(category)}
-              className={`h-7 shrink-0 rounded-full border px-2.5 text-[11px] font-medium transition-colors ${
+              className={`h-7 shrink-0 rounded-full border px-2.5 text-[11px] font-medium transition-[color,background-color,border-color,transform] active:scale-[0.96] ${
                 tab === category && !normalizedQuery
                   ? 'border-accent-primary/60 bg-accent-primary/15 text-accent-primary'
                   : 'border-border-subtle text-zinc-400 hover:border-zinc-500 hover:text-zinc-200'
@@ -166,7 +166,7 @@ export default function CatalogPanel() {
             )}
           </p>
         ) : (
-          <div className="space-y-4">
+          <div key={tab} className="hud-content-enter space-y-4">
             {groups.map((group) => (
               <div key={group.category}>
                 <h3 className="px-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-zinc-400">
@@ -188,9 +188,9 @@ export default function CatalogPanel() {
                         title={`${meta.name} — ${meta.descriptionId}`}
                         aria-pressed={active}
                         onClick={() => setPlacing(active ? null : meta.type)}
-                        className={`flex h-[88px] flex-col items-center justify-center rounded-lg border px-1.5 py-1.5 text-center transition-[transform,border-color,background-color] duration-200 ease-[cubic-bezier(0.22,1,0.36,1)] active:scale-[0.97] active:duration-[120ms] ${
+                        className={`flex h-[88px] flex-col items-center justify-center rounded-lg border px-1.5 py-1.5 text-center transition-[transform,border-color,background-color,box-shadow] duration-200 ease-[cubic-bezier(0.34,1.3,0.64,1)] hover:-translate-y-[2px] hover:shadow-[0_6px_16px_rgb(0_0_0/0.35)] active:scale-[0.97] active:duration-[120ms] ${
                           active
-                            ? 'border-accent-primary bg-accent-primary/10'
+                            ? 'tile-pulse border-accent-primary bg-accent-primary/10'
                             : 'border-[#5B6478] bg-panel-elevated hover:border-zinc-400'
                         }`}
                       >

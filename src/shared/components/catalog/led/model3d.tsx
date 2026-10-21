@@ -5,6 +5,7 @@ import {
   COLOR_TOKENS,
   MATERIAL_PROPS,
 } from '../../../../features/stage3d/materials3d';
+import { GlowHalo } from '../../../../features/stage3d/effects/GlowHalo';
 
 /**
  * Warna LED dari token fungsional terkunci (SPESIFIKASI-GAYA-3D §4:
@@ -97,8 +98,9 @@ const BOND_WIRE_GEOMETRY = createBondWireGeometry();
  * yang terlihat menembus epoxy kelas epoxyLed (transparansi palsu
  * 0,55–0,75 tanpa transmission): cangkir reflektor/anvil besar di kaki
  * katoda, post kecil anoda, die + kawat bond emas di antaranya.
- * Perilaku menyala TIDAK berubah: emissive mengikuti arus cabang 'led'
- * (flange 0,7×, badan 1,4×) + pointLight; rusak = epoxy gosong gelap.
+ * Perilaku menyala: emissive mengikuti arus cabang 'led' (flange 1,1×,
+ * badan 3,0× — wilayah HDR untuk Bloom) + halo sprite additive +
+ * pointLight tumpahan; rusak = epoxy gosong gelap tanpa cahaya apa pun.
  */
 export const LedRender3D: ComponentType<ComponentRenderProps> = ({ instance }) => {
   const colorName = typeof instance.props.color === 'string' ? instance.props.color : 'red';
@@ -160,27 +162,36 @@ export const LedRender3D: ComponentType<ComponentRenderProps> = ({ instance }) =
           {...MATERIAL_PROPS.epoxyLed}
           color={domeColor}
           emissive={damaged ? '#000000' : baseColor}
-          emissiveIntensity={damaged ? 0 : intensity * 0.7}
+          emissiveIntensity={damaged ? 0 : intensity * 1.1}
         />
       </mesh>
 
-      {/* Badan + kubah menyatu — epoxy kelas epoxyLed dari pustaka */}
+      {/* Badan + kubah menyatu — epoxy kelas epoxyLed dari pustaka.
+          Faktor emissive 3,0 (gelombang "efek hidup"): pada arus penuh
+          (intensity 1,5) emissive mencapai 4,5 — wilayah HDR yang
+          tertangkap Bloom, bukan sekadar ganti warna permukaan. */}
       <mesh geometry={BODY_GEOMETRY} position={[0, 1.65, 0]} castShadow>
         <meshPhysicalMaterial
           {...MATERIAL_PROPS.epoxyLed}
           color={domeColor}
           emissive={damaged ? '#000000' : baseColor}
-          emissiveIntensity={damaged ? 0 : intensity * 1.4}
+          emissiveIntensity={damaged ? 0 : intensity * 3}
         />
       </mesh>
 
-      {/* Cahaya titik saat LED menyala */}
+      {/* Halo cahaya di sekitar kubah — kesan cahaya bocor ke udara;
+          mati total saat arus ~0 atau LED rusak (di dalam GlowHalo). */}
+      {!damaged && <GlowHalo color={baseColor} drive={intensity / 1.5} position={[0, 3.3, 0]} />}
+
+      {/* Cahaya titik saat LED menyala — tumpahan ke breadboard &
+          tetangga: jarak diperlebar 5 → 16 satuan dan intensitas
+          diskalakan dari arus nyata (maks 82 pada arus penuh). */}
       {!damaged && intensity > 0.05 && (
         <pointLight
           position={[0, 3.2, 0]}
           color={baseColor}
-          intensity={intensity * 30}
-          distance={5}
+          intensity={intensity * 55}
+          distance={16}
           decay={2}
         />
       )}

@@ -3,6 +3,7 @@ import * as THREE from 'three';
 import gsap from 'gsap';
 import { Canvas, useThree, type ThreeEvent } from '@react-three/fiber';
 import { ContactShadows, OrbitControls } from '@react-three/drei';
+import { EffectComposer, Bloom } from '@react-three/postprocessing';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import type { OrbitControls as OrbitControlsImpl } from 'three-stdlib';
 import Breadboard from './Breadboard';
@@ -266,10 +267,11 @@ function CameraRig({ resetSignal }: { resetSignal: number }) {
  * semua material metalness tinggi & clearcoat (kaki komponen, kaleng
  * motor, epoxy LED, PCB) tidak punya apa-apa untuk dipantulkan selain
  * dua lampu → logam datar & plastik "render mentah".
- * environmentIntensity 0,6 (tengah rentang riset 0,55–0,75; titik tengah
- * konservatif agar rig lampu & ContactShadows yang ada tidak berubah
- * karakter). Cleanup memulihkan environment sebelumnya dan me-dispose
- * render target, PMREM generator, serta geometri/material scene ruangan.
+ * environmentIntensity 0,85 (SPEK-WARNA-SEGAR §4: dinaikkan dari 0,6 —
+ * pantulan studio lebih hadir agar permukaan terasa hidup di panggung
+ * terang; hanya NILAI yang berubah, mekanisme PMREM tetap). Cleanup
+ * memulihkan environment sebelumnya dan me-dispose render target, PMREM
+ * generator, serta geometri/material scene ruangan.
  */
 function SceneEnvironment() {
   const gl = useThree((s) => s.gl);
@@ -281,7 +283,7 @@ function SceneEnvironment() {
     const previousEnvironment = scene.environment;
     const previousIntensity = scene.environmentIntensity;
     scene.environment = renderTarget.texture;
-    scene.environmentIntensity = 0.6;
+    scene.environmentIntensity = 0.85;
     return () => {
       scene.environment = previousEnvironment;
       scene.environmentIntensity = previousIntensity;
@@ -519,14 +521,16 @@ export default function Workbench({ resetSignal }: { resetSignal: number }) {
       camera={{ position: CAMERA_HOME.toArray(), fov: 45, near: 0.5, far: 600 }}
       style={{ position: 'absolute', inset: 0 }}
     >
-      <color attach="background" args={['#10131a']} />
-      <fog attach="fog" args={['#10131a', 190, 380]} />
+      {/* Palet adegan SPEK-WARNA-SEGAR §4: panggung kertas hangat terang
+          ala A0 (bukan lagi dunia basement #10131a) */}
+      <color attach="background" args={['#f0ebdf']} />
+      <fog attach="fog" args={['#f0ebdf', 230, 430]} />
       <SceneEnvironment />
 
-      <ambientLight intensity={0.55} />
+      <ambientLight intensity={0.8} />
       <directionalLight
         position={[34, 55, 24]}
-        intensity={1.6}
+        intensity={1.5}
         castShadow
         shadow-mapSize-width={1024}
         shadow-mapSize-height={1024}
@@ -535,13 +539,13 @@ export default function Workbench({ resetSignal }: { resetSignal: number }) {
         shadow-camera-top={80}
         shadow-camera-bottom={-80}
       />
-      <directionalLight position={[-30, 28, -36]} intensity={0.35} />
+      <directionalLight position={[-30, 28, -36]} intensity={0.55} />
 
       <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0, 0]} receiveShadow>
         <planeGeometry args={[420, 420]} />
-        <meshStandardMaterial color="#0f241d" roughness={1} />
+        <meshStandardMaterial color="#146356" roughness={1} />
       </mesh>
-      <gridHelper args={[420, 210, '#18382d', '#18382d']} position={[0, 0.02, 0]} />
+      <gridHelper args={[420, 210, '#2e8b74', '#2e8b74']} position={[0, 0.02, 0]} />
       {/* Bayangan kontak lembut tepat di bawah board & breadboard (tanpa HDR eksternal).
           frames={1}: bayangan kontak dibakar SEKALI (board & breadboard statis);
           default drei me-render pass kedalaman seluruh scene TIAP frame — pajak
@@ -568,6 +572,26 @@ export default function Workbench({ resetSignal }: { resetSignal: number }) {
         maxDistance={120}
       />
       <CameraRig resetSignal={resetSignal} />
+
+      {/* BLOOM (gelombang "efek hidup"): tanpa ini emissive hanya mewarnai
+          permukaan sendiri — tidak ada permukaan yang BERCAHAYA. Composer
+          bekerja di buffer HalfFloat (bawaan v3) dan tone mapping ACES
+          proyek diterapkan di pass akhir, jadi watak warna adegan tidak
+          berubah; yang berubah hanya elemen HDR yang berbunga.
+          luminanceThreshold 0,9 + smoothing 0,35: permukaan difus adegan
+          (puncak ±0,9 dari lampu arah + IBL) tetap di bawah lutut,
+          sementara emissive elemen menyala yang didorong ke ≥1,2–4,5
+          tertangkap. mipmapBlur = bunga lembut bertingkat murah;
+          multisampling 4 menjaga tepi tetap antialias di WebGL2. */}
+      <EffectComposer multisampling={4}>
+        <Bloom
+          mipmapBlur
+          intensity={0.8}
+          luminanceThreshold={0.9}
+          luminanceSmoothing={0.35}
+          radius={0.75}
+        />
+      </EffectComposer>
     </Canvas>
   );
 }

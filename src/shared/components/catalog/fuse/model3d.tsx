@@ -114,7 +114,7 @@ export const FuseRender3D: ComponentType<ComponentRenderProps> = ({ instance }) 
       ) : (
         <>
           <mesh geometry={COIL_INTACT}>
-            <meshPhysicalMaterial {...MATERIAL_PROPS.metalPin} color="#9aa1ab" />
+            <meshPhysicalMaterial {...MATERIAL_PROPS.metalPin} color="#b0b8c2" />
           </mesh>
           {/* Ekor lurus dari ujung koil masuk ke dalam cap */}
           {[-1, 1].map((side) => (
@@ -124,7 +124,7 @@ export const FuseRender3D: ComponentType<ComponentRenderProps> = ({ instance }) 
               rotation={[Math.PI / 2, 0, 0]}
             >
               <cylinderGeometry args={[WIRE_RADIUS, WIRE_RADIUS, 0.3, 6]} />
-              <meshPhysicalMaterial {...MATERIAL_PROPS.metalPin} color="#9aa1ab" />
+              <meshPhysicalMaterial {...MATERIAL_PROPS.metalPin} color="#b0b8c2" />
             </mesh>
           ))}
         </>

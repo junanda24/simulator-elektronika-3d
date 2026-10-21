@@ -1,4 +1,5 @@
 import type { ComponentPlugin } from '../types';
+import { withInstanceMotion } from '../../features/stage3d/effects/InstanceMotion';
 import { resistorPlugin } from './catalog/resistor';
 import { ledPlugin } from './catalog/led';
 import { pushButtonPlugin } from './catalog/push-button';
@@ -24,8 +25,14 @@ import { tiltSwitchPlugin } from './catalog/tilt-switch';
  * Single source of truth seluruh komponen (ARCHITECTURE.md §1.3).
  * Menambah komponen = buat folder catalog/<slug> + daftarkan di sini.
  * Core (solver, stage, wiring) tidak pernah menyebut nama komponen.
+ *
+ * Setiap Render3D dibungkus shell gerak InstanceMotion (animasi masuk
+ * settle + cincin denyut saat terpilih). Pembungkusan hidup di sini —
+ * satu-satunya titik yang dilewati semua render instance — agar file
+ * Workbench & model tidak perlu tahu soal animasi; ghost penempatan
+ * dikenali shell dari keanggotaan store dan dirender polos.
  */
-export const COMPONENT_REGISTRY: ComponentPlugin[] = [
+const RAW_COMPONENT_REGISTRY: ComponentPlugin[] = [
   resistorPlugin,
   ledPlugin,
   pushButtonPlugin,
@@ -47,6 +54,10 @@ export const COMPONENT_REGISTRY: ComponentPlugin[] = [
   fusePlugin,
   tiltSwitchPlugin,
 ];
+
+export const COMPONENT_REGISTRY: ComponentPlugin[] = RAW_COMPONENT_REGISTRY.map(
+  (plugin) => ({ ...plugin, Render3D: withInstanceMotion(plugin.Render3D) }),
+);
 
 const BY_TYPE = new Map(COMPONENT_REGISTRY.map((p) => [p.type, p]));
 

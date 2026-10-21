@@ -210,7 +210,7 @@ export const SoilMoistureRender3D: ComponentType<ComponentRenderProps> = ({
         castShadow
         onPointerDown={handlePointerDown}
       >
-        <meshPhysicalMaterial {...MATERIAL_PROPS.pcb} color="#1d4ed8" />
+        <meshPhysicalMaterial {...MATERIAL_PROPS.pcb} color="#2470e0" />
       </RoundedBox>
       {/* Silkscreen putih di permukaan atas papan */}
       <mesh position={[0, 1.235, 0]} rotation={[-Math.PI / 2, 0, 0]}>
@@ -247,7 +247,7 @@ export const SoilMoistureRender3D: ComponentType<ComponentRenderProps> = ({
       {/* Trimpot biru bersekrup kuningan beralur */}
       <group position={[-0.65, 0, 0.75]}>
         <RoundedBox args={[0.95, 0.5, 0.95]} radius={0.06} smoothness={4} position={[0, 1.48, 0]} castShadow>
-          <meshPhysicalMaterial {...MATERIAL_PROPS.absWarna} color="#2563eb" />
+          <meshPhysicalMaterial {...MATERIAL_PROPS.absWarna} color="#2470e0" />
         </RoundedBox>
         <mesh position={[0, 1.75, 0]} castShadow>
           <cylinderGeometry args={[0.28, 0.28, 0.09, 20]} />
@@ -301,7 +301,7 @@ export const SoilMoistureRender3D: ComponentType<ComponentRenderProps> = ({
 
       {/* Palang pangkal garpu (PCB biru) + dua lubang pemasangan */}
       <RoundedBox args={[1.9, 0.25, 1.5]} radius={0.07} smoothness={4} position={[0, -0.15, 0]} castShadow>
-        <meshPhysicalMaterial {...MATERIAL_PROPS.pcb} color="#1d4ed8" />
+        <meshPhysicalMaterial {...MATERIAL_PROPS.pcb} color="#2470e0" />
       </RoundedBox>
       {([-0.6, 0.6] as const).map((x) => (
         <mesh key={`hole-${x}`} position={[x, -0.15, 0.45]}>
@@ -315,7 +315,7 @@ export const SoilMoistureRender3D: ComponentType<ComponentRenderProps> = ({
       {([-0.6, 0.6] as const).map((x) => (
         <group key={`prong-${x}`} position={[x, 0, 0]}>
           <mesh geometry={prongGeometry} position={[0, -2.62, 0]} castShadow>
-            <meshPhysicalMaterial {...MATERIAL_PROPS.pcb} color="#1d4ed8" />
+            <meshPhysicalMaterial {...MATERIAL_PROPS.pcb} color="#2470e0" />
           </mesh>
           {([-1, 1] as const).map((face) => (
             <group key={`gold-${face}`}>

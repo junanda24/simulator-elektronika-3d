@@ -345,7 +345,7 @@ export default function UnoBoard({ position = [0, 0, 0] }: UnoBoardProps) {
       <mesh position={[-8.6, PCB_TOP_Y + 0.13, 8.35]}>
         <boxGeometry args={[0.55, 0.26, 0.55]} />
         <meshStandardMaterial
-          color="#0d3a1c"
+          color="#0f5130"
           emissive={COLOR_TOKENS.ledGreen}
           emissiveIntensity={1.6}
           roughness={0.4}
@@ -381,7 +381,7 @@ export default function UnoBoard({ position = [0, 0, 0] }: UnoBoardProps) {
         <group key={cz} position={[cx, 0, cz]}>
           <mesh position={[0, 1.5, 0]} castShadow>
             <cylinderGeometry args={[1.1, 1.1, 2.4, 24]} />
-            <meshPhysicalMaterial {...MATERIAL_PROPS.plastikHitam} color="#23252b" />
+            <meshPhysicalMaterial {...MATERIAL_PROPS.plastikHitam} color={COLOR_TOKENS.karetGelap} />
           </mesh>
           <mesh position={[0, 2.72, 0]}>
             <cylinderGeometry args={[1.02, 1.02, 0.08, 24]} />

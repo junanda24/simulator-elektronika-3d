@@ -16,8 +16,8 @@ import { COLOR_TOKENS, MATERIAL_PROPS } from '../../../../features/stage3d/mater
  * digeser); konstanta di bawah hanya warna benda asli setempat.
  */
 const TERMINAL_BLUE = '#0f5fc0';
-const PCB_GREEN = '#15803d';
-const LABEL_INK = '#16233c';
+const PCB_GREEN = '#1ca64e';
+const LABEL_INK = '#1b2a47';
 
 /** Posisi kaki sesuai pin elektrik: kolom koil x=-1.5, kolom kontak x=+1.5. */
 const LEG_POSITIONS: Array<[number, number]> = [
@@ -274,7 +274,7 @@ export const RelayRender3D: ComponentType<ComponentRenderProps> = ({ instance })
       <group position={[-3.15, 1.0, 1.75]}>
         <mesh position={[0, 0.4, 0]} castShadow>
           <cylinderGeometry args={[0.35, 0.35, 0.8, 24]} />
-          <meshPhysicalMaterial {...MATERIAL_PROPS.plastikHitam} color="#1e3a8a" />
+          <meshPhysicalMaterial {...MATERIAL_PROPS.plastikHitam} color="#2456c8" />
         </mesh>
         <mesh position={[0, 0.81, 0]}>
           <cylinderGeometry args={[0.33, 0.33, 0.03, 24]} />
@@ -294,7 +294,7 @@ export const RelayRender3D: ComponentType<ComponentRenderProps> = ({ instance })
           color="#ff2a2a"
           roughness={0.3}
           emissive="#ff2a2a"
-          emissiveIntensity={active ? 2.2 : 0.04}
+          emissiveIntensity={active ? 3.8 : 0.04}
         />
       </mesh>
       {active && (

@@ -155,7 +155,7 @@ export const SevenSegmentRender3D: ComponentType<ComponentRenderProps> = ({ inst
             color={SEGMENT_OFF}
             roughness={0.4}
             emissive={SEGMENT_ON}
-            emissiveIntensity={intensityOf(seg.key) * 2.4}
+            emissiveIntensity={intensityOf(seg.key) * 4.5}
           />
         </mesh>
       ))}
@@ -167,7 +167,7 @@ export const SevenSegmentRender3D: ComponentType<ComponentRenderProps> = ({ inst
           color={SEGMENT_OFF}
           roughness={0.4}
           emissive={SEGMENT_ON}
-          emissiveIntensity={intensityOf('dp') * 2.4}
+          emissiveIntensity={intensityOf('dp') * 4.5}
         />
       </mesh>
 
@@ -192,8 +192,8 @@ export const SevenSegmentRender3D: ComponentType<ComponentRenderProps> = ({ inst
         <pointLight
           position={[0, 2.4, 0]}
           color="#ff2a2a"
-          intensity={peakFrac * 5}
-          distance={5}
+          intensity={peakFrac * 16}
+          distance={14}
           decay={2}
         />
       )}

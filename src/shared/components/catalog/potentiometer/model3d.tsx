@@ -79,7 +79,7 @@ export const PotentiometerRender3D: ComponentType<ComponentRenderProps> = ({
         width: 512,
         height: 176,
         lines: [{ text: formatPotValue(totalOhms), fontSize: 104 }],
-        color: '#26282c',
+        color: COLOR_TOKENS.karetGelap,
       }),
     [totalOhms],
   );

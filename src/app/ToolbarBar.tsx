@@ -114,7 +114,7 @@ export default function ToolbarBar() {
   };
 
   const iconButton =
-    'flex size-10 shrink-0 items-center justify-center rounded-full border border-[#5B6478]/60 text-zinc-200 transition-all hover:border-[#5B6478] hover:text-zinc-50 active:scale-95 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:border-[#5B6478]/60 disabled:active:scale-100';
+    'flex size-10 shrink-0 items-center justify-center rounded-full border border-[#5B6478]/60 text-zinc-200 transition-all duration-150 ease-[cubic-bezier(0.22,1,0.36,1)] hover:border-[#5B6478] hover:text-zinc-50 active:scale-95 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:border-[#5B6478]/60 disabled:active:scale-100';
 
   return (
     <div className="pointer-events-auto mx-auto flex h-12 w-fit max-w-full items-center gap-2 overflow-x-auto rounded-full border border-border-subtle bg-panel/90 px-2.5 shadow-[0_8px_32px_rgb(0_0_0/0.45),0_2px_8px_rgb(0_0_0/0.4)] backdrop-blur-md [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
@@ -135,7 +135,7 @@ export default function ToolbarBar() {
               }`}
             >
               <span
-                className={`flex size-6 items-center justify-center rounded-full border-2 text-[10px] font-bold text-white/90 transition-transform [text-shadow:0_1px_2px_rgb(0_0_0/0.45)] ${
+                className={`flex size-6 items-center justify-center rounded-full border-2 text-[10px] font-bold text-white/90 transition-transform duration-200 ease-[cubic-bezier(0.34,1.3,0.64,1)] [text-shadow:0_1px_2px_rgb(0_0_0/0.45)] ${
                   active ? 'scale-110 border-accent-primary' : 'border-white/15'
                 }`}
                 style={{ backgroundColor: c.hex }}

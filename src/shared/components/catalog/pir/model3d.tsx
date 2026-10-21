@@ -13,7 +13,7 @@ import { COLOR_TOKENS, MATERIAL_PROPS } from '../../../../features/stage3d/mater
  * PCB = kelas pcb, plastik warna = kelas absWarna, chip & kapasitor
  * = kelas plastikHitam. Konstanta di bawah hanya WARNA benda asli.
  */
-const PCB_GREEN = '#15803d';
+const PCB_GREEN = '#1ca64e';
 const DOME_WHITE = '#f4f1ea';
 const TRIMMER_ORANGE = '#f07d1a';
 
@@ -146,7 +146,7 @@ export const PirRender3D: ComponentType<ComponentRenderProps> = ({ instance, onI
     const mat = domeMatRef.current;
     if (!mat) return;
     mat.emissiveIntensity = motionRef.current
-      ? 0.6 + 0.4 * Math.sin(clock.elapsedTime * 6)
+      ? 1.0 + 0.6 * Math.sin(clock.elapsedTime * 6)
       : 0;
   });
 
@@ -179,7 +179,7 @@ export const PirRender3D: ComponentType<ComponentRenderProps> = ({ instance, onI
       {[-1.45, 1.45].map((x) => (
         <mesh key={`hole-${x}`} position={[x, 0.79, 0]}>
           <cylinderGeometry args={[0.13, 0.13, 0.32, 20]} />
-          <meshStandardMaterial color="#0b2013" roughness={0.9} />
+          <meshStandardMaterial color="#0e2a1a" roughness={0.9} />
         </mesh>
       ))}
 
@@ -241,7 +241,7 @@ export const PirRender3D: ComponentType<ComponentRenderProps> = ({ instance, onI
           <meshStandardMaterial
             color="#ef4444"
             emissive="#ef4444"
-            emissiveIntensity={motion ? 1.6 : 0.05}
+            emissiveIntensity={motion ? 3.6 : 0.05}
             roughness={0.3}
           />
         </mesh>

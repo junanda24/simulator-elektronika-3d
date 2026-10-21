@@ -10,11 +10,14 @@ import * as THREE from 'three';
  * - §3: parameter PBR per kelas material (roughness / metalness /
  *   clearcoat / clearcoatRoughness) — nilai di bawah adalah titik tengah
  *   rentang tabel; jangan mengarang angka baru di file komponen.
- * - §4: basis warna = warna benda asli; hue warna FUNGSIONAL (gelang
- *   resistor, kabel servo, rel breadboard, warna LED, teal Uno, biru
- *   relay) DILARANG digeser. Token di COLOR_TOKENS dipanen dari nilai
- *   yang sudah terbukti di kode (resistor/servo/LED/breadboard) dan dari
- *   benda aslinya; file komponen TIDAK BOLEH memakai hex liar baru.
+ * - §4 (DIPERBARUI 2026-10-21 sore — SPEK-WARNA-SEGAR.md): batas lama
+ *   "saturasi hanya +10–15%" DIBATALKAN user untuk warna badan/obyek
+ *   (terasa tua/kusam); arah kini SEGAR & MUDA — lightness badan diangkat
+ *   ke pita ±35–65% dan chroma ke wilayah vivid bersih, hue tetap.
+ *   Hue warna FUNGSIONAL (gelang resistor, kabel servo, rel breadboard,
+ *   warna LED) tetap TERKUNCI maknanya: boleh lebih jenuh/terang, tidak
+ *   digeser. Token di COLOR_TOKENS adalah satu-satunya sumber nilai;
+ *   file komponen TIDAK BOLEH memakai hex liar baru.
  * - Color Expert (token graph): file ini = lapisan REFERENCE token;
  *   komponen mengonsumsi token/factory, bukan literal.
  *
@@ -68,18 +71,18 @@ export type MaterialClass3D = keyof typeof MATERIAL_PARAMS;
  * TERKUNCI: jangan digeser, jangan diganti varian "lebih cantik".
  */
 export const COLOR_TOKENS = {
-  // — Fungsional (terkunci) —
-  /** Gelang resistor EIA 0–9, dipanen dari resistor/model3d.tsx */
+  // — Fungsional (hue terkunci; nilai per SPEK-WARNA-SEGAR §2) —
+  /** Gelang resistor EIA 0–9 — standar internasional, TIDAK diubah */
   resistorBands: [
     '#000000', '#7a3b1e', '#d42a1e', '#e07b24', '#f2c618',
     '#2e9e4f', '#2456c8', '#7a3fa0', '#8a8f98', '#f2f2f2',
   ],
   resistorGold: '#c9a227',
   /** Kabel servo SG90: cokelat (GND) / merah (VCC) / oranye (SIG) */
-  servoWireBrown: '#7c4a21',
-  servoWireRed: '#d43a2f',
+  servoWireBrown: '#8a5a2b',
+  servoWireRed: '#e0402f',
   servoWireOrange: '#f59e0b',
-  /** Rel breadboard MB-102 */
+  /** Rel breadboard MB-102 — standar +/−, TIDAK diubah */
   breadboardRailPlus: '#d42a1e',
   breadboardRailMinus: '#2456c8',
   /** Warna cahaya LED (dari led/model3d.tsx) */
@@ -88,31 +91,41 @@ export const COLOR_TOKENS = {
   ledGreen: '#22ff66',
   ledBlue: '#2266ff',
   ledWhite: '#f5f5f5',
-  /** Teal PCB Arduino Uno asli */
-  unoTeal: '#008184',
-  /** Biru badan relay Songle SRD */
-  relayBlue: '#1d6fd1',
-  /** Biru case servo SG90 */
-  servoCaseBlue: '#2f6fd0',
+  /** Teal PCB Arduino Uno — hue sama, diangkat ke teal studio terang */
+  unoTeal: '#00a6b0',
+  /** Biru badan relay Songle SRD — hue sama, lebih bercahaya */
+  relayBlue: '#2b7de0',
+  /** Biru case servo SG90 — hue sama, lebih ringan & jenuh */
+  servoCaseBlue: '#3a86e8',
 
   // — Logam mulia & kabel (dipanen dari soil-moisture FC-28) —
   /** Emas pelapis pin header & elektroda garpu probe FC-28 */
-  goldPlated: '#d4af37',
+  goldPlated: '#e4b93e',
   /** Emas lebih gelap: garis jalur di muka elektroda garpu */
-  goldTrace: '#a8842c',
+  goldTrace: '#be9736',
   /** Kuningan sekrup trimpot FC-28 */
-  brassScrew: '#b08d3e',
+  brassScrew: '#c29b45',
   /** Insulasi kabel merah penghubung modul ↔ probe FC-28 */
-  cableRed: '#b91c1c',
+  cableRed: '#e02b20',
+
+  // — PCB board generik (SPEK-WARNA-SEGAR §2): diterapkan di
+  // GenericBoard menggantikan pcbColor definitions yang nyaris hitam —
+  // definitions.ts sendiri disinkronkan pada gelombang sapuan —
+  /** PCB ESP32 DevKit: biru tengah malam (asli umumnya hitam — stylisasi) */
+  esp32Pcb: '#22335c',
+  /** PCB NodeMCU: keluarga biru sama, setingkat lebih terang */
+  nodeMcuPcb: '#2b3a67',
+  /** PCB Raspberry Pi Pico: hijau segar */
+  picoPcb: '#1f9d4d',
 
   // — Netral / material —
-  plastikHitam: '#1b1b1f',
-  karetGelap: '#23262d',
-  metalPin: '#cfd4dc',
-  canAluminium: '#c8ccd2',
-  breadboardBody: '#f2ede2',
-  resistorBody: '#d8b98a',
-  keramikKrem: '#d8b98a',
+  plastikHitam: '#222229',
+  karetGelap: '#2c303a',
+  metalPin: '#dce2ea',
+  canAluminium: '#d9dee5',
+  breadboardBody: '#faf7ee',
+  resistorBody: '#eecf9b',
+  keramikKrem: '#eecf9b',
 } as const;
 
 /** Warna & opacity bawaan per kelas bila pemanggil tidak memberi warna. */
@@ -220,23 +233,26 @@ export function getMaterial3D(
 }
 
 /**
- * §4 sebagai kode (Color Expert: encode the derivation, don't freeze a
- * literal): naikkan saturasi HSL sebesar `amount` (bawaan 0,125 = tengah
- * rentang +10–15% spesifikasi) dari warna benda asli, TANPA menggeser hue.
- * Lightness sengaja TIDAK di-clamp di sini — pita lightness 35–65% §4
- * adalah aturan memilih warna dasar badan, dan token terkunci seperti
- * putih LED (#f5f5f5) memang sah di luar pita itu.
+ * Arah segar sebagai kode (SPEK-WARNA-SEGAR §3; Color Expert: encode the
+ * derivation, don't freeze a literal): naikkan saturasi HSL sebesar
+ * `amount` (bawaan 0,30) dari warna benda asli TANPA menggeser hue, dan
+ * angkat lightness menuju pita tengah 0,50 sebesar 22% jaraknya (hanya
+ * untuk warna yang lebih gelap dari 0,50 — warna yang sudah terang,
+ * seperti putih LED, tidak disentuh). Menggantikan derivasi lama
+ * ×1,125-tanpa-lightness yang dibatalkan user (terasa tua/kusam).
  */
-export function vivid(hex: string, amount = 0.125): string {
+export function vivid(hex: string, amount = 0.3): string {
   const color = new THREE.Color(hex);
   const hsl = { h: 0, s: 0, l: 0 };
   // Eksplisit sRGB: getHSL/setHSL bawaan three bekerja di ruang kerja
-  // linear, yang mengompresi kenaikan saturasi dari maksud §4.
+  // linear, yang mengompresi kenaikan saturasi dari maksud arah warna.
   color.getHSL(hsl, THREE.SRGBColorSpace);
+  const lightness =
+    hsl.l < 0.5 ? hsl.l + (0.5 - hsl.l) * 0.22 : hsl.l;
   color.setHSL(
     hsl.h,
     Math.min(1, hsl.s * (1 + amount)),
-    hsl.l,
+    lightness,
     THREE.SRGBColorSpace,
   );
   return `#${color.getHexString()}`;
