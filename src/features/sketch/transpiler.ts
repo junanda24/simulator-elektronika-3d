@@ -19,6 +19,17 @@
  * `while(true){}` tanpa `delay()` tidak akan membekukan runtime — guard
  * milik runtime yang memutuskan kapan harus menyerah/menjadwal ulang.
  *
+ * Sorot baris eksekusi: codegen menyisipkan `__line(n);` tepat SEBELUM
+ * setiap pernyataan yang berada dalam daftar pernyataan sebuah blok
+ * (body fungsi, blok bersarang, badan `case` pada switch) — n = nomor
+ * baris sumber token pertama pernyataan itu. Runtime meneruskannya ke
+ * sesi (hooks.onLine) agar editor menyorot baris yang sedang berjalan.
+ * Pernyataan tunggal tanpa kurung kurawal sebagai body if/loop TIDAK
+ * ditandai sendiri (menyisipkan pernyataan di posisi itu akan mengubah
+ * ikatan else/makna) — pernyataan kontrol induknyalah yang ditandai;
+ * body berkurung kurawal ditandai per pernyataan di dalam bloknya.
+ * Deklarasi global juga tidak ditandai (dijalankan sekali saat factory).
+ *
  * Implementasi: tokenizer + parser recursive-descent/Pratt tulisan tangan
  * (tanpa library parser eksternal), codegen langsung saat parsing.
  *
@@ -55,7 +66,7 @@ export interface TranspileResult {
 
 /** Awalan wajib kode hasil: destrukturisasi API + konstanta Arduino. */
 const PREAMBLE = [
-  "const { pinMode, digitalWrite, digitalRead, analogWrite, analogRead, delay, millis, guard, Serial, map, constrain, min, max, abs } = __api;",
+  "const { pinMode, digitalWrite, digitalRead, analogWrite, analogRead, delay, millis, guard, Serial, map, constrain, min, max, abs, __line } = __api;",
   "const HIGH = 1, LOW = 0, INPUT = 'INPUT', OUTPUT = 'OUTPUT', INPUT_PULLUP = 'INPUT_PULLUP';",
   "const A0='A0',A1='A1',A2='A2',A3='A3',A4='A4',A5='A5';",
   'const LED_BUILTIN = 13;',
@@ -883,6 +894,18 @@ class Parser {
 
   /* ---------- blok & pernyataan ---------- */
 
+  /**
+   * Awali kode sebuah pernyataan dengan penanda baris sumbernya
+   * (`__line(n);`) agar runtime bisa memberi tahu editor baris mana yang
+   * sedang dieksekusi. HANYA aman dipanggil untuk pernyataan yang berada
+   * dalam daftar pernyataan (isi blok / badan case) — di posisi pernyataan
+   * tunggal (body if/loop tanpa kurung) sisipan ini akan merusak ikatan.
+   * Pernyataan kosong (';') tidak ditandai.
+   */
+  private withLineMark(line: number, code: string): string {
+    return code === ';' ? code : `__line(${line}); ${code}`;
+  }
+
   /** Blok `{ ... }`; `injectGuard` menyisipkan guard di awal (khusus loop()). */
   private parseBlock(injectGuard = false): string {
     this.expect('{', "kurung kurawal '{' diharapkan.");
@@ -895,8 +918,9 @@ class Parser {
           "kurung kurawal '}' tidak ditutup.",
         );
       }
+      const line = this.peek().line;
       const s = this.parseStatement();
-      if (s) stmts.push(s);
+      if (s) stmts.push(this.withLineMark(line, s));
     }
     this.next(); // '}'
     return `{ ${stmts.join('\n')} }`;
@@ -1053,8 +1077,9 @@ class Parser {
         this.expect(':', "titik dua ':' diharapkan setelah 'default'.");
         parts.push('default:');
       } else {
+        const line = this.peek().line;
         const s = this.parseStatement();
-        if (s) parts.push(s);
+        if (s) parts.push(this.withLineMark(line, s));
       }
     }
     this.next(); // '}'

@@ -118,6 +118,8 @@ interface CircuitStore {
   deadPins: string[];
   boardFault: boolean;
   sketchError: string | null;
+  /** Baris sketch yang sedang dieksekusi (dari snapshot sesi); null = tanpa sorot. */
+  currentLine: number | null;
   activeLessonId: string | null;
   lessonChecks: boolean[];
   completedLessons: string[];
@@ -257,6 +259,7 @@ export const useCircuitStore = create<CircuitStore>((set, get) => ({
   deadPins: [],
   boardFault: false,
   sketchError: null,
+  currentLine: null,
   activeLessonId: null,
   lessonChecks: [],
   completedLessons: (() => {
@@ -462,6 +465,7 @@ export const useCircuitStore = create<CircuitStore>((set, get) => ({
       pendingFrom: null,
       running: false,
       pinStates: {},
+      currentLine: null,
       lessonChecks: [],
       lastDamageRuleId: null,
     });
@@ -522,6 +526,7 @@ export const useCircuitStore = create<CircuitStore>((set, get) => ({
       wires: s.wires.filter((w) => w.a.kind !== 'board' && w.b.kind !== 'board'),
       running: false,
       pinStates: {},
+      currentLine: null,
       deadPins: [],
       boardFault: false,
       autopsy: null,
@@ -536,7 +541,9 @@ export const useCircuitStore = create<CircuitStore>((set, get) => ({
   },
 
   setRunning: (running) => {
-    set({ running });
+    // Berhenti = sorot baris eksekusi hilang seketika, tanpa menunggu
+    // snapshot berikutnya dari sesi.
+    set({ running, ...(running ? {} : { currentLine: null }) });
     if (running) {
       syncSim(get);
       simSetPowered(true);
@@ -662,6 +669,7 @@ export const useCircuitStore = create<CircuitStore>((set, get) => ({
         boardFault: snapshot.boardFault,
         sketchError: snapshot.sketchError,
         running: false,
+        currentLine: null,
         lastDamageRuleId: damageRuleId,
         lessonChecks,
         completedLessons,
@@ -681,6 +689,7 @@ export const useCircuitStore = create<CircuitStore>((set, get) => ({
       deadPins: snapshot.deadPins,
       boardFault: snapshot.boardFault,
       sketchError: snapshot.sketchError,
+      currentLine: snapshot.currentLine,
       // Kejujuran status: bila sketch mati karena error (snapshot
       // melaporkan sketchRunning false) sementara UI mengira masih
       // berjalan, samakan statusnya — header tidak boleh terus
@@ -751,6 +760,7 @@ export const useCircuitStore = create<CircuitStore>((set, get) => ({
       sketchCode: project.sketchCode,
       running: false,
       pinStates: {},
+      currentLine: null,
       autopsy: null,
       activeLessonId: null,
       lessonChecks: [],

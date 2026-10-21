@@ -72,6 +72,8 @@ function buildHarness(source: string, opts: MockOptions = {}): Harness {
         printed.push(String(value ?? ''));
       },
     },
+    // Penanda baris eksekusi dari codegen — mock tidak peduli sorot baris.
+    __line: () => {},
     map: (v: number, a: number, b: number, c: number, d: number) =>
       c + ((d - c) * (v - a)) / (b - a),
     constrain: (v: number, a: number, b: number) => Math.min(b, Math.max(a, v)),

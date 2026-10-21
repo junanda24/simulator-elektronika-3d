@@ -39,6 +39,7 @@ function makeSnapshot(results: Record<string, ComponentSimResult>): SimSnapshot 
     serialChunk: '',
     sketchError: null,
     sketchRunning: true,
+    currentLine: null,
   };
 }
 

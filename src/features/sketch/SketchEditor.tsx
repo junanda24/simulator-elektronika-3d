@@ -10,6 +10,9 @@ import { cpp } from '@codemirror/lang-cpp';
  * STYLE_GUIDE: panel #12151C, teks zinc, aksen cyan untuk seleksi.
  * Baris yang disebut pesan error sketch mendapat latar merah tipis
  * (danger #FF2A54) agar pengguna langsung melihat letak kesalahannya.
+ * Baris yang sedang dieksekusi sketch mendapat latar cyan lembut —
+ * deklarasi CSS-nya sebelum error-line agar error tetap menang bila
+ * kedua dekorasi jatuh pada baris yang sama.
  */
 
 const setErrorLineEffect = StateEffect.define<number | null>();
@@ -27,6 +30,29 @@ const errorLineField = StateField.define<DecorationSet>({
         } else {
           const line = tr.state.doc.line(effect.value);
           next = Decoration.set([errorLineDecoration.range(line.from)]);
+        }
+      }
+    }
+    return next;
+  },
+  provide: (field) => EditorView.decorations.from(field),
+});
+
+const setExecLineEffect = StateEffect.define<number | null>();
+
+const execLineDecoration = Decoration.line({ class: 'cm-sketch-exec-line' });
+
+const execLineField = StateField.define<DecorationSet>({
+  create: () => Decoration.none,
+  update(decorations, tr) {
+    let next = decorations.map(tr.changes);
+    for (const effect of tr.effects) {
+      if (effect.is(setExecLineEffect)) {
+        if (effect.value === null || effect.value < 1 || effect.value > tr.state.doc.lines) {
+          next = Decoration.none;
+        } else {
+          const line = tr.state.doc.line(effect.value);
+          next = Decoration.set([execLineDecoration.range(line.from)]);
         }
       }
     }
@@ -55,6 +81,9 @@ const workbenchTheme = EditorView.theme(
     },
     '.cm-activeLine': { backgroundColor: 'rgba(0,229,255,0.05)' },
     '.cm-activeLineGutter': { backgroundColor: 'transparent', color: '#a1a1aa' },
+    // Deklarasi exec-line SENGAJA sebelum error-line: bila satu baris
+    // kena keduanya, aturan yang terdeklarasi belakangan (error) menang.
+    '.cm-sketch-exec-line': { backgroundColor: 'rgba(0,229,255,0.10)' },
     '.cm-sketch-error-line': { backgroundColor: 'rgba(255,42,84,0.14)' },
     '&.cm-focused .cm-selectionBackground, .cm-selectionBackground': {
       backgroundColor: 'rgba(0,229,255,0.22)',
@@ -69,9 +98,11 @@ interface SketchEditorProps {
   onChange: (value: string) => void;
   /** Baris (1-based) yang disebut pesan error sketch; null = tanpa tanda. */
   errorLine?: number | null;
+  /** Baris (1-based) yang sedang dieksekusi sketch; null = tanpa sorot. */
+  execLine?: number | null;
 }
 
-export default function SketchEditor({ value, onChange, errorLine = null }: SketchEditorProps) {
+export default function SketchEditor({ value, onChange, errorLine = null, execLine = null }: SketchEditorProps) {
   const hostRef = useRef<HTMLDivElement>(null);
   const viewRef = useRef<EditorView | null>(null);
   const onChangeRef = useRef(onChange);
@@ -90,6 +121,7 @@ export default function SketchEditor({ value, onChange, errorLine = null }: Sket
         syntaxHighlighting(defaultHighlightStyle, { fallback: true }),
         workbenchTheme,
         errorLineField,
+        execLineField,
         EditorView.updateListener.of((update) => {
           if (update.docChanged) {
             const next = update.state.doc.toString();
@@ -127,6 +159,14 @@ export default function SketchEditor({ value, onChange, errorLine = null }: Sket
     if (!view) return;
     view.dispatch({ effects: setErrorLineEffect.of(errorLine) });
   }, [errorLine]);
+
+  // Sorot baris yang sedang dieksekusi; nilainya datang dari store
+  // (currentLine sesi) dan menjadi null begitu sketch berhenti.
+  useEffect(() => {
+    const view = viewRef.current;
+    if (!view) return;
+    view.dispatch({ effects: setExecLineEffect.of(execLine) });
+  }, [execLine]);
 
   return <div ref={hostRef} className="h-full overflow-hidden" />;
 }

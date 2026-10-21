@@ -19,6 +19,7 @@ export default function RightDock() {
   const setSketchCode = useCircuitStore((s) => s.setSketchCode);
   const restartSketch = useCircuitStore((s) => s.restartSketch);
   const sketchError = useCircuitStore((s) => s.sketchError);
+  const currentLine = useCircuitStore((s) => s.currentLine);
   const serialText = useCircuitStore((s) => s.serialText);
   const clearSerial = useCircuitStore((s) => s.clearSerial);
   const running = useCircuitStore((s) => s.running);
@@ -95,7 +96,7 @@ export default function RightDock() {
       ) : tab === 'kode' ? (
         <div className="flex min-h-0 flex-1 flex-col">
           <div className="min-h-0 flex-1">
-            <SketchEditor value={sketchCode} onChange={setSketchCode} errorLine={errorLine} />
+            <SketchEditor value={sketchCode} onChange={setSketchCode} errorLine={errorLine} execLine={currentLine} />
           </div>
           <div className="shrink-0 border-t border-border-subtle p-3">
             <p className="mb-2 text-xs leading-relaxed text-zinc-400">

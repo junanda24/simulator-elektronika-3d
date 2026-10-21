@@ -18,6 +18,12 @@ export interface RuntimeHooks {
   onSerial: (text: string) => void;
   isPinDead: (pinId: string) => boolean;
   onError: (message: string) => void;
+  /**
+   * Baris sumber (1-based) yang mulai dieksekusi — dipanggil kode hasil
+   * transpile lewat builtin `__line(n)` di setiap batas pernyataan.
+   * Opsional: sesi yang tidak peduli sorot baris boleh tidak mengisinya.
+   */
+  onLine?: (line: number) => void;
 }
 
 export interface SketchControl {
@@ -148,6 +154,13 @@ export function startSketchProgram(
     },
     millis() {
       return Math.floor(virtualNow);
+    },
+    /**
+     * Penanda baris eksekusi dari transpiler (`__line(n);` sebelum tiap
+     * pernyataan). Sinkron dan murah: hanya meneruskan ke hooks sesi.
+     */
+    __line(line: number) {
+      hooks.onLine?.(line);
     },
     /** LOOP_GUARD dari transpiler: serahkan kendali berkala agar worker tidak membeku. */
     async guard() {

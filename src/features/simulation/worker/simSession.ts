@@ -43,6 +43,8 @@ export interface SimSnapshot {
   serialChunk: string;
   sketchError: string | null;
   sketchRunning: boolean;
+  /** Baris sketch (1-based) yang sedang dieksekusi; null bila sketch berhenti/error. */
+  currentLine: number | null;
 }
 
 interface CircuitParts {
@@ -67,6 +69,7 @@ export class SimSession {
   private serialBuffer = '';
   private serialDirty = false;
   private sketchError: string | null = null;
+  private currentLine: number | null = null;
   private pendingDamage: SimSnapshot['damageEvents'] = [];
   private pendingBoard: SimSnapshot['boardEvents'] = [];
   private listener: ((snapshot: SimSnapshot) => void) | null = null;
@@ -116,8 +119,14 @@ export class SimSession {
           this.serialDirty = true;
         },
         isPinDead: (pinId) => this.deadPins.has(pinId) || this.boardFault,
+        onLine: (line) => {
+          // Callback __line terpanggil di setiap batas pernyataan —
+          // sentuh state hanya bila barisnya benar-benar berpindah.
+          if (line !== this.currentLine) this.currentLine = line;
+        },
         onError: (message) => {
           this.sketchError = message;
+          this.currentLine = null;
           this.emit();
         },
       },
@@ -142,6 +151,7 @@ export class SimSession {
   private stopRuntime(): void {
     this.runtime?.stop();
     this.runtime = null;
+    this.currentLine = null;
     if (this.timer) {
       clearInterval(this.timer);
       this.timer = null;
@@ -267,6 +277,7 @@ export class SimSession {
       serialChunk: this.serialBuffer,
       sketchError: this.sketchError,
       sketchRunning: this.runtime !== null && !this.runtime.isStopped(),
+      currentLine: this.currentLine,
     };
     this.pendingDamage = [];
     this.pendingBoard = [];
