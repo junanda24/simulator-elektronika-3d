@@ -1,8 +1,7 @@
-import { useEffect, useMemo, useRef, type ComponentType } from 'react';
-import { useFrame, type ThreeEvent } from '@react-three/fiber';
+import { useEffect, useMemo, type ComponentType } from 'react';
+import { type ThreeEvent } from '@react-three/fiber';
 import * as THREE from 'three';
 import { RoundedBox } from '@react-three/drei';
-import type { MeshPhysicalMaterial } from 'three';
 import type { ComponentRenderProps } from '../../../types';
 import { createLabelTexture } from '../../../../features/stage3d/labelTexture';
 import { COLOR_TOKENS, MATERIAL_PROPS } from '../../../../features/stage3d/materials3d';
@@ -120,7 +119,9 @@ const TrimmerPot = ({ position }: { position: [number, number, number] }) => (
  * Fresnel berfaset konsentris di atas rangka persegi-membulat, dua
  * trimpot oranye, IC BISS0001, kapasitor, lubang pemasangan, dan LED
  * indikator merah. Klik kubah untuk menghidupkan/mematikan simulasi
- * gerakan; kubah berdenyut merah muda saat gerakan terdeteksi.
+ * gerakan; kubah menyala merah muda STABIL saat gerakan terdeteksi
+ * (denyut/osilasi emissive dibuang atas perintah user arah SOLID
+ * 2026-10-21 — "buang efek shimmering"). LED adalah penunjuk utama.
  */
 export const PirRender3D: ComponentType<ComponentRenderProps> = ({ instance, onInteract }) => {
   const motion = instance.interactiveState.motion === true;
@@ -136,19 +137,6 @@ export const PirRender3D: ComponentType<ComponentRenderProps> = ({ instance, onI
   useEffect(() => () => domeGeometry.dispose(), [domeGeometry]);
 
   const silkscreen = useMemo(createPirSilkscreen, []);
-
-  // Denyut kubah saat gerakan terdeteksi: emissive berosilasi halus.
-  const domeMatRef = useRef<MeshPhysicalMaterial>(null);
-  const motionRef = useRef(motion);
-  motionRef.current = motion;
-
-  useFrame(({ clock }) => {
-    const mat = domeMatRef.current;
-    if (!mat) return;
-    mat.emissiveIntensity = motionRef.current
-      ? 1.0 + 0.6 * Math.sin(clock.elapsedTime * 6)
-      : 0;
-  });
 
   const handleDomePointerDown = (e: ThreeEvent<PointerEvent>) => {
     e.stopPropagation();
@@ -189,7 +177,8 @@ export const PirRender3D: ComponentType<ComponentRenderProps> = ({ instance, onI
       </RoundedBox>
 
       {/* Kubah lensa Fresnel berfaset konsentris — klik untuk toggle gerakan;
-          berpendar merah muda berdenyut saat gerakan terdeteksi */}
+          berpendar merah muda STABIL (0,8 tetap, tanpa denyut) saat gerakan
+          terdeteksi, mati total saat tidak ada gerakan */}
       <mesh
         geometry={domeGeometry}
         position={[0, 1.08, -0.15]}
@@ -197,7 +186,6 @@ export const PirRender3D: ComponentType<ComponentRenderProps> = ({ instance, onI
         onPointerDown={handleDomePointerDown}
       >
         <meshPhysicalMaterial
-          ref={domeMatRef}
           {...MATERIAL_PROPS.absWarna}
           color={DOME_WHITE}
           roughness={0.32}
@@ -205,7 +193,7 @@ export const PirRender3D: ComponentType<ComponentRenderProps> = ({ instance, onI
           clearcoatRoughness={0.25}
           flatShading
           emissive="#ff8fab"
-          emissiveIntensity={0}
+          emissiveIntensity={motion ? 0.8 : 0}
         />
       </mesh>
 
@@ -241,7 +229,7 @@ export const PirRender3D: ComponentType<ComponentRenderProps> = ({ instance, onI
           <meshStandardMaterial
             color="#ef4444"
             emissive="#ef4444"
-            emissiveIntensity={motion ? 3.6 : 0.05}
+            emissiveIntensity={motion ? 1.6 : 0.05}
             roughness={0.3}
           />
         </mesh>

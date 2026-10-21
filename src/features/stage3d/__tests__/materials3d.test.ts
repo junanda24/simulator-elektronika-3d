@@ -23,17 +23,21 @@ describe('materials3d — tabel parameter §3', () => {
   });
 
   it('parameter tiap kelas berada di dalam rentang spesifikasi', () => {
+    // Rentang kelas PLASTIK badan (absWarna, plastikHitam, pcb, keramik,
+    // breadboardKrem) digeser +0,15 atas perintah user arah SOLID
+    // 2026-10-21 (plastik lebih matte). Kelas optik (epoxyLed, kaca),
+    // karet, dan logam tetap pada rentang spesifikasi aslinya.
     const rentang: Record<MaterialClass3D, [number, number]> = {
-      absWarna: [0.3, 0.38],
-      plastikHitam: [0.35, 0.45],
+      absWarna: [0.45, 0.53],
+      plastikHitam: [0.5, 0.6],
       epoxyLed: [0.12, 0.2],
-      pcb: [0.38, 0.45],
+      pcb: [0.53, 0.6],
       karet: [0.75, 0.9],
       kaca: [0.05, 0.12],
       metalPin: [0.3, 0.45],
       canAluminium: [0.35, 0.5],
-      keramik: [0.45, 0.55],
-      breadboardKrem: [0.4, 0.5],
+      keramik: [0.6, 0.7],
+      breadboardKrem: [0.55, 0.65],
     };
     for (const kelas of KELAS) {
       const { roughness } = MATERIAL_PARAMS[kelas];
@@ -110,9 +114,11 @@ describe('materials3d — warna §4', () => {
     expect(COLOR_TOKENS.picoPcb).toBe('#1f9d4d');
   });
 
-  it('vivid menaikkan saturasi ±30% + mengangkat lightness, tanpa menggeser hue', () => {
-    // Derivasi berubah atas SPEK-WARNA-SEGAR §3: rasio lama 1,125 tanpa
-    // sentuhan lightness dibatalkan user (terasa tua/kusam).
+  it('vivid menaikkan saturasi ±30% tanpa mengubah lightness, tanpa menggeser hue', () => {
+    // Derivasi dikoreksi arah SOLID 2026-10-21 (perintah user "warna
+    // lebih solid"): pengangkatan lightness 22% versi SPEK-WARNA-SEGAR
+    // §3 DIBUANG karena membuat warna berkapur/pastel — lightness kini
+    // wajib kembali persis ke nilai asal, saturasi ×1,30 dipertahankan.
     const before = new THREE.Color(COLOR_TOKENS.relayBlue);
     const after = new THREE.Color(vivid(COLOR_TOKENS.relayBlue));
     const hb = { h: 0, s: 0, l: 0 };
@@ -122,12 +128,15 @@ describe('materials3d — warna §4', () => {
     expect(ha.h).toBeCloseTo(hb.h, 3);
     expect(ha.s).toBeGreaterThan(hb.s);
     expect(ha.s / hb.s).toBeCloseTo(1.3, 2);
-    // relayBlue L=0,52 sudah di atas pita tengah → lightness tidak berubah
     expect(ha.l).toBeCloseTo(hb.l, 3);
-    // Warna gelap (L<0,5) wajib TERANGKAT menuju pita tengah
+    // Warna gelap (L<0,5) TIDAK lagi terangkat: lightness tetap asal
+    const darkBefore = new THREE.Color('#14632f');
     const dark = new THREE.Color(vivid('#14632f'));
+    const hdb = { h: 0, s: 0, l: 0 };
     const hd = { h: 0, s: 0, l: 0 };
+    darkBefore.getHSL(hdb, THREE.SRGBColorSpace);
     dark.getHSL(hd, THREE.SRGBColorSpace);
-    expect(hd.l).toBeGreaterThan(0.23);
+    expect(hd.l).toBeCloseTo(hdb.l, 3);
+    expect(hd.h).toBeCloseTo(hdb.h, 3);
   });
 });

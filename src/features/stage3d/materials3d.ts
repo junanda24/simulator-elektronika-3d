@@ -10,12 +10,15 @@ import * as THREE from 'three';
  * - §3: parameter PBR per kelas material (roughness / metalness /
  *   clearcoat / clearcoatRoughness) — nilai di bawah adalah titik tengah
  *   rentang tabel; jangan mengarang angka baru di file komponen.
- * - §4 (DIPERBARUI 2026-10-21 sore — SPEK-WARNA-SEGAR.md): batas lama
- *   "saturasi hanya +10–15%" DIBATALKAN user untuk warna badan/obyek
- *   (terasa tua/kusam); arah kini SEGAR & MUDA — lightness badan diangkat
- *   ke pita ±35–65% dan chroma ke wilayah vivid bersih, hue tetap.
+ * - §4 (DIPERBARUI 2026-10-21 sore — SPEK-WARNA-SEGAR.md, lalu
+ *   dikoreksi arah SOLID di hari yang sama): batas lama "saturasi hanya
+ *   +10–15%" DIBATALKAN user untuk warna badan/obyek (terasa tua/kusam);
+ *   arah SEGAR & MUDA dipertahankan lewat nilai token itu sendiri, TAPI
+ *   pengangkatan lightness pada derivasi `vivid()` DIBUANG atas perintah
+ *   user ("warna lebih solid") — lightness yang diangkat membuat warna
+ *   berkapur/pastel. Kini: saturasi naik, lightness = nilai asal token.
  *   Hue warna FUNGSIONAL (gelang resistor, kabel servo, rel breadboard,
- *   warna LED) tetap TERKUNCI maknanya: boleh lebih jenuh/terang, tidak
+ *   warna LED) tetap TERKUNCI maknanya: boleh lebih jenuh, tidak
  *   digeser. Token di COLOR_TOKENS adalah satu-satunya sumber nilai;
  *   file komponen TIDAK BOLEH memakai hex liar baru.
  * - Color Expert (token graph): file ini = lapisan REFERENCE token;
@@ -40,16 +43,25 @@ export interface Material3DParams {
   clearcoatRoughness: number;
 }
 
-/** §3 — parameter PBR per kelas (titik tengah rentang spesifikasi). */
+/**
+ * §3 — parameter PBR per kelas. Kelas PLASTIK badan komponen dinaikkan
+ * roughness-nya +0,15 dari titik tengah spesifikasi atas perintah user
+ * arah SOLID 2026-10-21 ("warna lebih solid", plastik lebih matte —
+ * pantulan mengilap adalah bagian dari rasa "shimmering" yang dibuang).
+ * Yang naik: absWarna, plastikHitam, pcb, keramik, breadboardKrem.
+ * Yang SENGAJA tidak diubah: epoxyLed & kaca (kelas optik/transparan —
+ * kilapnya adalah identitas bahan), karet (sudah matte penuh 0,82),
+ * dan semua logam (metalPin, canAluminium — memang harus memantul).
+ */
 export const MATERIAL_PARAMS = {
-  /** Plastik ABS mainan (badan warna): r .30–.38, cc .7/.30 */
-  absWarna: { roughness: 0.34, metalness: 0, clearcoat: 0.7, clearcoatRoughness: 0.3 },
-  /** Plastik hitam: r .35–.45, cc .5/.35, warna #1B1B1F (bukan #000) */
-  plastikHitam: { roughness: 0.4, metalness: 0, clearcoat: 0.5, clearcoatRoughness: 0.35 },
+  /** Plastik ABS mainan (badan warna): r .30–.38 +0,15 SOLID, cc .7/.30 */
+  absWarna: { roughness: 0.49, metalness: 0, clearcoat: 0.7, clearcoatRoughness: 0.3 },
+  /** Plastik hitam: r .35–.45 +0,15 SOLID, cc .5/.35, warna #1B1B1F (bukan #000) */
+  plastikHitam: { roughness: 0.55, metalness: 0, clearcoat: 0.5, clearcoatRoughness: 0.35 },
   /** Epoxy LED: r .12–.20, cc 1.0/.08, transparansi palsu tanpa transmission */
   epoxyLed: { roughness: 0.16, metalness: 0, clearcoat: 1, clearcoatRoughness: 0.08 },
-  /** PCB solder mask: r .38–.45, cc .5/.30 */
-  pcb: { roughness: 0.42, metalness: 0, clearcoat: 0.5, clearcoatRoughness: 0.3 },
+  /** PCB solder mask: r .38–.45 +0,15 SOLID, cc .5/.30 */
+  pcb: { roughness: 0.57, metalness: 0, clearcoat: 0.5, clearcoatRoughness: 0.3 },
   /** Karet: r .75–.90, matte penuh */
   karet: { roughness: 0.82, metalness: 0, clearcoat: 0, clearcoatRoughness: 0 },
   /** Kaca (fuse, diode DO-35): r .05–.12, cc 1.0/.05, opacity rendah */
@@ -58,10 +70,10 @@ export const MATERIAL_PARAMS = {
   metalPin: { roughness: 0.38, metalness: 1, clearcoat: 0, clearcoatRoughness: 0 },
   /** Can aluminium (elco, motor): r .35–.50, m 1.0 */
   canAluminium: { roughness: 0.42, metalness: 1, clearcoat: 0, clearcoatRoughness: 0 },
-  /** Keramik (kapasitor keramik): r .45–.55, cc .3/.40 */
-  keramik: { roughness: 0.5, metalness: 0, clearcoat: 0.3, clearcoatRoughness: 0.4 },
-  /** Breadboard krem: r .40–.50, cc .3/.40 */
-  breadboardKrem: { roughness: 0.45, metalness: 0, clearcoat: 0.3, clearcoatRoughness: 0.4 },
+  /** Keramik (kapasitor keramik): r .45–.55 +0,15 SOLID, cc .3/.40 */
+  keramik: { roughness: 0.65, metalness: 0, clearcoat: 0.3, clearcoatRoughness: 0.4 },
+  /** Breadboard krem: r .40–.50 +0,15 SOLID, cc .3/.40 */
+  breadboardKrem: { roughness: 0.6, metalness: 0, clearcoat: 0.3, clearcoatRoughness: 0.4 },
 } as const satisfies Record<string, Material3DParams>;
 
 export type MaterialClass3D = keyof typeof MATERIAL_PARAMS;
@@ -233,13 +245,15 @@ export function getMaterial3D(
 }
 
 /**
- * Arah segar sebagai kode (SPEK-WARNA-SEGAR §3; Color Expert: encode the
- * derivation, don't freeze a literal): naikkan saturasi HSL sebesar
- * `amount` (bawaan 0,30) dari warna benda asli TANPA menggeser hue, dan
- * angkat lightness menuju pita tengah 0,50 sebesar 22% jaraknya (hanya
- * untuk warna yang lebih gelap dari 0,50 — warna yang sudah terang,
- * seperti putih LED, tidak disentuh). Menggantikan derivasi lama
- * ×1,125-tanpa-lightness yang dibatalkan user (terasa tua/kusam).
+ * Arah segar sebagai kode (SPEK-WARNA-SEGAR §3, dikoreksi arah SOLID
+ * 2026-10-21 atas perintah user "warna lebih solid"; Color Expert:
+ * encode the derivation, don't freeze a literal): naikkan saturasi HSL
+ * sebesar `amount` (bawaan 0,30) dari warna benda asli TANPA menggeser
+ * hue dan TANPA menyentuh lightness — lightness dikembalikan persis ke
+ * nilai asal warna token. Versi sebelumnya mengangkat lightness 22%
+ * menuju 0,50; angkatan itulah yang membuat warna berkapur/pastel,
+ * jadi DIBUANG. Saturasi ×1,30 dipertahankan: warna tetap segar, tapi
+ * pekat/solid pada kedalaman aslinya.
  */
 export function vivid(hex: string, amount = 0.3): string {
   const color = new THREE.Color(hex);
@@ -247,12 +261,10 @@ export function vivid(hex: string, amount = 0.3): string {
   // Eksplisit sRGB: getHSL/setHSL bawaan three bekerja di ruang kerja
   // linear, yang mengompresi kenaikan saturasi dari maksud arah warna.
   color.getHSL(hsl, THREE.SRGBColorSpace);
-  const lightness =
-    hsl.l < 0.5 ? hsl.l + (0.5 - hsl.l) * 0.22 : hsl.l;
   color.setHSL(
     hsl.h,
     Math.min(1, hsl.s * (1 + amount)),
-    lightness,
+    hsl.l,
     THREE.SRGBColorSpace,
   );
   return `#${color.getHexString()}`;

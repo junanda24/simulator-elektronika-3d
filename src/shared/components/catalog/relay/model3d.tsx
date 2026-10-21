@@ -294,7 +294,7 @@ export const RelayRender3D: ComponentType<ComponentRenderProps> = ({ instance })
           color="#ff2a2a"
           roughness={0.3}
           emissive="#ff2a2a"
-          emissiveIntensity={active ? 3.8 : 0.04}
+          emissiveIntensity={active ? 2.2 : 0.04}
         />
       </mesh>
       {active && (

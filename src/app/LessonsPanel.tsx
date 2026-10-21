@@ -44,9 +44,11 @@ const celebratedLessonIds = new Set<string>();
 
 /**
  * Banner "Modul selesai!": perayaan terukur sekali per modul per sesi —
- * banner berdenyut sekali + sapuan cahaya melintas (.hud-celebrate)
- * dan centang menggambar dirinya (.hud-check-draw) sambil meletup
- * (.hud-check-pop). Tanpa confetti; mati total di reduced-motion.
+ * banner berdenyut sekali (.hud-celebrate) dan centang menggambar
+ * dirinya (.hud-check-draw) sambil meletup (.hud-check-pop). Sapuan
+ * cahaya yang dulu melintas banner DIBUANG atas perintah user arah
+ * SOLID 2026-10-21 ("buang efek shimmering"). Tanpa confetti; mati
+ * total di reduced-motion.
  */
 function CompletionBanner({ lessonId }: { lessonId: string }) {
   const [celebrating, setCelebrating] = useState(

@@ -115,8 +115,8 @@ function createServoLabel(): THREE.CanvasTexture {
 
 /**
  * Motor servo SG90 prosedural bergaya stylized realism (gelombang 3 —
- * poles): badan biru translucent ringan dengan stiker "SG90", garis
- * seam casing, kuping pemasangan BERLUBANG TEMBUS, tonjolan rumah gir
+ * poles): badan biru SOLID penuh dengan stiker "SG90", garis seam
+ * casing, kuping pemasangan BERLUBANG TEMBUS, tonjolan rumah gir
  * bundar + leher poros, dan tiga kabel lentur warna asli (cokelat/
  * merah/oranye) keluar dari bawah badan ke titik pin. Tanduk putih
  * berlubang berputar pada sumbu Y mengikuti branchCurrents.angle
@@ -167,14 +167,13 @@ export const ServoRender3D: ComponentType<ComponentRenderProps> = ({ instance })
         </mesh>
       ))}
 
-      {/* Badan SG90: RoundedBox biru case sedikit translucent seperti
-          plastik asli (opacity ringan; kelas absWarna §3 + token warna) */}
+      {/* Badan SG90: RoundedBox biru case SOLID penuh (opacity 1,0,
+          transparansi dimatikan — arah SOLID 2026-10-21 atas perintah
+          user; sebelumnya 0,92 translucent. Kelas absWarna §3 + token) */}
       <RoundedBox args={[3, 2.2, 3.6]} radius={0.16} smoothness={4} position={[0, 1.7, 0]} castShadow>
         <meshPhysicalMaterial
           {...MATERIAL_PROPS.absWarna}
           color={COLOR_TOKENS.servoCaseBlue}
-          opacity={0.92}
-          transparent
         />
       </RoundedBox>
 
@@ -189,24 +188,20 @@ export const ServoRender3D: ComponentType<ComponentRenderProps> = ({ instance })
         <meshStandardMaterial map={labelTexture} roughness={0.5} />
       </mesh>
 
-      {/* Kuping pemasangan berlubang tembus di kedua ujung (extrude) */}
+      {/* Kuping pemasangan berlubang tembus di kedua ujung (extrude) — solid penuh */}
       <mesh geometry={flangeGeometry} position={[0, 2.275, 0]} castShadow>
         <meshPhysicalMaterial
           {...MATERIAL_PROPS.absWarna}
           color={COLOR_TOKENS.servoCaseBlue}
-          opacity={0.92}
-          transparent
         />
       </mesh>
 
-      {/* Tonjolan rumah gir bundar di sisi atas badan */}
+      {/* Tonjolan rumah gir bundar di sisi atas badan — solid penuh */}
       <mesh position={[0, 2.86, 0]} castShadow>
         <cylinderGeometry args={[1, 1, 0.22, 28]} />
         <meshPhysicalMaterial
           {...MATERIAL_PROPS.absWarna}
           color={COLOR_TOKENS.servoCaseBlue}
-          opacity={0.92}
-          transparent
         />
       </mesh>
 

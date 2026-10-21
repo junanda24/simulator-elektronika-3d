@@ -5,7 +5,6 @@ import {
   COLOR_TOKENS,
   MATERIAL_PROPS,
 } from '../../../../features/stage3d/materials3d';
-import { GlowHalo } from '../../../../features/stage3d/effects/GlowHalo';
 
 /**
  * Warna LED dari token fungsional terkunci (SPESIFIKASI-GAYA-3D §4:
@@ -95,12 +94,14 @@ const BOND_WIRE_GEOMETRY = createBondWireGeometry();
  * LED 5mm prosedural setia asli (SPESIFIKASI-GAYA-3D §5 Gelombang 2 +
  * Part A riset A3): kubah Ø5,0 & flange Ø5,8 dengan sisi datar katoda,
  * kaki PIPIH pelat stempel (anoda lebih panjang), dan struktur dalam
- * yang terlihat menembus epoxy kelas epoxyLed (transparansi palsu
- * 0,55–0,75 tanpa transmission): cangkir reflektor/anvil besar di kaki
- * katoda, post kecil anoda, die + kawat bond emas di antaranya.
- * Perilaku menyala: emissive mengikuti arus cabang 'led' (flange 1,1×,
- * badan 3,0× — wilayah HDR untuk Bloom) + halo sprite additive +
- * pointLight tumpahan; rusak = epoxy gosong gelap tanpa cahaya apa pun.
+ * yang terlihat samar menembus epoxy kelas epoxyLed: cangkir
+ * reflektor/anvil besar di kaki katoda, post kecil anoda, die + kawat
+ * bond emas di antaranya. Opacity badan 0,92 (arah SOLID 2026-10-21
+ * atas perintah user — override setempat di bawah, BUKAN bawaan kelas
+ * epoxyLed 0,65, agar warna badan pekat dan kelas bersama tidak ikut
+ * berubah untuk pemakai lain seperti LDR).
+ * Perilaku menyala TIDAK berubah: emissive mengikuti arus cabang 'led'
+ * (flange 0,7×, badan 1,4×) + pointLight; rusak = epoxy gosong gelap.
  */
 export const LedRender3D: ComponentType<ComponentRenderProps> = ({ instance }) => {
   const colorName = typeof instance.props.color === 'string' ? instance.props.color : 'red';
@@ -156,42 +157,35 @@ export const LedRender3D: ComponentType<ComponentRenderProps> = ({ instance }) =
         <meshStandardMaterial color={COLOR_TOKENS.resistorGold} metalness={1} roughness={0.35} />
       </mesh>
 
-      {/* Flange alas — extrude bersisi datar katoda, epoxy berwarna */}
+      {/* Flange alas — extrude bersisi datar katoda, epoxy berwarna pekat */}
       <mesh geometry={FLANGE_GEOMETRY} position={[0, 1.75, 0]} castShadow>
         <meshPhysicalMaterial
           {...MATERIAL_PROPS.epoxyLed}
+          opacity={0.92}
           color={domeColor}
           emissive={damaged ? '#000000' : baseColor}
-          emissiveIntensity={damaged ? 0 : intensity * 1.1}
+          emissiveIntensity={damaged ? 0 : intensity * 0.7}
         />
       </mesh>
 
-      {/* Badan + kubah menyatu — epoxy kelas epoxyLed dari pustaka.
-          Faktor emissive 3,0 (gelombang "efek hidup"): pada arus penuh
-          (intensity 1,5) emissive mencapai 4,5 — wilayah HDR yang
-          tertangkap Bloom, bukan sekadar ganti warna permukaan. */}
+      {/* Badan + kubah menyatu — epoxy kelas epoxyLed dari pustaka, opacity 0,92 */}
       <mesh geometry={BODY_GEOMETRY} position={[0, 1.65, 0]} castShadow>
         <meshPhysicalMaterial
           {...MATERIAL_PROPS.epoxyLed}
+          opacity={0.92}
           color={domeColor}
           emissive={damaged ? '#000000' : baseColor}
-          emissiveIntensity={damaged ? 0 : intensity * 3}
+          emissiveIntensity={damaged ? 0 : intensity * 1.4}
         />
       </mesh>
 
-      {/* Halo cahaya di sekitar kubah — kesan cahaya bocor ke udara;
-          mati total saat arus ~0 atau LED rusak (di dalam GlowHalo). */}
-      {!damaged && <GlowHalo color={baseColor} drive={intensity / 1.5} position={[0, 3.3, 0]} />}
-
-      {/* Cahaya titik saat LED menyala — tumpahan ke breadboard &
-          tetangga: jarak diperlebar 5 → 16 satuan dan intensitas
-          diskalakan dari arus nyata (maks 82 pada arus penuh). */}
+      {/* Cahaya titik saat LED menyala */}
       {!damaged && intensity > 0.05 && (
         <pointLight
           position={[0, 3.2, 0]}
           color={baseColor}
-          intensity={intensity * 55}
-          distance={16}
+          intensity={intensity * 30}
+          distance={5}
           decay={2}
         />
       )}

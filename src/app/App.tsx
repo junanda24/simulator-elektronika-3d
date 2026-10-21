@@ -784,7 +784,7 @@ export default function App() {
                 role="status"
                 aria-live="polite"
                 className={`pointer-events-none flex items-center gap-2 rounded-full border border-border-subtle bg-panel px-3.5 py-2 text-xs font-medium text-zinc-200 ${capsuleShadow} ${
-                  busyP.exiting ? 'hud-exit' : 'hud-pop-breathe'
+                  busyP.exiting ? 'hud-exit' : 'hud-pop'
                 }`}
               >
                 <SpinnerIcon className="size-3.5 shrink-0 animate-spin text-accent-primary" />

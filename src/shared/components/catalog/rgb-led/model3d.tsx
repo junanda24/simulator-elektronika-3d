@@ -6,7 +6,6 @@ import {
   COLOR_TOKENS,
   MATERIAL_PROPS,
 } from '../../../../features/stage3d/materials3d';
-import { GlowHalo } from '../../../../features/stage3d/effects/GlowHalo';
 
 /** Arus kanal untuk kecerahan penuh (A) — sama seperti LED 5mm tunggal. */
 const FULL_CURRENT_A = 0.02;
@@ -140,11 +139,13 @@ function clamp01(value: number): number {
  * LED RGB 5mm prosedural setia asli (SPESIFIKASI-GAYA-3D §5 Gelombang 2,
  * mengikuti bahasa LED 5mm): kubah bening Ø5,0 + flange Ø5,8 bersisi
  * datar, EMPAT kaki PIPIH pelat stempel (COM terpanjang), dan rangka
- * dalam yang terlihat menembus epoxy kelas epoxyLed: cangkir lebar di
- * kaki COM memegang tiga die R/G/B, tiga post kanal, dan kawat bond
- * emas ke tiap die. Perilaku menyala: emissive = campuran kanal r/g/b
- * dari simState (flange 1,0×, badan 2,6× — wilayah HDR untuk Bloom) +
- * halo sprite additive + pointLight tumpahan.
+ * dalam yang terlihat samar menembus epoxy kelas epoxyLed: cangkir
+ * lebar di kaki COM memegang tiga die R/G/B, tiga post kanal, dan
+ * kawat bond emas ke tiap die. Opacity badan 0,92 (arah SOLID
+ * 2026-10-21 — override setempat, sama seperti LED tunggal, agar
+ * warna campuran tampil pekat). Perilaku menyala TIDAK berubah:
+ * emissive = campuran kanal r/g/b dari simState (flange 0,7×, badan
+ * 1,4×) + pointLight.
  */
 export const RgbLedRender3D: ComponentType<ComponentRenderProps> = ({ instance }) => {
   const currents = instance.simState.branchCurrents;
@@ -210,35 +211,31 @@ export const RgbLedRender3D: ComponentType<ComponentRenderProps> = ({ instance }
         </group>
       ))}
 
-      {/* Flange alas — extrude bersisi datar, epoxy bening */}
+      {/* Flange alas — extrude bersisi datar, epoxy pekat */}
       <mesh geometry={FLANGE_GEOMETRY} position={[0, 1.75, 0]} castShadow>
         <meshPhysicalMaterial
           {...MATERIAL_PROPS.epoxyLed}
+          opacity={0.92}
           color={domeColor}
           emissive={emissive}
-          emissiveIntensity={damaged ? 0 : 1}
+          emissiveIntensity={damaged ? 0 : 0.7}
         />
       </mesh>
 
-      {/* Badan + kubah bening menyatu — epoxy kelas epoxyLed. Faktor
-          emissive 2,6 (gelombang "efek hidup"): campuran kanal penuh
-          mencapai wilayah HDR yang tertangkap Bloom. */}
+      {/* Badan + kubah menyatu — epoxy kelas epoxyLed, opacity 0,92 */}
       <mesh geometry={BODY_GEOMETRY} position={[0, 1.65, 0]} castShadow>
         <meshPhysicalMaterial
           {...MATERIAL_PROPS.epoxyLed}
+          opacity={0.92}
           color={domeColor}
           emissive={emissive}
-          emissiveIntensity={damaged ? 0 : 2.6}
+          emissiveIntensity={damaged ? 0 : 1.4}
         />
       </mesh>
 
-      {/* Halo cahaya campuran di sekitar kubah, sebanding kanal terkuat */}
-      {!damaged && <GlowHalo color={mixed} drive={peak} position={[0, 3.3, 0]} />}
-
-      {/* Cahaya titik berwarna campuran saat ada kanal menyala —
-          tumpahan diperlebar 5 → 16 satuan seperti LED tunggal */}
+      {/* Cahaya titik berwarna campuran saat ada kanal menyala */}
       {!damaged && peak > 0.05 && (
-        <pointLight position={[0, 3.2, 0]} color={mixed} intensity={peak * 55} distance={16} decay={2} />
+        <pointLight position={[0, 3.2, 0]} color={mixed} intensity={peak * 30} distance={5} decay={2} />
       )}
 
       {/* Badge arus per kanal live dari branchCurrents r/g/b */}

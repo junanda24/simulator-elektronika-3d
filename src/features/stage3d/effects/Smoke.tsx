@@ -12,9 +12,11 @@ import { playBurnPop } from '../../../shared/utils/soundFx';
  * 4. Getaran kamera singkat (250 ms, amplitudo ±0,12) yang batal sendiri
  *    bila kamera digerakkan pihak lain (user / CameraRig).
  * 5. Kepulan asap abu yang naik terus (perilaku asli, dipertahankan).
- * 6. Bara pijar pada badan komponen: denyut cahaya aditif ±1,5 detik di
- *    jantung komponen tepat saat kerusakan terjadi (gelombang animasi —
- *    melengkapi kilatan yang menerangi SEKITAR komponen).
+ * 6. Bara pijar pada badan komponen: cahaya aditif STABIL di jantung
+ *    komponen selama komponen rusak/asap aktif — intensitas & skala
+ *    tetap, tanpa kedip/osilasi (kedip 26 rad/s + amplop ±1,5 detik
+ *    dibuang atas perintah user arah SOLID 2026-10-21, "buang efek
+ *    shimmering"; melengkapi kilatan yang menerangi SEKITAR komponen).
  * Posisi partikel dimutasi langsung pada BufferAttribute — tanpa re-render.
  */
 
@@ -129,7 +131,6 @@ export function Smoke({ position }: { position: [number, number, number] }) {
 
   const sparkPointsRef = useRef<THREE.Points>(null);
   const flashRef = useRef<THREE.PointLight>(null);
-  const emberRef = useRef<THREE.Mesh>(null);
 
   /** Waktu clock saat efek pertama kali dirender (acuan semua lapisan). */
   const startTimeRef = useRef<number | null>(null);
@@ -192,29 +193,9 @@ export function Smoke({ position }: { position: [number, number, number] }) {
         age <= FLASH_DURATION + 0.1 ? 8 * Math.exp(-14 * age) : 0;
     }
 
-    // --- Bara pijar PADA badan komponen (pelengkap kilatan, bukan
-    // duplikat): bola pijar aditif di jantung komponen yang menyala
-    // terang lalu berdenyut meredup selama ±1,5 detik — komponen yang
-    // baru terbakar terlihat "panas" sesaat, sesudahnya kepulan asap
-    // yang menjadi petunjuk permanen. Amplop linear + kedip sinus
-    // cepat; skala & opacity dimutasi langsung, tanpa alokasi. Lapisan
-    // cahaya murni (bukan perpindahan), jadi — sama seperti percikan &
-    // kilatan di file ini — tidak digerbang reduced-motion; yang
-    // digerbang di sini hanya getaran kamera. ---
-    const ember = emberRef.current;
-    if (ember) {
-      const EMBER_LIFE = 1.5;
-      if (age <= EMBER_LIFE) {
-        const envelope = 1 - age / EMBER_LIFE;
-        const flicker = 0.7 + 0.3 * Math.sin(age * 26);
-        const s = Math.max(0.001, 0.6 * envelope * flicker);
-        ember.visible = true;
-        ember.scale.set(s, s, s);
-        (ember.material as THREE.MeshBasicMaterial).opacity = 0.85 * envelope;
-      } else if (ember.visible) {
-        ember.visible = false;
-      }
-    }
+    // Bara pijar SENGAJA tidak lagi ditangani di useFrame: ia kini
+    // statis penuh (skala & opacity tetap di JSX) selama Smoke mount —
+    // lihat komentar lapisan 6 di header file.
 
     // --- Getaran kamera: offset acak kecil selama 250 ms ---
     const shake = shakeRef.current;
@@ -286,18 +267,19 @@ export function Smoke({ position }: { position: [number, number, number] }) {
         decay={2}
       />
 
-      {/* Bara pijar sesaat di jantung komponen yang baru rusak */}
+      {/* Bara pijar STABIL di jantung komponen yang rusak: skala 0,6 &
+          opacity 0,85 tetap selama asap aktif (nilai puncak lapisan
+          lama, kini dibekukan — tanpa kedip, tanpa meredup) */}
       <mesh
-        ref={emberRef}
         position={[position[0], position[1] + 0.55, position[2]]}
-        visible={false}
+        scale={0.6}
         raycast={() => null}
       >
         <sphereGeometry args={[0.55, 16, 16]} />
         <meshBasicMaterial
           color="#FF7A1A"
           transparent
-          opacity={0}
+          opacity={0.85}
           depthWrite={false}
           toneMapped={false}
           blending={THREE.AdditiveBlending}
